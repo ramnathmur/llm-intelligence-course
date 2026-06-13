@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Intelligence — The Full Arc</title>
+<link rel="stylesheet" href="css/style.css">
+<meta property="og:title" content="LLM Intelligence — Beyond the Next-Word Guesser">
+<meta property="og:description" content="A complete learning path from 'LLMs just predict the next word' to a full, defensible understanding of genuine artificial intelligence.">
+<meta property="og:type" content="website">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+  <div class="index-hero">
+    <h1>Beyond the Next-Word Guesser</h1>
+    <p class="subtitle">A complete learning path from "LLMs just predict the next word" to a full, defensible understanding of how and why they exhibit genuine artificial intelligence — and how that intelligence becomes autonomous action.</p>
+    <div class="index-stats">
+      <div class="stat">
+        <div class="stat-number">34</div>
+        <div class="stat-label">Concepts</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">7</div>
+        <div class="stat-label">Modules</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" id="progress-count">0</div>
+        <div class="stat-label">Completed</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="module-cards">
+    <!-- Rendered by JS -->
+  </div>
+
+  <div class="how-to-use">
+    <h2>How to Use This Package</h2>
+    <ul>
+      <li>Follow the <strong>learning path</strong> in order — each concept builds on the ones before it.</li>
+      <li>Use the <strong>Previous / Next</strong> links at the bottom of each page to stay on track.</li>
+      <li>Your progress is saved automatically in your browser. Green dots = completed.</li>
+      <li>Every page has <strong>verification questions</strong> at the bottom — test yourself before moving on.</li>
+      <li>Blue chips at the top of each page link to <strong>prerequisites</strong> if you need a refresher.</li>
+    </ul>
+  </div>
+
+  <div class="cta-container">
+    <a href="" id="start-link" class="cta-button">Start Learning →</a>
+  </div>
+</main>
+
+<script src="js/nav.js"></script>
+<script>
+  LLMNav.init(null);
+
+  document.getElementById('progress-count').textContent = LLMNav.getVisitedCount();
+
+  const cardsContainer = document.getElementById('module-cards');
+  const progress = LLMNav.getProgress();
+
+  LLMNav.MODULES.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'module-card';
+
+    const descs = [
+      'How raw text becomes the mathematical substrate that makes intelligence possible.',
+      'How training builds intelligence into weights — from gradient descent to emergent capabilities.',
+      'The mechanisms inside the transformer that produce intelligent behavior at inference time.',
+      'How raw capability becomes useful, safe, controllable intelligence.',
+      'How reasoning becomes autonomous action in the world.',
+      'How we observe, measure, and verify that intelligence is real.',
+      'The foundational questions about what LLM intelligence is, what it isn\'t, and what it means.'
+    ];
+
+    let gapsHtml = m.gaps.map(g => {
+      const visited = progress[g.slug] ? 'visited' : '';
+      return `<a href="module-${m.id}/${g.slug}.html" class="gap-link ${visited}">${g.id}</a>`;
+    }).join('');
+
+    card.innerHTML = `
+      <h2>Module ${m.id}: ${m.title}</h2>
+      <p class="module-desc">${descs[m.id - 1]}</p>
+      <div class="gap-list">${gapsHtml}</div>
+    `;
+    cardsContainer.appendChild(card);
+  });
+
+  // Set start link to first unvisited gap, or first gap if all visited
+  const firstUnvisited = LLMNav.LEARNING_PATH.find(slug => !progress[slug]) || LLMNav.LEARNING_PATH[0];
+  const targetModule = LLMNav.getModuleForSlug(firstUnvisited);
+  document.getElementById('start-link').href = `module-${targetModule.id}/${firstUnvisited}.html`;
+
+  const visited = LLMNav.getVisitedCount();
+  if (visited > 0 && visited < LLMNav.LEARNING_PATH.length) {
+    document.getElementById('start-link').textContent = 'Continue Learning →';
+  } else if (visited >= LLMNav.LEARNING_PATH.length) {
+    document.getElementById('start-link').textContent = 'Review From Start →';
+  }
+</script>
+</body>
+</html>

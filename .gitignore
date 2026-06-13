@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Generator backups produced by `node generate-pages.js --force`
+*.bak
+
+# Throwaway test / scratch pages
+_test-*.html
+src/_test-*.html
+
+# Stray scaffold template (superseded by generate-pages.js)
+src/template.html
+
+# OS / editor cruft
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
