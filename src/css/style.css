@@ -621,6 +621,25 @@ body {
 .callout-argue .callout-label { color: var(--green); }
 .callout-argue .callout-label::before { content: '\2694\FE0F '; }
 
+/* ===== THINK FURTHER CALLOUT (synthesis / extrapolation prompt) ===== */
+/* Purple accent = open-ended reflection. Color-emoji glyph to match the
+   existing callout label set (why / insight / warning / argue). */
+.callout-think {
+  background: var(--purple-dim);
+  border-left: 4px solid var(--purple);
+}
+.callout-think .callout-label { color: var(--purple); }
+.callout-think .callout-label::before { content: '\1F52D '; } /* telescope: look further */
+
+/* ===== CALLBACK CALLOUT (spaced retrieval to a prior gap) ===== */
+/* Blue accent matches the prerequisite chips: "connect back to earlier learning". */
+.callout-callback {
+  background: var(--blue-dim);
+  border-left: 4px solid var(--blue);
+}
+.callout-callback .callout-label { color: var(--blue); }
+.callout-callback .callout-label::before { content: '\1F519 '; } /* BACK arrow */
+
 /* ===== READING TIME ===== */
 .reading-time {
   display: inline-flex;
@@ -972,6 +991,27 @@ body {
   font-size: 0.88rem;
   color: var(--text);
   line-height: 1.6;
+}
+
+/* ===== TOKEN CHIP (G11 tokenizer demo) ===== */
+.token-chip {
+  display: inline-block;
+  margin: 0.2rem 0.25rem 0.2rem 0;
+  padding: 0.3rem 0.55rem;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.85rem;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius-sm);
+  vertical-align: top;
+}
+.token-chip .token-id {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 /* ===== BEFORE/AFTER COMPARISON ===== */

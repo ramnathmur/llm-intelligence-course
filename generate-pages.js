@@ -3,12 +3,27 @@ const path = require('path');
 
 const base = path.join('C:\\Claude Cowork\\Projects\\ai autonomy\\src');
 
+/*
+ * EDITING MODEL (see PROJECT-PLAN.md section 2):
+ *   - This generator OWNS the structural shell of a gap page, but ONLY while the
+ *     page is still a pristine scaffold (its <div class="content"> still contains
+ *     the string "content-placeholder").
+ *   - Once a page has hand-written content, the guard below makes this script
+ *     REFUSE to overwrite it, so re-running can never silently destroy authored work.
+ *   - To deliberately re-scaffold an authored page (e.g. a sitewide <head> change):
+ *         node generate-pages.js --force
+ *     That writes a timestamped .bak of the existing file first; you must then
+ *     MANUALLY re-merge your <div class="content"> from the .bak into the result.
+ *     Never run --force without doing the re-merge.
+ */
+const FORCE = process.argv.includes('--force');
+
 const gaps = [
   { module: 1, modTitle: 'From Text to Numbers', id: 'G11', slug: 'g11-tokenization', title: 'Tokenization &amp; Embedding Spaces', oneLiner: 'Text enters the model as tokens mapped to high-dimensional vectors where geometric distance encodes semantic similarity.', analogy: 'A postal system that converts addresses into GPS coordinates &mdash; text becomes math where distance = meaning.', why: "The learner&#39;s &quot;next-word guesser&quot; frame assumes the model works on words. It works on tokens embedded in a space where meaning has geometric structure.", argue: "After this page, you can explain why an LLM doesn&#39;t work on &quot;words&quot; at all &mdash; and why its mathematical representation of meaning is the first crack in the &quot;guesser&quot; frame.", readTime: '~10 min', prereqs: [], questions: ['Why does the model split &quot;unhappiness&quot; into sub-word tokens rather than treating it as one word?', 'What does it mean that &quot;king &minus; man + woman &asymp; queen&quot; in embedding space?', 'Why is the embedding space a better representation than a dictionary lookup?'] },
   { module: 1, modTitle: 'From Text to Numbers', id: 'G1', slug: 'g01-weights', title: 'What Weights Actually Encode', oneLiner: 'LLM weights are a compressed statistical world model encoding concepts, relationships, and reasoning patterns &mdash; not a lookup table.', analogy: 'A compressed river-physics map, not a list of rivers &mdash; the weights encode how language works, not individual facts.', why: "Once the learner sees that weights encode structure, the &quot;next-word guesser&quot; frame collapses.", argue: "After this page, you can tell a skeptic: &quot;The model doesn&#39;t store facts &mdash; it stores the physics of how language encodes meaning.&quot;", readTime: '~12 min', prereqs: [{id:'G11',title:'Tokenization &amp; Embedding Spaces',slug:'g11-tokenization',mod:1}], questions: ['What is the difference between a lookup table and a compressed statistical model?', 'Can you explain why &quot;Paris is the capital of France&quot; lives in model weights without being stored as a fact?', 'What happens to a weight-encoded concept when you ask the model a question it has never seen?'] },
   { module: 1, modTitle: 'From Text to Numbers', id: 'G12', slug: 'g12-training-objective', title: 'The Training Objective', oneLiner: 'Predicting the next token forces the model to learn grammar, facts, reasoning patterns, world knowledge, and theory of mind.', analogy: 'Learning cricket by predicting the next ball &mdash; to predict well, you must learn physics, player psychology, pitch conditions, and game strategy.', why: "The direct rebuttal to &quot;it just guesses the next word.&quot; To guess well, it must learn everything humans encode in language.", argue: "After this page, you can turn the skeptic&#39;s own argument: &quot;Yes, it predicts the next word &mdash; and to do that well, it had to learn everything.&quot;", readTime: '~8 min', prereqs: [{id:'G11',title:'Tokenization &amp; Embedding Spaces',slug:'g11-tokenization',mod:1},{id:'G1',title:'What Weights Actually Encode',slug:'g01-weights',mod:1}], questions: ['Why does next-token prediction require the model to learn factual knowledge, not just grammar?', 'What is self-supervised learning, and why does it scale better than supervised learning?', 'Give an example of a sentence where predicting the next word requires reasoning, not pattern matching.'] },
   { module: 2, modTitle: 'The Learning Engine', id: 'G13', slug: 'g13-backpropagation', title: 'Backpropagation &amp; Gradient Descent', oneLiner: 'The model improves by computing prediction error and propagating it backward to nudge each weight toward reducing future errors.', analogy: 'A consultant getting client feedback after each engagement and adjusting their approach &mdash; trillions of small adjustments improving each prediction.', why: "Intelligence is the cumulative result of trillions of small weight adjustments, each one reducing prediction error by a tiny amount.", argue: "After this page, you can explain the mechanism: &quot;Intelligence wasn&#39;t programmed &mdash; it was learned through trillions of tiny corrections.&quot;", readTime: '~12 min', prereqs: [{id:'G1',title:'What Weights Actually Encode',slug:'g01-weights',mod:1},{id:'G12',title:'The Training Objective',slug:'g12-training-objective',mod:1}], questions: ['What is a loss function and what does it measure?', 'In plain language, what does &quot;propagate the error backward&quot; mean?', 'Why does a model trained on next-token prediction end up encoding world knowledge rather than just word co-occurrence statistics?'] },
-  { module: 2, modTitle: 'The Learning Engine', id: 'G4', slug: 'g04-scaling-laws', title: 'Neural Scaling Laws', oneLiner: 'Model capability scales predictably with size, data, and compute &mdash; a measurable empirical law, not magic.', analogy: 'Compound interest on a savings account &mdash; each increment is small, but the relationship between input (compute) and output (capability) follows a precise, predictable mathematical curve.', why: "Scaling laws are the empirical answer to &quot;where did the intelligence come from?&quot; &mdash; more scale leads to qualitatively different capabilities.", argue: "After this page, you can cite the empirical law: &quot;Intelligence scales predictably with compute &mdash; and at certain scales, qualitatively new abilities appear.&quot;", readTime: '~10 min', prereqs: [{id:'G13',title:'Backpropagation &amp; Gradient Descent',slug:'g13-backpropagation',mod:2}], questions: ['What is the basic form of a neural scaling law?', 'Why does a 70B-parameter model do things a 7B model cannot?', 'Can you predict from scaling laws whether a new capability will emerge?'] },
+  { module: 2, modTitle: 'The Learning Engine', id: 'G4', slug: 'g04-scaling-laws', title: 'Neural Scaling Laws', oneLiner: 'Model capability scales predictably with size, data, and compute &mdash; a measurable empirical law, not magic.', analogy: 'Water cooling from 20&deg;C to 0&deg;C: mostly smooth change, then a phase transition into ice &mdash; a qualitatively new thing.', why: "Scaling laws are the empirical answer to &quot;where did the intelligence come from?&quot; &mdash; more scale leads to qualitatively different capabilities.", argue: "After this page, you can cite the empirical law: &quot;Intelligence scales predictably with compute &mdash; and at certain scales, qualitatively new abilities appear.&quot;", readTime: '~10 min', prereqs: [{id:'G13',title:'Backpropagation &amp; Gradient Descent',slug:'g13-backpropagation',mod:2}], questions: ['What is the basic form of a neural scaling law?', 'Why does a 70B-parameter model do things a 7B model cannot?', 'Can you predict from scaling laws whether a new capability will emerge?'] },
   { module: 2, modTitle: 'The Learning Engine', id: 'G14', slug: 'g14-pretraining-data', title: 'Pre-Training Data', oneLiner: 'The composition, quality, and diversity of pre-training data directly determine what the model learns &mdash; data is the curriculum.', analogy: "A medical student&#39;s curriculum: the breadth and quality of cases they study determines what kind of doctor they become.", why: "Intelligence comes from architecture AND data. A transformer trained only on restaurant reviews would never learn physics.", argue: "After this page, you can explain why data diversity matters: &quot;The model&#39;s intelligence is shaped by what it studied &mdash; data is the curriculum.&quot;", readTime: '~8 min', prereqs: [{id:'G13',title:'Backpropagation &amp; Gradient Descent',slug:'g13-backpropagation',mod:2},{id:'G4',title:'Neural Scaling Laws',slug:'g04-scaling-laws',mod:2}], questions: ['Why would a model trained on 10x more data from a single domain perform worse than one trained on diverse data?', 'What is &quot;data contamination&quot; and why does it matter for evaluating model intelligence?', 'How does the Chinchilla finding change how we think about the data-compute tradeoff?'] },
   { module: 2, modTitle: 'The Learning Engine', id: 'G5', slug: 'g05-emergence', title: 'Emergent Capabilities', oneLiner: 'At certain scales, LLMs appear to develop qualitatively new abilities &mdash; though whether these transitions are truly discontinuous or artifacts of measurement is actively debated.', analogy: 'An ant colony: no individual ant knows the architecture, but at scale the colony builds a temperature-regulated structure.', why: "The core empirical answer to &quot;where did the intelligence come from?&quot; &mdash; it was not programmed; it emerged from scale.", argue: "After this page, you have the killer answer: &quot;Nobody programmed it to reason &mdash; the ability emerged at scale, the way ice forms when water cools past a threshold.&quot;", readTime: '~12 min', prereqs: [{id:'G4',title:'Neural Scaling Laws',slug:'g04-scaling-laws',mod:2}], questions: ['What is the difference between a capability that scales smoothly and one that emerges discontinuously?', 'Name two capabilities that were emergent.', 'Why does emergence matter to the &quot;next-word guesser&quot; debate?'] },
   { module: 2, modTitle: 'The Learning Engine', id: 'G15', slug: 'g15-fine-tuning', title: 'Fine-Tuning &amp; Transfer Learning', oneLiner: "A pre-trained model&#39;s knowledge transfers to new tasks with minimal additional training &mdash; general intelligence specializes.", analogy: 'A general-practice lawyer who specializes in tax law &mdash; same foundational training, narrowed by focused additional experience.', why: "Understanding transfer learning explains why a model trained on general text can become a code assistant or medical advisor.", argue: "After this page, you can explain how a single model becomes many specialists &mdash; and why that&#39;s transfer of genuine understanding, not separate programs.", readTime: '~10 min', prereqs: [{id:'G14',title:'Pre-Training Data',slug:'g14-pretraining-data',mod:2},{id:'G1',title:'What Weights Actually Encode',slug:'g01-weights',mod:1}], questions: ['What is the difference between pre-training and fine-tuning?', 'Why can fine-tuning on 10,000 examples change model behavior when pre-training used trillions of tokens?', 'What is catastrophic forgetting, and how does it constrain fine-tuning?'] },
@@ -41,6 +56,7 @@ const gaps = [
 ];
 
 let count = 0;
+let skipped = 0;
 for (const g of gaps) {
   const dir = path.join(base, `module-${g.module}`);
   const file = path.join(dir, `${g.slug}.html`);
@@ -143,8 +159,25 @@ ${questionsHtml}
 </body>
 </html>`;
 
+  // --- Non-destructive guard (Phase 0) ---------------------------------------
+  // A pristine scaffold contains "content-placeholder"; an authored page does not.
+  // Never clobber an authored page unless --force, and even then back it up first.
+  if (fs.existsSync(file)) {
+    const existing = fs.readFileSync(file, 'utf8');
+    if (!existing.includes('content-placeholder')) {
+      if (!FORCE) {
+        console.warn('SKIP (has hand-written content): ' + file);
+        skipped++;
+        continue;
+      }
+      const bak = `${file}.${Date.now()}.bak`;
+      fs.writeFileSync(bak, existing, 'utf8');
+      console.warn('FORCED overwrite — backup: ' + bak + ' (re-merge your content div!)');
+    }
+  }
+
   fs.writeFileSync(file, html, 'utf8');
   count++;
 }
 
-console.log('Created ' + count + ' gap pages.');
+console.log('Wrote ' + count + ' page(s)' + (skipped ? ', skipped ' + skipped + ' with hand-written content' : '') + '.');

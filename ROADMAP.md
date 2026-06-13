@@ -1,5 +1,16 @@
 # AI Autonomy Learning Package — Roadmap
 
+> **Authoritative build plan:** see `PROJECT-PLAN.md` for the full 7-item plan, phasing, dependencies, and copy-paste templates. The phase numbers below track per-module content; PROJECT-PLAN.md is the source of truth for sequencing.
+
+## Phase 0: Safety & Build Conventions ✅
+- [x] Git repository initialized; pristine scaffold committed as the recoverable floor
+- [x] **Generator overwrite guard** — `generate-pages.js` now SKIPs any page whose `content-placeholder` marker is gone (i.e. authored), so re-running it can never silently wipe content. Use `node generate-pages.js --force` only for a deliberate re-scaffold: it writes a timestamped `.bak` and you must manually re-merge the `<div class="content">`.
+- [x] G4 anchor analogy reverted to the water→ice phase-transition (curriculum-correct)
+- [x] New CSS classes in `style.css`: `.callout-think` (Think Further), `.callout-callback` (spaced-retrieval), `.token-chip` (G11 tokenizer)
+- [x] `src/template.html` retired (gitignored)
+
+**Editing model (important):** the generator owns the structural shell of *placeholder* pages only. All deep content + interactives are **hand-written** into the `<div class="content">` of each HTML file. Once a page is authored the guard protects it — post-content structural changes are hand-edits or a deliberate `--force` + `.bak` + manual re-merge, never a plain regen.
+
 ## Phase 1: Foundation (Scaffolding) ✅
 - [x] Curriculum v1 → v2 (34 gaps, 7 modules)
 - [x] Self-evaluation and v2.1 revision
