@@ -2,6 +2,8 @@
 
 > **Authoritative build plan:** see `PROJECT-PLAN.md` for the full 7-item plan, phasing, dependencies, and copy-paste templates. The phase numbers below track per-module content; PROJECT-PLAN.md is the source of truth for sequencing.
 
+> **▶ Resume here (2026-06-13):** Phase 0 done & committed. Content authoring **not started** — all 34 pages are still `content-placeholder` scaffolds. Next: Phase 1 (G11/G1/G12). Full resume instructions in `HANDOFF.md`.
+
 ## Phase 0: Safety & Build Conventions ✅
 - [x] Git repository initialized; pristine scaffold committed as the recoverable floor
 - [x] **Generator overwrite guard** — `generate-pages.js` now SKIPs any page whose `content-placeholder` marker is gone (i.e. authored), so re-running it can never silently wipe content. Use `node generate-pages.js --force` only for a deliberate re-scaffold: it writes a timestamped `.bak` and you must manually re-merge the `<div class="content">`.
