@@ -59,10 +59,133 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Hand a competent project manager a single sentence &mdash; "launch the product in Q3" &mdash; and watch what happens. They don't start writing launch-day press releases. They pull the sentence apart. Engineering, marketing, legal, support: four workstreams. Inside engineering, the feature has to be built before it can be tested, and tested before it ships, so those milestones line up in order. Marketing can't write the announcement until the feature is locked, but they can build the landing page in parallel. Every leaf of that tree is a task small enough that one person can finish it in an afternoon and know whether they succeeded. That decomposition &mdash; goal into workstreams into milestones into tasks, wired together by what-depends-on-what &mdash; is exactly what an autonomous agent does when it turns a vague instruction into action. It is the single capability that separates a chatbot, which answers, from an agent, which executes.</p>
+
+    <p>This page is about that capability as a formal thing, not a parlor trick. It is tempting to think "goal decomposition" just means prompting the model to write a numbered list. It is much more than that, and understanding the difference is what lets you build agents that survive contact with a real, messy, multi-phase task instead of collapsing the moment something doesn't go to plan.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: which strategy from G16 &mdash; tree-of-thought, reflection, or self-correction &mdash; maps onto an agent backtracking after a failed sub-task? Justify before you reveal.</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>The cleanest match is <strong>tree-of-thought</strong> for the backtracking itself, with <strong>reflection</strong> doing the diagnosis that tells you <em>where</em> to backtrack to. In <a href="../module-3/g16-advanced-reasoning.html">G16 &mdash; Advanced Reasoning</a> you saw that tree-of-thought explores multiple branches and abandons dead ones, while reflection is the model criticizing its own output and learning from the failure verbally. When a sub-task fails, an agent does both: it reflects on <em>why</em> the step failed (reflection), then it returns to an earlier decision point and tries a different branch of the plan (tree-of-thought). Pure self-correction &mdash; fixing a single answer in place &mdash; is the weakest fit here, because a failed sub-task often means the <em>plan</em> was wrong, not just one output. Hold onto this; the recovery section below is essentially G16's machinery applied to an action loop instead of a reasoning loop.</p>
+      </div>
     </div>
+
+    <h2>Flat lists versus hierarchies: why the shape matters</h2>
+
+    <p>Start with the distinction that the first verification question is really asking about. A <strong>flat task list</strong> is what you get when you ask a model, in one shot, "list the steps to launch the product," and it returns ten bullet points. It looks like a plan. It is not, in any robust sense, a plan &mdash; it is a guess at a plan, frozen at the moment it was written, with no structure connecting the items to each other.</p>
+
+    <p>A <strong>hierarchical goal decomposition</strong> is a tree. The root is the goal. Below it are a few broad workstreams. Below each workstream are milestones. Below each milestone are concrete, executable tasks. The structure carries information that a flat list throws away. Three things make the hierarchy genuinely different, not just prettier:</p>
+
+    <ul>
+      <li><strong>Levels of abstraction.</strong> The top of the tree is intentionally vague ("get the product legally cleared"); the bottom is concrete enough to act on ("file the trademark application"). This lets the agent reason at the right altitude. It can decide the <em>shape</em> of the launch without yet deciding the wording of every email.</li>
+      <li><strong>Decomposition on demand.</strong> A flat list commits to every detail up front, when the agent knows the least. A hierarchy lets the agent expand a branch only when it reaches it &mdash; figuring out the sub-tasks of "run the beta" only after the feature is actually built, using what it learned along the way. This is the difference between planning the whole trip before you leave and planning each leg as you arrive.</li>
+      <li><strong>Localized failure.</strong> When a task in a hierarchy fails, the damage is contained to its branch. You re-plan the "marketing" subtree without touching "engineering." In a flat list, there's no branch to contain anything; one wrong step poisons everything after it because the list has no idea which items actually depended on the broken one.</li>
+    </ul>
+
+    <p>The cricket analogy a coach would use: a flat list is a batter who has memorized "play these ten shots in this order." A hierarchy is a batter with a plan at three levels &mdash; the match situation (chase 180, don't lose wickets early), the over-by-over intent (rotate strike against the spinner, attack the part-timer), and the ball-by-ball shot selection that gets decided only as each delivery leaves the bowler's hand. The first batter is helpless the moment the bowler does something unexpected. The second adapts because the plan was structured to be adapted.</p>
+
+    <h2>ReAct: the loop that makes decomposition real</h2>
+
+    <p>Here is the part that makes goal decomposition more than wishful prompting. A plan written once and executed blindly is brittle, because the world talks back. The feature build reveals an API limitation; the trademark search turns up a conflict; a tool returns an error instead of data. An agent that decomposed its goal up front and then refused to look up from its checklist will march confidently off a cliff.</p>
+
+    <p>The breakthrough that fixed this is the <strong>ReAct</strong> pattern, from Yao et al. (2023), and the name is the whole idea: <em>Reason + Act</em>, interleaved. Instead of "make a full plan, then execute it," the agent runs a tight loop:</p>
+
+    <ol>
+      <li><strong>Thought</strong> &mdash; the model reasons in natural language about the current state and what the next sub-task should be.</li>
+      <li><strong>Action</strong> &mdash; it takes one concrete step: call a tool, search, run code, query a database.</li>
+      <li><strong>Observation</strong> &mdash; it reads what came back from the real world.</li>
+      <li>Then it loops back to Thought, now updated by the observation, and decides the next step.</li>
+    </ol>
+
+    <p>Yao and colleagues showed that this interleaving beats both pure reasoning (chain-of-thought with no actions, which hallucinates facts it can't check) and pure acting (taking tool steps with no reasoning between them, which wanders). The reasoning traces let the model plan, track progress, and handle exceptions; the actions let it pull in real information that grounds the reasoning. On knowledge-intensive benchmarks the combination cut hallucination dramatically compared to chain-of-thought alone, precisely because every reasoning step could be checked against an observation from the world. That grounding loop is the same observe-reason-act cycle that runs underneath all agent behavior &mdash; goal decomposition is what gives the loop a destination, and ReAct is what keeps the loop honest.</p>
+
+    <p>Notice what ReAct does to the planning question. The decomposition is no longer a one-shot artifact written before anything happens. It is <em>continuously revised</em>. The agent holds a plan, executes the next step, observes the result, and updates the plan in light of what it just learned. The hierarchy is alive.</p>
+
+    <h2>Dependency ordering: how the agent decides what comes first</h2>
+
+    <p>The second verification question is the sharp one: when sub-tasks depend on each other, how does the agent decide their order? The answer is the same one a project manager uses, and computer science has a name for it.</p>
+
+    <p>Think of the tasks as a graph. Draw an arrow from task A to task B whenever B needs A's output before it can start &mdash; "write the feature" points to "test the feature," which points to "ship the feature." A valid execution order is any sequence where every arrow points forward: you never attempt a task before the things it depends on are done. Producing such an order is called a <strong>topological sort</strong>, and the only hard requirement is that the dependency graph has no cycles &mdash; no task can, directly or through a chain, depend on itself.</p>
+
+    <p>Two consequences fall out of this view, and both matter for building real agents:</p>
+
+    <ul>
+      <li><strong>Parallelism is free information.</strong> Any two tasks with no dependency path between them can run at the same time. "Build the landing page" and "write the feature code" don't point at each other, so a well-structured agent (or a team of sub-agents, which you'll meet in <a href="g24-multi-agent.html">G24 &mdash; Multi-Agent Systems</a>) can dispatch them concurrently. The hierarchy makes this visible; a flat list hides it.</li>
+      <li><strong>The critical path sets the floor.</strong> The longest chain of must-be-sequential tasks determines the minimum time to the goal. No amount of parallelism shortens it. An agent that understands its dependency graph knows which sub-tasks are on the critical path and which have slack &mdash; the same prioritization a good engagement manager does instinctively.</li>
+    </ul>
+
+    <p>An important honesty note: LLM agents don't usually compute a formal topological sort with an algorithm. They <em>reason</em> their way to a valid ordering using the same in-context understanding of cause and prerequisite that you saw build up across earlier modules. Sometimes they get it wrong &mdash; they'll try to test a feature that isn't built yet &mdash; and the ReAct loop is what catches it, because the action fails and the observation feeds back. The model's grasp of dependency is good but not guaranteed; the loop is the safety net.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">An agent's plan has these tasks: (1) write feature code, (2) write the launch blog post, (3) test the feature, (4) design the landing page. The blog post needs the finished feature; testing needs the code; the landing page needs nothing. Which two tasks can safely run at the same time from the very start?</div>
+      <button class="quiz-option" data-letter="A">Write feature code and test the feature.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Write feature code and design the landing page.</button>
+      <button class="quiz-option" data-letter="C">Write the launch blog post and design the landing page.</button>
+      <div class="quiz-feedback" data-correct="Right. The landing page depends on nothing, and writing the code depends on nothing, so they sit on separate branches with no arrow between them &mdash; safe to run in parallel from step one. Testing must wait for the code; the blog post must wait for the finished feature." data-incorrect="Look at the arrows. Testing depends on the code, and the blog post depends on the finished feature, so neither of those can start at the very beginning. The only two tasks with no prerequisites are writing the code and designing the landing page."></div>
+    </div>
+
+    <h2>Walkthrough: decompose, execute, and recover</h2>
+
+    <p>Now put it together on the anchor example. Watch a project-manager agent take "launch the product," build the tree, run the loop, and &mdash; this is the part that matters &mdash; recover when a sub-task fails instead of crashing.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Goal into workstreams (top of the tree)</h4>
+        <p>The agent reads "launch the product in Q3" and refuses to act on it directly &mdash; it's too abstract. It splits the goal into four workstreams: <strong>Engineering</strong>, <strong>Legal</strong>, <strong>Marketing</strong>, <strong>Support</strong>. Nothing is executable yet; this layer just carves the problem into independent territories so the rest can be reasoned about separately.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Workstreams into milestones, milestones into tasks</h4>
+        <p>It expands Engineering into milestones: <em>feature built &rarr; feature tested &rarr; feature shipped</em>. Each milestone becomes concrete tasks: "implement the export endpoint," "write integration tests," "run the load test." Legal expands into "trademark search," "terms-of-service review." The bottom layer is now actionable &mdash; every leaf is something a single step can attempt and a single observation can verify.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Wire the dependencies, pick the order</h4>
+        <p>The agent draws the arrows. "Test" depends on "build"; "ship" depends on "test"; the marketing announcement depends on "feature shipped." It notices the landing-page design and the trademark search depend on nothing, so it queues those to run in parallel with the build. The critical path &mdash; build &rarr; test &rarr; ship &rarr; announce &mdash; is the longest chain, so that's the timeline to protect.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Execute one step, observe, repeat (the ReAct loop)</h4>
+        <p><strong>Thought:</strong> "Start with the trademark search; it's on no critical path but it's a hard blocker if it fails." <strong>Action:</strong> query the trademark database. <strong>Observation:</strong> a conflicting mark already exists for the proposed product name. The plan just collided with reality.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>A sub-task fails &mdash; recover, don't crash</h4>
+        <p>A brittle agent would barrel on and try to "file the trademark," fail again, and burn its budget repeating a doomed step. This agent <em>reflects</em>: the failure isn't in the execution, it's in an upstream assumption &mdash; the product name. It backtracks up the tree (the tree-of-thought move from the callback), re-plans the affected branch: insert a new sub-task, "propose three alternative names," then re-run the trademark search on the winner. Crucially, it only re-plans the <em>Legal/naming branch</em>. Engineering keeps building in parallel, untouched, because the hierarchy localized the failure.</p>
+      </div>
+      <div class="walkthrough-step" data-step="6">
+        <h4>Bound the recovery so it can't loop forever</h4>
+        <p>Recovery needs a leash. The agent caps retries (try a fix at most N times before escalating), watches its budget (tokens, tool calls, wall-clock), and has an escape hatch: if a branch keeps failing, mark the goal partially blocked and surface it to a human rather than thrashing. Recovery that can't terminate is just a more expensive failure.</p>
+      </div>
+    </div>
+
+    <p>That fifth step is the entire answer to the third verification question. When a sub-task fails, a well-built agent does not abandon the goal and does not blindly retry the same broken step. It diagnoses whether the failure is local (retry or substitute the step) or structural (the plan above it was wrong, so re-plan the branch), it backtracks to the right level of the tree, and it bounds the whole recovery with retry limits and a budget so a single bad step can't consume everything. This is Reflexion-style verbal self-correction &mdash; from the Shinn et al. (2023) work you met in G16 &mdash; running inside an action loop instead of a pure reasoning loop.</p>
+
+    <h2>Why this is the line between chatbot and agent</h2>
+
+    <p>Step back and the larger claim comes into focus. A chatbot is a single turn: prompt in, response out, done. It has no notion of a goal that outlives the current message, no mechanism to take an action and react to its result, no plan to revise. An agent has all three. Goal decomposition is what gives it a target with internal structure; the ReAct loop is what lets it pursue that target across many steps while staying grounded in what's actually happening; dependency ordering is what keeps the pursuit coherent.</p>
+
+    <p>This is also why "just prompt the model to make a list" is the wrong mental model. The list is the cheapest, most fragile slice of the capability. The capability that matters is the <em>standing structure</em> &mdash; a hierarchy the agent can expand on demand, execute against, and surgically repair &mdash; plus the loop that keeps that structure honest against a world that keeps changing the facts. None of this requires the model to be conscious or to "want" the goal. It requires the model to be good enough at reasoning to maintain and revise a plan, and the surrounding loop to feed it observations. The intelligence you established in earlier modules is the engine; decomposition and the action loop are the transmission that turns it into motion.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The "It's Just a List" Frame</div>
+        <p>"Goal decomposition is just asking the model to write the steps. You prompt it for a numbered list and run the items in order. Nothing intelligent &mdash; a checklist."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"Decomposition is a living hierarchy the agent expands on demand, sequences by dependency, executes one grounded step at a time via a reason-act-observe loop, and surgically re-plans when a branch fails &mdash; all without abandoning the goal. The list is the artifact; the structure and the loop are the capability."</p>
+      </div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Goal decomposition is what turns reasoning into autonomous action. A chatbot answers; an agent breaks a goal into a hierarchy, orders the sub-tasks by dependency, executes them one grounded step at a time through a reason-act-observe loop, and re-plans the broken branch &mdash; not the whole tree &mdash; when a step fails. The hierarchy makes failure local and recovery cheap; the ReAct loop keeps the plan honest against a world that won't sit still. That standing, revisable structure &mdash; not the one-shot list &mdash; is the line between a chatbot and an agent.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If an agent decomposes a goal wrongly at the top, every sub-task inherits the error. What checkpoint catches a bad decomposition before it burns the whole budget?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the ReAct (Reason + Act) loop is from Yao et al. (2023), "ReAct: Synergizing Reasoning and Acting in Language Models," ICLR. The reflect-and-retry recovery pattern draws on Shinn et al. (2023), "Reflexion: Language Agents with Verbal Reinforcement Learning," NeurIPS &mdash; introduced in <a href="../module-3/g16-advanced-reasoning.html">G16 &mdash; Advanced Reasoning</a>. "Topological sort" is the standard term for ordering tasks so every dependency comes before what needs it.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

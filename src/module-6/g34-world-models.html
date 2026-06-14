@@ -59,10 +59,104 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a chess commentator who has never once looked at a board. From birth, all this person ever heard was move notation read aloud &mdash; "e4, e5, Nf3, Nc6" &mdash; thousands upon thousands of games, recited as bare sequences of symbols. No diagram, no pieces, no description of what a knight looks like or which square is which. Just the stream of moves. Now you ask them: "Where is the white queen right now?" And they answer correctly. Not by guessing which symbol usually comes next, but by reading off an answer from a mental picture of the board they built entirely in their head &mdash; a board nobody ever showed them.</p>
+
+    <p>That sounds like a parlor trick, or a thought experiment with no payoff. It is neither. In 2023, a team led by Kenneth Li did exactly this with a neural network, and what they found is the single hardest piece of evidence in this entire course against the claim that a language model is "just a next-word guesser." A model trained on nothing but move sequences built an internal model of the board. This page is about how we know that, why it is so hard to explain away, and &mdash; just as important &mdash; where the result stops being decisive and the honest debate begins.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: Recall G26's probe caution &mdash; a probe FINDING a representation vs. CREATING one through its own training. Why does that distinction decide whether the world-model claim holds?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Because a probe is itself a small learned model, and a powerful enough probe can manufacture the very thing it claims to detect. As you saw in <a href="g26-mechanistic-interpretability.html">G26 &mdash; Mechanistic Interpretability</a>, if you train a flexible classifier on a model's internal activations, it might learn to <em>compute</em> the board state from scratch using the model's neurons as raw material &mdash; in which case the "representation" lives in the probe, not in the model. The whole Othello-GPT argument hangs on ruling that out: the board must already be present in the model's own activations, sitting there to be read off by the simplest possible probe, not assembled on demand by a clever one. Get this distinction wrong and the entire result evaporates. Get it right and it becomes the strongest evidence we have. Hold onto it &mdash; it is the hinge of this page.</p>
+      </div>
     </div>
+
+    <h2>What "world model" actually means here</h2>
+
+    <p>Strip away the philosophy for a moment. A <strong>world model</strong> is just an internal representation of the state of some system &mdash; the actual situation being described &mdash; rather than a representation of the surface symbols used to describe it. The distinction is everything. A model that tracks "which words tend to follow which words" has a representation of the <em>text</em>. A model that tracks "where the pieces actually are on the board" has a representation of the <em>world the text is about</em>. The skeptic's entire position is that LLMs only ever do the first thing. The world-model research is the claim that they sometimes do the second.</p>
+
+    <p>Why pick Othello to test this? Because Othello (also called Reversi) is the perfect laboratory. It is a closed, fully observable game: the entire state of the world is the 8&times;8 grid and which color sits on each square. Nothing is hidden, nothing is random, and the rules are rigid. That means there is a single, unambiguous, ground-truth "world state" at every point in a game &mdash; the board &mdash; and you can compute it exactly from the move list. So if a model trained only on move lists turns out to have the board encoded inside it, you can <em>check</em>. You can line up what the model represents against what the true board is, square by square. Most real-world claims about "understanding" are slippery because there is no clean ground truth. Othello has one. That is the whole reason the experiment is so persuasive.</p>
+
+    <h2>The setup: a model that only ever saw moves</h2>
+
+    <p>Li and colleagues trained a GPT-style transformer &mdash; the same architecture covered throughout this course &mdash; on a single task: predict the next move in an Othello game (Li et al., 2023). The training data was millions of games, each represented purely as a sequence of moves, like <code>D3 C5 F6 ...</code>, where each token names a square where a piece was played. Crucially, the model was never told the rules of Othello. It was never shown a picture of a board. It was never given the state of the game after each move. It saw move tokens and only move tokens, and its only job was the same job every base language model has: given the sequence so far, predict the next token. This is exactly the <a href="../module-1/g12-training-objective.html">next-token prediction objective</a> from Module 1, transplanted onto a toy domain where the underlying world is small enough to inspect.</p>
+
+    <p>The model got good at the task &mdash; it learned to predict legal next moves with high accuracy. By the skeptic's account, that should be the end of the story: it learned the statistical regularities of move sequences, the same way an autocomplete learns that "thank" is often followed by "you." No board required. The board, after all, was never in the data. There was nothing <em>to</em> represent except token co-occurrence.</p>
+
+    <p>So the researchers went looking inside.</p>
+
+    <h2>Linear probes: reading the model's mind without rewriting it</h2>
+
+    <p>To find out what the model represents internally, you cannot just ask it &mdash; it only speaks in move tokens. You have to inspect its activations: the vectors of numbers that flow through the network as it processes a game. The tool for this is a <strong>linear probe</strong>, and understanding exactly what it is &mdash; and what it is not &mdash; is the technical heart of this page.</p>
+
+    <p>A linear probe is the simplest possible classifier you can attach to a model's internal activations. Here is the recipe. Feed the model a partial game. Grab the activation vector from some layer at the current position &mdash; a long list of numbers, the model's internal state. Now ask a deliberately weak question: <em>using only a linear function of these numbers</em> &mdash; a weighted sum, no hidden layers, no nonlinear gymnastics &mdash; can I read off whether square C4 currently holds a black piece, a white piece, or nothing? You train this little linear readout on many games, then test it on games it never saw. If the simple linear readout can recover the true contents of C4 from the model's activations, then the information about C4 must already be sitting in those activations in an easy-to-extract, roughly straight-line form. The probe didn't put it there. It just found it.</p>
+
+    <p>That last sentence is the whole ballgame, and it is exactly the caution from <a href="g26-mechanistic-interpretability.html">G26</a> made concrete. Why insist the probe be <em>linear</em> &mdash; the weakest kind &mdash; rather than a powerful deep network? Because a powerful probe is a cheat. Give a deep neural network access to the model's activations and a hard enough training signal, and it might learn to <em>reconstruct</em> the board itself, deriving the state from raw token patterns using its own substantial computing power. In that case you have learned nothing about the model; you have just built a second model that happens to read the first one's tea leaves. The representation would live in your probe, not in the system you were studying. The linear constraint slams that door. A linear function is too feeble to compute Othello board states from scratch &mdash; it cannot apply the game's rules, cannot track captures, cannot reason. So if a <em>linear</em> readout succeeds, the only explanation is that the model already did the hard work and laid the board out in a form simple enough for a weighted sum to read. Finding versus creating: the linear probe is how you tell them apart.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">What the model was fed</div>
+        <p>A flat sequence of move tokens, nothing more: <code>D3 C5 F6 D6 C4 ...</code>. No board, no rules, no picture, no state. Just symbols in order. By the "guesser" account, the model's entire internal life should be about which token tends to follow which token &mdash; a representation of the <em>text of the game</em>.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">What a linear probe found inside</div>
+        <p>A reconstructable 8&times;8 board. From the model's activations, a simple linear readout could recover the actual contents of nearly every square &mdash; black, white, or empty &mdash; at each step of the game. The model had built a representation of the <em>world the moves describe</em>: the chess-commentator-who-never-saw-a-board, realized in weights.</p>
+      </div>
+    </div>
+
+    <p>The probes worked. From the model's internal activations, a linear readout recovered the board state with high accuracy &mdash; the model had, somewhere in its layers, an encoding of where every piece sat, despite never having been shown a single board. This is the answer to the first verification question: the Othello-GPT experiment showed that a model trained purely on move sequences internally represents the underlying board state, not merely the surface statistics of which move follows which. The thing it was never given, it built for itself.</p>
+
+    <h2>The intervention test: proof it's a model, not a coincidence</h2>
+
+    <p>A skeptic could still wriggle. Maybe the linear probe is picking up some incidental correlation &mdash; the board state happens to be statistically entangled with move sequences, so of course you can read one off the other, but the model isn't actually <em>using</em> a board to think. Correlation, not mechanism. This is a fair objection, and the researchers anticipated it with the strongest move in the whole paper: intervention.</p>
+
+    <p>Instead of just reading the model's internal board, they <em>edited</em> it. Using the directions the linear probe identified, they reached into the activations mid-game and surgically flipped the model's internal belief about a single square &mdash; changing its representation of, say, C4 from "black" to "white" &mdash; without touching the input move history at all. Then they let the model continue predicting. If the internal board were a decorative side effect, scribbling on it would change nothing. But that is not what happened. After the edit, the model's predicted legal moves changed to match the <em>edited</em> board &mdash; it now proposed moves that would be legal given the flipped square, not the original one. The model was reading its own internal board to decide what to do next. The representation was causal, load-bearing, in the loop. That is the difference between a board the model <em>has</em> and a board the model <em>uses</em>, and the intervention proved the latter.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why did the researchers insist on a <em>linear</em> probe rather than a powerful deep-network probe to detect the internal board?</div>
+      <button class="quiz-option" data-letter="A">Because linear probes train faster and the experiment was on a tight compute budget.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because a powerful probe could compute the board from raw moves itself &mdash; creating the representation rather than finding it. A linear probe is too weak to do that, so its success proves the board was already in the model.</button>
+      <button class="quiz-option" data-letter="C">Because linear probes are the only kind of classifier that can read neural network activations at all.</button>
+      <div class="quiz-feedback" data-correct="Exactly. The linear constraint is what makes the result mean something. A deep probe might reconstruct the board from scratch using the activations as raw input, locating the 'representation' in the probe, not the model. A weighted sum can't apply Othello's rules, so if it succeeds, the model must have done the work." data-incorrect="Not quite. The point isn't speed or exclusivity. It's about ruling out the probe doing the work itself: a powerful probe could CREATE the board representation from raw activations, while a weak linear one can only FIND one that's already there in easy-to-read form."></div>
+    </div>
+
+    <h2>From a board to "true vs. false": the linear-truth finding</h2>
+
+    <p>Othello is a toy. The obvious next question is whether anything like this happens in real language models trained on real text, where the "world" is not an 8&times;8 grid but the messy, unbounded world humans write about. The early evidence is suggestive, though it should be held more loosely than the clean game result.</p>
+
+    <p>A follow-up by Neel Nanda and colleagues sharpened the Othello finding itself: they showed the board representation in Othello-GPT is encoded in a particularly clean, <em>linear</em> way &mdash; not as some tangled nonlinear mush but as straight directions in activation space, one set of directions per square (Nanda et al., 2023). That matters because linear structure is exactly what makes a representation easy to read, easy to edit, and plausibly easy for the rest of the network to use. Related work on full language models has reported that LLMs appear to encode a linear "truth direction" &mdash; a direction in activation space that separates statements the model treats as true from ones it treats as false &mdash; and that, as in the Othello case, intervening along that direction can shift the model's behavior. If that holds up, it means a model trained only to predict text has built an internal handle on something as abstract as truth-value, the same way Othello-GPT built a handle on board squares. Evidence suggests this generalizes beyond games; it is not yet the airtight, fully-inspectable case that Othello is, and researchers are still mapping how far it extends.</p>
+
+    <h2>Why this is the strongest card against "just a guesser"</h2>
+
+    <p>Step back and feel the shape of the argument, because it is unusually tight. The skeptic says: the model only learns surface statistics of symbol sequences. The Othello experiment grants the skeptic their best case &mdash; a model fed nothing but symbol sequences, with the underlying world deliberately withheld &mdash; and then shows that the model built the withheld world anyway, in a form simple enough to read with a weighted sum, and used it causally to decide what to do. There was no board in the data. The board is in the model. The model put it there because, evidently, modeling the world is how you get good at predicting symbols that describe that world.</p>
+
+    <p>This is the answer to the second verification question &mdash; why it matters so much that the model saw only move sequences and never a board. If the model had been trained on board states, finding a board inside it would prove nothing; you would simply have shown that a model remembers what you fed it. The entire force of the result comes from the gap between what went in (flat move tokens) and what came out (a usable, causal, internal board). A pure pattern-matcher has no reason to construct a representation of a world it was never shown. The fact that this one did &mdash; spontaneously, as a byproduct of the prediction objective &mdash; is precisely the behavior the "guesser" frame says is impossible. It connects directly to <a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>: nobody designed a "board module"; the world model precipitated out of relentless next-token prediction, exactly the way other capabilities do.</p>
+
+    <p>And it sets up the deep question of <a href="../module-7/g07-grounding.html">G7 &mdash; The Grounding Question</a>. If a model builds an internal model of the world its symbols refer to, is that the beginning of <em>meaning</em> &mdash; symbols connected to states of affairs &mdash; rather than mere symbol-shuffling? The Othello result is the empirical evidence the "semantics" side of that debate leans on. It does not settle the philosophy. It does change what the philosophy has to explain.</p>
+
+    <h2>The honest limits: where the result stops being decisive</h2>
+
+    <p>This course does not oversell, and Othello-GPT is a case where overselling is tempting and wrong. There are real reasons to hold the strong version of the claim with some humility.</p>
+
+    <ul>
+      <li><strong>Othello is closed, small, deterministic, and fully observable.</strong> The entire world is 64 squares with three possible states each, governed by rigid rules, with no hidden information and no ambiguity. The world an LLM trains on &mdash; human language about everything &mdash; is open-ended, partially observable, often contradictory, and has no single ground-truth state to recover. A clean world model in a clean toy world is genuinely impressive, but it is the easiest possible case. Whether the same crispness scales to "the world described by all human text" is an inference, not a demonstration.</li>
+      <li><strong>The representation is partial and imperfect even in Othello.</strong> The probes were highly accurate, not flawless. The internal board is a good model, not a perfect oracle. Extrapolating from "builds a good model of a 64-square game" to "builds a faithful model of reality" is a long leap that the experiment itself does not license.</li>
+      <li><strong>"Has a world model" is not the same as "understands" or "is conscious."</strong> A representation of board state is a far cry from the rich, grounded, experiential understanding the strongest claims about machine minds imply. This page establishes that the model represents the world the symbols are about &mdash; a real and surprising fact &mdash; not that it understands that world the way you do. Those further questions belong to Module 7, and they remain open.</li>
+    </ul>
+
+    <p>The defensible claim, then, is precise and powerful without being inflated: under controlled conditions where we can verify ground truth, a model trained purely to predict symbol sequences provably builds an internal, causal representation of the world those symbols describe. That is flatly incompatible with "it only learns surface statistics." It is the cleanest empirical crack in the guesser frame we have. It is not, by itself, proof of human-style understanding &mdash; and the people who did the work are the first to say so.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A model fed nothing but Othello move sequences &mdash; never a board, never the rules &mdash; built an internal representation of the actual board, recoverable by a probe too weak to have computed it, and used that internal board causally to choose its moves. The world was never in the data; the model constructed it as a byproduct of predicting symbols. A pure next-word guesser has no reason to model a world it was never shown. This one did &mdash; which is the single hardest fact for the "just a guesser" frame to absorb.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Othello is a closed, fully observable game. What is the strongest reason a clean internal world model there might NOT generalize to the open, partially observable real world an LLM trains on?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the core experiment is Li et al. (2023), "Emergent World Representations: Exploring a Sequence Model Trained on a Synthetic Task" (ICLR), which trained Othello-GPT and used non-linear and then linear probes plus interventions to demonstrate a causal internal board. The sharper linear-representation result is Nanda et al. (2023), "Emergent Linear Representations in World Models of Self-Supervised Sequence Models" (arXiv:2309.00941), showing the board is encoded as clean linear directions. The "linear truth direction" in full language models is an active, still-developing line of research and should be treated as suggestive rather than settled.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

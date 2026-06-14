@@ -59,10 +59,107 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a lawyer who spent four years in law school and three more in general practice. She has argued small contract disputes, handled a divorce, drafted a will, read thousands of cases across a dozen areas of law. She is not a tax specialist. But when a tax-heavy client walks in, she does not go back to law school. She reads the relevant tax code, takes on a handful of tax cases under supervision, and within months she is the firm's go-to person for tax. The foundation was already there &mdash; how to read a statute, how to construct an argument, how to think like a lawyer. Specialization just pointed that foundation at one corner of the field.</p>
+
+    <p>That is exactly what fine-tuning does to a language model, and it is one of the most important practical facts in all of AI. A model trained on the whole internet is a generalist with a staggering breadth of latent skill. Fine-tuning is the focused additional experience that turns that generalist into a tax lawyer &mdash; or a code assistant, or a medical advisor, or a customer-support agent &mdash; without rebuilding the model from scratch. This page is about how that works, why it works so cheaply, and the one serious thing that can go wrong: the specialist who specializes so hard she forgets how to do anything else.</p>
+
+    <h2>Two stages, two completely different scales</h2>
+
+    <p>Modern language models are built in two phases, and the gap between them is enormous. The first phase, <a href="g14-pretraining-data.html">pre-training</a>, is where the model reads trillions of tokens of general text and learns &mdash; through nothing but <a href="../module-1/g12-training-objective.html">next-token prediction</a> &mdash; how language works, what facts the world contains, and how to reason. This is the law-school-plus-general-practice phase. It is monstrously expensive: months of compute on thousands of specialized chips, costs running into the millions of dollars. It happens once, and the result is a <strong>base model</strong>: a broad, capable, but unfocused generalist.</p>
+
+    <p>The second phase is <strong>fine-tuning</strong>. You take the finished base model and continue training it &mdash; but now on a small, curated dataset aimed at one task or behavior. Instead of trillions of tokens, you might use ten thousand examples. Instead of months, it might take hours. Instead of millions of dollars, it might cost a few hundred. The model does not start over. It starts from everything it already knows and nudges itself toward the new specialty.</p>
+
+    <p>Here is the cleanest way to hold the distinction in your head. Pre-training builds the <em>capabilities</em> &mdash; the general machinery of language, knowledge, and reasoning. Fine-tuning shapes the <em>behavior</em> &mdash; how the model applies that machinery, what tone it uses, what format it produces, which slice of its vast latent knowledge it foregrounds. Pre-training teaches the model what it knows. Fine-tuning teaches it what to do with you.</p>
+
+    <h2>Why ten thousand examples can move trillions of tokens</h2>
+
+    <p>This is the part that genuinely surprises people, and it is the second verification question, so let's take it head-on. Pre-training used something like ten to fifteen trillion tokens. Fine-tuning might use ten thousand examples &mdash; a difference of roughly a billion to one. How can such a tiny dataset change the behavior of a model shaped by such a vast one? It feels like trying to redirect a river with a teaspoon.</p>
+
+    <p>The resolution is that fine-tuning is not <em>adding</em> a billionth of the knowledge. It is <em>steering</em> knowledge that already exists. Remember what pre-training actually produced: a model that has already seen tax law, medical text, Python code, and customer complaints &mdash; all of it &mdash; folded into its <a href="../module-1/g01-weights.html">weights</a>. The capability to be a tax lawyer is latent in the base model. It is in there, mixed with ten thousand other latent capabilities, none of them dominant. Fine-tuning does not install the skill. It turns up the volume on the part that was already present and turns down the rest.</p>
+
+    <p>Think of the base model as a brilliant new hire who has read everything but has no idea what this particular job wants. They <em>can</em> write a formal legal memo, a casual Slack reply, a SQL query, or a sonnet &mdash; they have seen all of those. What they lack is the sense of which one you want right now. Ten thousand examples of "this is the kind of answer we give here" is not teaching them to write; it is teaching them which of their existing abilities to reach for and how to package it. That is why a small dataset has outsized leverage: each example is a strong directional signal landing on top of an already-rich foundation, not a brick in an empty foundation. The river was already flowing; the teaspoon just opens a channel it would rather follow.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Before reading on: if fine-tuning only steers existing knowledge, why can't a base model just do the specialized task with the right prompt?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Often it can &mdash; partially. A well-prompted base model can do a surprising amount through <a href="../module-3/g03-in-context-learning.html">in-context learning</a>, where examples in the prompt steer behavior temporarily. But prompting has limits: the steering vanishes when the prompt ends, it eats into the context window, and it is inconsistent across edge cases. Fine-tuning makes the steering <em>permanent and reliable</em> by writing it into the weights, so the behavior holds across millions of requests without spending a single prompt token on it. The choice between prompting and fine-tuning is one of the most useful judgment calls in applied AI &mdash; and the Think Further box below pushes on exactly that.</p>
+      </div>
     </div>
+
+    <h2>This is transfer learning, and it is not a trick</h2>
+
+    <p>The umbrella term for "train on one thing, reuse it for another" is <strong>transfer learning</strong>, and it is the single idea that makes the whole modern AI economy possible. Without it, every company that wanted a medical chatbot would have to train a model from scratch on medical data &mdash; impossibly expensive, and doomed anyway because there isn't enough medical text in existence to teach a model language from zero. Transfer learning means you pay the enormous general-education cost once, then everyone amortizes it into cheap specializations.</p>
+
+    <p>The foundational demonstration of this for language came from Jeremy Howard and Sebastian Ruder in their 2018 paper introducing ULMFiT &mdash; Universal Language Model Fine-tuning (Howard &amp; Ruder, 2018). Their result was striking for its time: take a single model pre-trained on general English text, fine-tune it on a target task with only a few hundred to a few thousand labeled examples, and it matched or beat models trained on that task from scratch with far more data. They showed that the general language knowledge genuinely <em>transferred</em> &mdash; the model wasn't starting fresh on each new task, it was carrying forward what it already understood about how English works and applying it to sentiment classification, topic labeling, and more. They even introduced techniques like gradual unfreezing (fine-tuning the model's layers in stages rather than all at once) to protect the transferred knowledge during specialization. ULMFiT is, in a real sense, the template every instruction-tuned chatbot you use today still follows: pre-train broadly, fine-tune narrowly.</p>
+
+    <p>And notice what this proves about the intelligence question, which is the through-line of this whole course. If the model were merely memorizing surface patterns, transfer would be impossible &mdash; sentiment examples and topic examples share almost no surface features. The fact that knowledge from general text transfers to specific tasks is evidence that pre-training built something <em>general</em>: reusable understanding of language and reasoning, not a lookup table glued to one task. Transfer learning works because there is genuine, portable competence underneath. You cannot transfer what you do not actually have.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why can fine-tuning on just 10,000 examples meaningfully change a model that was pre-trained on trillions of tokens?</div>
+      <button class="quiz-option" data-letter="A">Because the 10,000 fine-tuning examples are higher quality, so each one counts for millions of pre-training tokens.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because fine-tuning steers latent capabilities the model already has &mdash; it amplifies an existing ability rather than installing a new one from scratch.</button>
+      <button class="quiz-option" data-letter="C">Because fine-tuning erases the pre-training weights and replaces them with the new examples.</button>
+      <div class="quiz-feedback" data-correct="Right. The base model already contains the latent ability to do the task &mdash; it learned it during pre-training along with everything else. Fine-tuning provides a strong directional signal that foregrounds that ability, so a tiny dataset has outsized leverage on an already-rich foundation." data-incorrect="Not quite. It isn't about per-example quality or erasing weights. The key is that fine-tuning steers a capability the base model already learned during pre-training &mdash; it amplifies what's latent rather than teaching from zero."></button>
+    </div>
+
+    <h2>The same foundation, narrowed: generalist vs. specialist</h2>
+
+    <p>To make the steering concrete, compare what the same model looks like before and after fine-tuning on a single specialty &mdash; say, turning a general base model into a focused code assistant. The foundation is identical. What changes is where the model's attention and confidence get pointed.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Base Model &mdash; The Generalist</div>
+        <p>Ask it to write a Python function and it will &mdash; competently. But ask it the same thing and you might get a poem, a half-finished essay, a tangent about the history of sorting algorithms, or code wrapped in chatty preamble. It <em>can</em> do everything, which means it commits to nothing. It also retains full breadth: it will happily switch to discussing cricket, French history, or cooking. Wide, capable, unfocused.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Fine-Tuned Model &mdash; The Specialist</div>
+        <p>After fine-tuning on thousands of high-quality coding interactions, the same model now reliably returns clean, runnable code with the right idioms, sensible error handling, and minimal chatter. It defaults to the behavior its specialty rewards. The reasoning machinery is unchanged &mdash; but it is now <em>aimed</em>. The risk: push the specialization too hard and the cricket, French history, and cooking start to fade. The narrowing that makes it sharp can also make it brittle.</p>
+      </div>
+    </div>
+
+    <h2>Catastrophic forgetting: the specialist who forgets the basics</h2>
+
+    <p>That last warning is the third verification question and the most important caveat on this page. Fine-tuning has a dark side with an appropriately dramatic name: <strong>catastrophic forgetting</strong>. When you train a model intensively on a narrow task, it can lose previously learned capabilities &mdash; sometimes capabilities that have nothing to do with the new task. The tax lawyer who buries herself in the tax code for two straight years can genuinely get rusty at the family law she once handled with ease. Push specialization far enough and the foundation itself starts to erode.</p>
+
+    <p>The mechanism is straightforward once you remember how the model stores knowledge. Capabilities live in the <a href="../module-1/g01-weights.html">weights</a> &mdash; the same shared parameters, reused across every task. The model does not have a separate "French history" drawer and a separate "Python" drawer. Everything is superimposed in one set of numbers. When fine-tuning adjusts those weights to get better at the new task, it has no way to know which adjustments quietly damage an unrelated skill. There is no protective wall around the old knowledge. Optimizing hard for the new objective can overwrite the configuration that encoded the old one. The model is not betraying you; it is doing exactly what you asked &mdash; minimize error on <em>these</em> examples &mdash; and the collateral damage is invisible until you test for it.</p>
+
+    <p>This is why catastrophic forgetting <em>constrains</em> fine-tuning rather than merely annoying practitioners. It sets a real ceiling on how aggressively you can specialize. You cannot just crank up the training and assume more is better; past a point, more specialization means more forgetting. Practitioners fight back with a toolkit built precisely for this tension:</p>
+
+    <ul>
+      <li><strong>Low learning rates.</strong> Make small, gentle adjustments so the weights drift toward the new behavior without violently overwriting old ones. The tax lawyer reads tax cases on the side, she doesn't lock herself away for a year.</li>
+      <li><strong>Parameter-efficient fine-tuning (PEFT), like LoRA.</strong> Instead of editing all the model's weights, freeze the original ones entirely and train a tiny set of new "adapter" parameters layered on top. The base knowledge is physically protected because it is never touched &mdash; the specialization lives in a small add-on you can attach or remove.</li>
+      <li><strong>Mixing in general data.</strong> Blend some broad, general examples into the fine-tuning set so the model keeps rehearsing its old skills while learning the new one. Deliberate practice of the fundamentals, so they don't atrophy.</li>
+      <li><strong>Gradual unfreezing.</strong> The ULMFiT trick &mdash; fine-tune the model's layers in stages rather than disturbing the whole network at once, limiting how far the foundational representations can shift.</li>
+    </ul>
+
+    <p>None of these eliminate the trade-off; they manage it. And that trade-off is genuinely informative about what these models are. A system that could specialize with zero forgetting would more likely be a system storing facts in separate, addressable slots &mdash; a database. The fact that learning new things can disturb old things is the fingerprint of a single, integrated, compressed representation, the same property that lets the model generalize and reason in the first place. Forgetting is the cost of having genuine, entangled understanding rather than a filing cabinet.</p>
+
+    <h2>When NOT to fine-tune</h2>
+
+    <p>Because fine-tuning is powerful, it is tempting to treat it as the answer to every problem. It is not, and knowing when to reach for something else is the mark of a competent practitioner. Two big alternatives sit right next to it.</p>
+
+    <p>The first is <a href="../module-3/g03-in-context-learning.html">in-context learning</a> &mdash; just putting instructions or examples in the prompt. If you only need to steer behavior occasionally, or you are still figuring out what you want, prompting is faster, cheaper, and reversible. You change a prompt in seconds; you re-run a fine-tune in hours. The second is <a href="../module-5/g22-memory-architectures.html">retrieval-augmented generation (RAG)</a>, where you give the model access to an external knowledge store and let it look things up at answer time. This matters because of a crucial distinction: <em>fine-tuning is bad at teaching the model new facts, and good at teaching it new behaviors.</em> If your problem is "the model doesn't know our company's latest product specs," fine-tuning is the wrong tool &mdash; the facts change constantly, fine-tuning bakes them in statically, and you risk forgetting elsewhere for the privilege. That is a retrieval problem; let the model fetch the current spec sheet. But if your problem is "the model knows plenty, it just answers in the wrong tone, format, or style," that is a behavior problem, and fine-tuning is exactly right.</p>
+
+    <p>The signal to listen for is the shape of the gap. Is the model missing <em>knowledge</em> (reach for RAG), missing <em>instructions for this one task</em> (reach for prompting/in-context learning), or missing a <em>consistent learned skill or style at scale</em> (reach for fine-tuning)? Get that diagnosis right and you save yourself enormous cost and a lot of catastrophic forgetting.</p>
+
+    <h2>The same idea, one layer up: RLHF</h2>
+
+    <p>One more thing, because it sets up where the course goes next. The most famous and consequential fine-tuning of all is the step that turns a raw base model into a helpful, polite, safe assistant. That process &mdash; <a href="../module-4/g18-rlhf.html">reinforcement learning from human feedback</a> &mdash; is a specialized, supercharged form of fine-tuning. It uses the same core move (continue training the base model on a small, curated signal to shape behavior), but the signal comes from human preferences rather than fixed example texts. Every chatbot you have ever talked to is a base model that was fine-tuned into an assistant. The generalist-to-specialist transformation you learned on this page is the same machinery that makes models usable at all &mdash; you'll see the mechanics in detail in <a href="../module-4/g18-rlhf.html">G18</a>.</p>
+
+    <p>And the capabilities the specialist amplifies? Many of them were never explicitly built by anyone &mdash; they precipitated out of scale during pre-training, which is exactly the phenomenon you'll examine in <a href="g05-emergence.html">G5 &mdash; Emergent Capabilities</a>. Fine-tuning can only foreground what pre-training already grew. The specialist is only as good as the generalist underneath.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Fine-tuning does not teach a model new abilities &mdash; it <em>steers</em> abilities the base model already learned during pre-training, which is why ten thousand examples can redirect a model shaped by trillions of tokens. That steering writes into shared, entangled weights, so specializing hard can overwrite unrelated skills: catastrophic forgetting. The trade-off is not a bug to be eliminated but the signature of a single integrated understanding &mdash; you can only forget the way you do if your knowledge was genuinely general in the first place.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Given catastrophic forgetting, when do you fine-tune vs. reach for RAG (G22) or in-context learning (G3) &mdash; and what signal tells you which a problem needs?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the key paper for this page is Howard &amp; Ruder (2018), "Universal Language Model Fine-tuning for Text Classification" (ACL), which established that general pre-trained language knowledge transfers to specific tasks and introduced techniques (discriminative fine-tuning, gradual unfreezing) for doing it without destroying the transferred knowledge. LoRA &mdash; the low-rank adaptation approach mentioned under parameter-efficient fine-tuning &mdash; is from Hu et al. (2021), "LoRA: Low-Rank Adaptation of Large Language Models" (arXiv:2106.09685).</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

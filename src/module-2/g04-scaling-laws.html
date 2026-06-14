@@ -58,10 +58,126 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Put a pot of water on the stove and watch a thermometer. From 20&deg;C up to 99&deg;C, the change is boring and predictable &mdash; the water gets hotter, degree by degree, exactly as much as you'd expect from the heat you're adding. Then you hit 100&deg;C and something different happens. The water stops getting hotter and starts becoming steam &mdash; a qualitatively new thing with new behavior. Run it the other way, cooling toward 0&deg;C, and you get the same story: smooth, smooth, smooth, then a phase transition into ice. The underlying input changed smoothly the whole time. The output didn't.</p>
+
+    <p>That double character &mdash; smooth and predictable in one measurement, abrupt and surprising in another &mdash; is the best way into neural scaling laws, the subject of this page. There is a smooth, almost boringly regular relationship governing how language models improve as you make them bigger. And there is a separate, much stranger story about when new <em>abilities</em> show up. Getting clear on which is which is the whole job here, because it's the empirical answer to the question that's been driving this whole module: where did the intelligence actually come from?</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: what is the underlying training process all that compute actually runs? In one sentence, what does each unit of compute buy you in weight adjustments?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Each unit of compute pays for one more pass of <a href="g13-backpropagation.html">backpropagation and gradient descent</a> &mdash; the model makes a prediction, measures how wrong it was with a loss function, and nudges every weight a tiny amount in the direction that would have reduced that error. As covered in <a href="g13-backpropagation.html">G13</a>, intelligence is the cumulative result of trillions of these microscopic nudges. So "more compute" is not an abstract resource &mdash; it is literally <em>more weight adjustments over more data</em>. Scaling laws are what you get when you zoom out and ask: if I buy a billion times more of those nudges, how much better does the model get? That zoomed-out view turns out to be shockingly orderly.</p>
+      </div>
     </div>
+
+    <h2>The result that surprised everyone: it's a straight line</h2>
+
+    <p>In early 2020, a team at OpenAI ran a methodical set of experiments and published a paper with a deliberately dry title: "Scaling Laws for Neural Language Models" (Kaplan et al., 2020). They trained language models across a huge range of sizes &mdash; tiny ones, medium ones, large ones &mdash; on varying amounts of data, using varying amounts of compute. Then they plotted how good each model got. "Good" here means low <strong>loss</strong>: the cross-entropy you met in <a href="g13-backpropagation.html">G13</a>, a single number measuring how surprised the model is by the next token. Lower loss means better prediction means a more capable model.</p>
+
+    <p>What they found is the load-bearing fact of this entire era of AI. When you plot test loss against compute on a log-log graph &mdash; meaning both axes count by multiplying (1, 10, 100, 1,000) rather than adding &mdash; the points don't scatter. They fall on a <em>straight line that slopes downward</em>. Loss decreases as a smooth, predictable <strong>power law</strong> of the compute you throw at the problem. The same clean relationship holds for the other two ingredients too: model size (number of parameters) and dataset size (number of tokens). Three knobs, three power laws, all eerily regular across more than seven orders of magnitude. That is a billion-fold range in which the rule did not bend.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A log-log plot showing test loss falling as a straight downward-sloping line versus compute, the signature of a power law.">
+        <text x="360" y="28" text-anchor="middle" fill="#e2e8f0" font-size="18" font-weight="600">Test Loss vs. Compute (log&ndash;log axes)</text>
+        <!-- axes -->
+        <line x1="90" y1="60" x2="90" y2="350" stroke="#5a6375" stroke-width="2"/>
+        <line x1="90" y1="350" x2="660" y2="350" stroke="#5a6375" stroke-width="2"/>
+        <!-- axis labels -->
+        <text x="40" y="210" text-anchor="middle" fill="#8892a4" font-size="14" transform="rotate(-90 40 210)">Loss (lower = better)</text>
+        <text x="375" y="392" text-anchor="middle" fill="#8892a4" font-size="14">Compute &mdash; counting by &times;10 (log scale) &rarr;</text>
+        <!-- log gridlines (vertical) -->
+        <line x1="204" y1="60" x2="204" y2="350" stroke="#161c30" stroke-width="1"/>
+        <line x1="318" y1="60" x2="318" y2="350" stroke="#161c30" stroke-width="1"/>
+        <line x1="432" y1="60" x2="432" y2="350" stroke="#161c30" stroke-width="1"/>
+        <line x1="546" y1="60" x2="546" y2="350" stroke="#161c30" stroke-width="1"/>
+        <line x1="660" y1="60" x2="660" y2="350" stroke="#161c30" stroke-width="1"/>
+        <!-- the power-law straight line -->
+        <line x1="110" y1="95" x2="650" y2="320" stroke="#00e5ff" stroke-width="3"/>
+        <!-- data points sitting on the line -->
+        <circle cx="150" cy="111" r="6" fill="#c084fc"/>
+        <circle cx="260" cy="157" r="6" fill="#c084fc"/>
+        <circle cx="370" cy="203" r="6" fill="#c084fc"/>
+        <circle cx="480" cy="249" r="6" fill="#c084fc"/>
+        <circle cx="590" cy="295" r="6" fill="#c084fc"/>
+        <!-- callout for the straight line -->
+        <text x="470" y="150" fill="#00e5ff" font-size="14" font-weight="600">A straight line on log&ndash;log</text>
+        <text x="470" y="170" fill="#8892a4" font-size="13">= a power law</text>
+        <!-- model size annotations under points -->
+        <text x="150" y="130" text-anchor="middle" fill="#5a6375" font-size="11">small</text>
+        <text x="370" y="222" text-anchor="middle" fill="#5a6375" font-size="11">medium</text>
+        <text x="590" y="314" text-anchor="middle" fill="#5a6375" font-size="11">large</text>
+      </svg>
+      <p class="diagram-caption">Each &times;10 of compute buys the same proportional drop in loss. The line keeps going &mdash; but notice it gets flatter, and never touches zero. That shallowing slope is diminishing returns, made precise.</p>
+    </div>
+
+    <p>So the answer to the first verification question &mdash; what is the basic form of a scaling law? &mdash; is exactly this. A scaling law says loss falls as a power of a resource: roughly, <em>loss &asymp; (a constant) &divide; (compute raised to some small fraction)</em>. In plain terms, every time you multiply your compute by ten, your loss drops by a fixed, predictable amount &mdash; not to zero, but a steady step down the ladder each time. The relationship is a multiply-in, multiply-out rule, which is why it only looks like a straight line when you stretch both axes onto log scales. On ordinary axes it's a curve that swoops down fast and then flattens into a long, shallow tail.</p>
+
+    <h2>Why this is genuinely strange &mdash; and genuinely useful</h2>
+
+    <p>Step back and feel how unusual this is. Most complicated systems don't behave like this. If you doubled the number of consultants on a project, you would not get a clean, repeatable improvement in the deliverable &mdash; you'd get coordination overhead, diminishing contributions, and a messy curve nobody could forecast. Neural networks, somehow, are different. A model is a tangle of billions of interacting parameters trained on a chaotic slurry of internet text, and yet its aggregate behavior obeys a law clean enough to print on a graph. Nobody fully understands <em>why</em> the regularity is so tight. But its existence is not in dispute &mdash; it has held across many model families and many labs.</p>
+
+    <p>The usefulness is enormous, and it changed how the industry operates. Because the curve is predictable, you can run a sweep of small, cheap experiments &mdash; models you can train in hours &mdash; fit the resulting line, and then <em>extrapolate</em> to forecast how a model 100 or 1,000 times bigger will perform before you spend tens of millions of dollars building it. This is the difference between gambling and engineering. When a lab commits a nine-figure budget to a training run, they are not crossing their fingers. They are reading a line they've already measured and trusting it to keep going. Scaling laws turned "make AI better" from alchemy into a budget line item.</p>
+
+    <p>There's an important refinement here that's worth flagging, because it shows the laws are a living research tool, not stone tablets. Kaplan et al. (2020) concluded that model size mattered most and you should pour most of your budget into making the model bigger. Two years later, a DeepMind team revisited the question and found Kaplan's recipe had under-fed its models on data. Their result &mdash; the "Chinchilla" paper (Hoffmann et al., 2022) &mdash; showed that for a fixed compute budget, you get a better model by balancing parameters and tokens far more evenly, roughly scaling them together. A model that's smaller but trained on much more data can beat a bigger, data-starved one. The headline takeaway: the existence and shape of scaling laws is robust, but the <em>exact optimal mix</em> of the ingredients is something researchers actively measure and revise. You'll see the data side of this story in <a href="g14-pretraining-data.html">G14 &mdash; Pre-Training Data</a>.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A scaling-law plot of loss versus compute is a straight, downward line on log-log axes. What does that straight line actually tell you?</div>
+      <button class="quiz-option" data-letter="A">That loss will eventually hit zero if you keep adding compute.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">That each multiplication of compute (&times;10) yields the same predictable drop in loss &mdash; a power law you can extrapolate to forecast a bigger model.</button>
+      <button class="quiz-option" data-letter="C">That capability improves linearly &mdash; double the compute, double the intelligence.</button>
+      <div class="quiz-feedback" data-correct="Right. Log-log straightness is the visual signature of a power law: equal multiplicative steps in compute produce equal steps down in loss. The slope is shallow and never reaches zero, which is why it's diminishing returns &mdash; but predictable diminishing returns, which is what makes forecasting possible." data-incorrect="Look again at the axes. They count by multiplying, not adding. The line never reaches zero (returns diminish), and the improvement is multiplicative, not a simple doubling &mdash; what matters is that each &times;10 of compute buys a fixed, forecastable drop in loss."></div>
+    </div>
+
+    <h2>Why a 70B model does things a 7B model simply can't</h2>
+
+    <p>Now to the second verification question, which is where the smooth story collides with the strange one. A 7-billion-parameter model and a 70-billion-parameter model are the same architecture, trained the same way, on overlapping data. The big one is, in a literal sense, just more of the same. So why can the 70B model follow multi-step instructions, do passable arithmetic, and reason through a problem when the 7B model produces fluent nonsense on the very same prompt?</p>
+
+    <p>Part of the answer is the smooth law you've already met. More parameters and more compute mean lower loss, and lower loss means the model is, across the board, a better predictor &mdash; sharper grammar, more facts, finer distinctions. A 70B model is meaningfully less wrong than a 7B model on essentially everything. That alone buys a lot.</p>
+
+    <p>But the part that makes people sit up is the other measurement &mdash; the phase-transition side of the analogy. For certain specific tasks, capability does not improve smoothly as the model grows. It stays near zero, near zero, near zero &mdash; and then, past some scale threshold, it jumps to working. The original report of this (Wei et al., 2022) catalogued tasks where small and medium models scored at chance level, and then a larger model in the same family suddenly performed far above chance. Multi-step arithmetic, certain kinds of word-unscrambling, answering questions that require chaining facts together &mdash; these looked like the water hitting 100&deg;C. Smooth input (more scale), discontinuous output (a new ability switching on).</p>
+
+    <p>So why can the 70B do what the 7B can't? Two compounding reasons: it is uniformly less wrong because of the smooth power law, <em>and</em> it has crossed scale thresholds that switched on capabilities the smaller model never had access to. The smooth curve raises the floor everywhere; the thresholds open specific doors. Hold on to the word "thresholds," though, because whether those jumps are real discontinuities or an illusion of how we measure them is a live and important argument &mdash; and it's the bridge to the next question.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Smooth Scaling (the power law)</div>
+        <p>Loss falls in clean, predictable steps as compute grows. Like water warming from 20&deg;C to 99&deg;C &mdash; the change tracks the input. This is what you can forecast and budget for. It quietly makes the model better at nearly everything at once.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Phase Transition (claimed emergence)</div>
+        <p>On certain tasks, accuracy sits at chance until a scale threshold, then jumps to working &mdash; like water at 100&deg;C becoming steam. The input changed smoothly; the capability did not. Whether this is truly abrupt is exactly the contested part.</p>
+      </div>
+    </div>
+
+    <h2>Can scaling laws predict which capability appears, and when?</h2>
+
+    <p>This is the third verification question, and it's the most important one to get exactly right, because the honest answer is a sharp "no" with a fascinating caveat attached. Scaling laws predict <em>loss</em> beautifully. They are nearly silent about <em>capabilities</em>.</p>
+
+    <p>Here's the gap, stated plainly. The smooth law tells you that a model with ten times the compute will have, say, 8% lower loss. It does not tell you that <em>this</em> is the run where the model will finally be able to do three-digit multiplication, or follow a five-step instruction, or write working code in a new language. You can forecast the aggregate prediction quality with confidence. You cannot read off the menu of skills that quality will unlock, nor the precise scale at which any particular one switches on. Loss is one continuous number; capabilities are a thousand separate, lumpy things. The law speaks the language of the first and is mute in the language of the second.</p>
+
+    <p>This is precisely why the next page exists. The phenomenon where new abilities appear at scale &mdash; abilities absent from smaller models trained identically &mdash; is called <strong>emergence</strong>, and it gets its own full treatment in <a href="g05-emergence.html">G5 &mdash; Emergent Capabilities</a>. Two things are worth previewing so you carry the right amount of skepticism into it.</p>
+
+    <p>First, emergence is genuinely surprising and was not predicted in advance from the loss curves &mdash; which is the whole reason it caused a stir. Second, and this is the caveat that keeps you honest: a careful 2023 analysis (Schaeffer et al., 2023) argued that some apparent "phase transitions" are partly an artifact of <em>how we choose to measure</em>. If you grade a task with a harsh all-or-nothing metric &mdash; exact-match accuracy, where a 50-digit answer that's one digit off scores zero &mdash; you manufacture a cliff. The model was improving smoothly underneath the whole time (you can see it in the continuous loss), but your yardstick only flips from "fail" to "pass" once the model crosses a high bar, producing the appearance of a sudden jump. Swap in a smoother metric and many of the dramatic cliffs soften into ramps.</p>
+
+    <p>So is emergence real or a mirage? The careful, current reading is: <em>some of both, and researchers still debate the proportions.</em> Part of what looked discontinuous was a measurement choice; the underlying capability was building gradually. But not everything dissolves under nicer metrics, and the practical reality stands regardless &mdash; you genuinely cannot look at a scaling curve today and confidently predict the full set of skills a model ten times larger will possess. Whether the unlock is a true thermodynamic phase change or just a sharp bend in a smooth curve, you can't forecast the menu from the loss. That irreducible surprise is the honest limit of scaling laws, and it's what makes the next page necessary rather than redundant. (For the full Schaeffer critique and the careful refinement of the emergence claim, see <a href="g05-emergence.html">G5</a>.)</p>
+
+    <h2>Putting it back together</h2>
+
+    <p>Return to the pot of water one last time, because the analogy carries the whole lesson. The thermometer reading is loss: it changes smoothly, predictably, in exact proportion to the heat you add, and you can forecast it with a simple rule. "Is it ice or steam?" is capability: it switches state at thresholds the thermometer alone would never let you predict. Scaling laws are the thermometer. They are an extraordinary instrument &mdash; precise, reliable, the reason modern AI is engineered rather than stumbled into. But a thermometer cannot tell you the moment water becomes steam, and a loss curve cannot tell you the moment a model learns to reason through a multi-step problem.</p>
+
+    <p>That distinction is the answer to "where did the intelligence come from?" at the level this module can give it. It came from scale &mdash; from buying enough of those <a href="g13-backpropagation.html">backpropagation</a> nudges, over enough data, that loss dropped low enough for sophisticated structure to be worth encoding. That part is lawful and forecastable. But the specific intelligence &mdash; <em>which</em> capabilities, appearing at <em>which</em> scale &mdash; arrives with a surprise the law cannot remove. Scaling is the predictable engine; emergence is the unpredictable output. The skeptic who says "it just got bigger" is right about the cause and wrong to think bigness is boring: more scale really does produce qualitatively different minds, and we can predict that it will happen long before we can predict exactly what it will do.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Scaling laws are smooth and forecastable on <em>loss</em> &mdash; every &times;10 of compute buys a predictable drop, a clean power law that lets labs budget for capability instead of gambling on it. But they are nearly silent on <em>capabilities</em>: you cannot read off the loss curve which specific skill will switch on, or at what scale. Intelligence emerging from scale is therefore two facts at once &mdash; a lawful, predictable engine (the falling loss) driving an output that arrives with genuine surprise (which abilities appear, and when). You can bank on the curve; you cannot bank on the menu.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Scaling laws are smooth on loss but silent on which capability unlocks when. With a fixed compute budget, how does that gap change how you would bet on a new model?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the smooth power-law result is Kaplan et al. (2020), "Scaling Laws for Neural Language Models" (arXiv:2001.08361). The compute-optimal revision of the data&ndash;parameter mix is the Chinchilla paper, Hoffmann et al. (2022), arXiv:2203.15556. The catalogue of capability jumps is Wei et al. (2022), "Emergent Abilities of Large Language Models" (arXiv:2206.07682); the measurement-artifact critique is Schaeffer et al. (2023), "Are Emergent Abilities of Large Language Models a Mirage?" (NeurIPS) &mdash; both are examined in depth on the next page, G5.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

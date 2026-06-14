@@ -59,10 +59,128 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a moderator running an expert panel. She is not a chemist, not an economist, not an epidemiologist. What she has is a clipboard with the review criteria the organizers handed her: "Press every claim for its strongest counter-evidence. Flag any conclusion that outruns its data. Reward novel mechanisms over incremental tweaks." A paper she has never seen lands on the table. She doesn't need a PhD in its field to run the session well &mdash; she needs to take those written criteria and <em>apply</em> them to this specific paper, in real time, in front of the panel. That act &mdash; criteria from outside, applied to a novel case by reasoning rather than retraining &mdash; is exactly how an LLM agent "picks a lens."</p>
+
+    <p>This page answers a question that trips up almost everyone building their first agent: <em>where does the agent's "judgment" come from?</em> When your research agent reads a paper "critically" instead of "enthusiastically," nothing in its weights changed between the two runs. No new training happened. The behavior you're seeing is not baked in &mdash; it's <em>configured at runtime</em>, and the mechanism that does the configuring is the same one you met two pages back.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in your own words, what does in-context learning actually let a model do without any weight updates?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It lets the model adapt its behavior based purely on what's in the prompt &mdash; instructions, examples, retrieved documents &mdash; without a single change to its weights. As you saw in <a href="../module-3/g03-in-context-learning.html">G3 &mdash; In-Context Learning</a>, the consultant who reads three of your memos and writes a perfect fourth didn't get retrained between memo two and memo three. The pattern lived in the context, and the model conditioned on it. Lens-picking is in-context learning pointed at a decision: the "pattern" the model conditions on is a set of review criteria, and the "fourth memo" it produces is its judgment of a new paper.</p>
+      </div>
     </div>
+
+    <h2>The lens is not in the weights &mdash; it's in the context</h2>
+
+    <p>Here is the cleanest way to hold the whole idea. A base model is a general-purpose reasoning engine with no particular point of view. It can argue for a paper and against it with equal fluency, because both arguments are well-represented in the text it learned from. What turns that neutral engine into "a skeptical reviewer" or "a generous brainstorming partner" is not a different model. It's a different <em>input</em>.</p>
+
+    <p>When you write a system prompt that says "You are a rigorous peer reviewer; your job is to find the weakest link in every argument," you are not editing the model. You are supplying decision criteria that sit in the context window for the entire session. Every time the model generates a token, those criteria are part of what it conditions on &mdash; and through <a href="../module-3/g02-attention.html">G2 &mdash; Transformer Attention</a>, the tokens of the new paper get to "look at" the tokens of your criteria and pull relevance from them. The attention mechanism is the literal wiring that lets "find the weakest link" reach across the prompt and shape how the model reads "our method improves accuracy by 2%." The lens is a set of words; attention is how those words touch the new input; in-context reasoning is what happens when they meet.</p>
+
+    <p>This is why the same agent can switch lenses between two API calls with zero retraining. Swap the system prompt from "rigorous reviewer" to "enthusiastic scout looking for promising directions," and the model now attends to a different set of criteria. Same weights, same paper, opposite reading. The capability that makes this possible &mdash; conditioning behavior on instructions and examples held in the prompt &mdash; is the few-shot, in-context learning ability documented at scale in the GPT-3 paper (Brown et al., 2020). Their headline result was that a single frozen model could be steered to dozens of different tasks purely by what you put in front of it. Lens-picking is that result applied to the specific task of "judge this input by these standards."</p>
+
+    <h2>Three places a lens can come from</h2>
+
+    <p>"The context" is not one thing. In a real agent, the criteria that form a lens can arrive through three different channels, and knowing which one you're using is the difference between an agent that behaves predictably and one that surprises you.</p>
+
+    <ul>
+      <li><strong>The system prompt.</strong> The most direct channel. You state the criteria explicitly in natural language: "Apply a critical lens. Question every causal claim. Demand effect sizes, not just p-values." This is durable across the whole session and is where most lens-setting should live.</li>
+      <li><strong>Few-shot examples.</strong> Instead of stating the lens, you <em>demonstrate</em> it. You show the agent two or three worked reviews &mdash; here's a paper, here's the critical review we'd want &mdash; and let it infer the standard from the examples. This is in-context learning in its purest form, and it's powerful when the lens is easier to show than to describe (tone, depth, what counts as a "real" objection).</li>
+      <li><strong>Retrieved context.</strong> The criteria can be pulled in dynamically. An agent might retrieve your organization's review rubric from a document store and inject it into the prompt before reading the paper. The lens isn't hard-coded &mdash; it's fetched, which means it can be versioned, updated, and audited independently of the agent. You'll see the machinery for this in <a href="g22-memory-architectures.html">G22 &mdash; Memory Architectures</a>.</li>
+    </ul>
+
+    <p>All three channels feed the same engine. Whether the criteria are typed into a system prompt, shown as examples, or retrieved from a database, they end up as tokens in the context window, and the model applies them the same way: by attending to them while it reasons about the new input. The channel changes how the lens gets <em>there</em>. It does not change how the lens gets <em>applied</em>.</p>
+
+    <h2>Watching the moderator work: a system prompt becomes a verdict</h2>
+
+    <p>Abstract claims are cheap. Let's make this concrete by walking a single paper through the agent twice &mdash; once under a critical lens, once under an exploratory one &mdash; and watching where the divergence comes from. The paper is the same both times. The weights are the same both times. Only the criteria in the prompt differ.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The organizer writes the criteria (system prompt)</h4>
+        <p>You set the lens in the system prompt: <em>"You are a senior reviewer applying a CRITICAL lens. For any paper, your job is to find the single weakest link in the argument, check whether conclusions are supported by the reported data, and flag claims that generalize beyond what was tested. Be specific; cite the exact sentence you're objecting to."</em> Nothing about the model has changed &mdash; you've just handed the moderator her clipboard.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>A novel paper arrives (the user turn)</h4>
+        <p>The agent receives a paper it has never seen: a study claiming a new drug "dramatically reduces relapse" based on a 28-person trial with no control group. The model has no stored opinion about this paper &mdash; it didn't exist in training. Everything it's about to say has to be <em>computed</em> from the paper plus the criteria.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Attention binds criteria to content (in-context reasoning)</h4>
+        <p>As the model reads "28-person trial with no control group," attention lets those tokens reach back to "check whether conclusions are supported by the reported data" and "flag claims that generalize beyond what was tested." The criteria and the content meet. The model isn't retrieving a canned critique &mdash; it's applying a general standard to a specific, novel case, exactly like the moderator pressing an unfamiliar paper against her clipboard.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>The critical verdict</h4>
+        <p>Output: "The central weakness is the absence of a control group &mdash; without one, 'dramatically reduces relapse' cannot be distinguished from natural recovery or placebo effect. With n=28, the confidence interval on any effect is wide enough that the result may not replicate. The conclusion outruns the evidence." That verdict was not in the model. It was produced by the criteria acting on the content.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Now swap the lens (exploratory)</h4>
+        <p>Change one thing &mdash; the system prompt now reads: <em>"You are a scout applying an EXPLORATORY lens. Identify what's promising and novel, and what follow-up experiment would make this compelling."</em> Same paper, same model. Output: "The mechanism is novel and the early signal is worth chasing. The obvious next step is a randomized controlled trial powered to detect the claimed effect &mdash; if it holds at n=200 with a control arm, this is publishable." Opposite reading, identical weights. The lens did all the work.</p>
+      </div>
+    </div>
+
+    <p>That last step is the whole argument in miniature. The skeptic's worry &mdash; "the agent just has a fixed personality baked in" &mdash; collapses the moment you watch the same model produce a rigorous teardown and a generous green-light from the same paper, switched by nothing but the words in its instructions. A fixed personality can't do that. A reasoning engine conditioned on supplied criteria can, and that's the first verification question answered: a reliable lens instruction names the standard concretely (what to look for, what to flag, what counts as good), and demonstrates the difference between lenses so the model can't blur them together.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Your research agent reviews the same paper twice and gives nearly opposite assessments. Between the two runs, you changed only the system prompt. What does this prove about where the "lens" lives?</div>
+      <button class="quiz-option" data-letter="A">The model was fine-tuned between the two runs, which is why its behavior changed.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The lens lives in the context, not the weights &mdash; the same frozen model conditioned on different criteria and applied them to the paper via in-context reasoning.</button>
+      <button class="quiz-option" data-letter="C">The model is unreliable and gives random answers, so the two runs just happened to differ.</button>
+      <div class="quiz-feedback" data-correct="Right. Identical weights, identical paper, different instructions, opposite verdict. The only thing that changed was the criteria in the prompt, so the behavior must be coming from the context being applied at runtime, not from anything stored in the model." data-incorrect="Look at what actually changed: only the system prompt. No training happened between calls. If the same frozen model produces opposite readings from different prompts, the steering must be coming from the context, not the weights."></div>
+    </div>
+
+    <h2>Verifying the lens: don't trust the label, check the reasoning</h2>
+
+    <p>Here's the trap that catches consultants-turned-agent-builders. You tell the agent "apply a critical lens," it cheerfully replies "Applying a critical lens now!" &mdash; and then writes a glowing review. The agent <em>claimed</em> the lens and <em>didn't apply</em> it. This is the second verification question, and it's the one that matters most in production, because an agent that narrates the right behavior while performing the wrong one is worse than useless: it's confidently wrong.</p>
+
+    <p>The fix is to never accept the agent's self-report as evidence. A label is cheap; reasoning is expensive. To verify a lens is actually being applied, check for the <em>fingerprints</em> of that lens in the output, not the announcement of it:</p>
+
+    <ul>
+      <li><strong>Demand artifacts the lens would necessarily produce.</strong> A genuine critical review must name a specific weakness, quote the exact claim it objects to, and say what evidence would change its mind. If those artifacts are missing, the lens wasn't applied &mdash; regardless of what the preamble says. Make these mandatory in the output format so their absence is detectable.</li>
+      <li><strong>Run the same input through opposing lenses and compare.</strong> If "critical" and "exploratory" produce substantially the same text, neither lens is doing anything. Divergence between lenses is your proof that the criteria are biting. This is the single most reliable check, and it's cheap &mdash; two calls and a comparison.</li>
+      <li><strong>Inspect the chain of reasoning, not just the conclusion.</strong> Ask the agent to show its work. As you'll see in <a href="../module-3/g09-chain-of-thought.html">G9 &mdash; Chain-of-Thought as Computation</a>, the intermediate steps aren't decoration &mdash; they're where the lens either shows up or doesn't. A critical lens that's real will produce visibly critical reasoning steps, not just a critical-sounding final sentence.</li>
+      <li><strong>Use a separate grader.</strong> A second model (or a rubric) that scores the output for "did it apply the critical criteria?" catches drift the primary agent won't admit to. Don't let the agent grade its own lens application.</li>
+    </ul>
+
+    <p>The deep reason self-reports are unreliable connects back to what these models are. The agent generates "Applying a critical lens" because that phrase is a high-probability continuation of a prompt that asked for a critical lens &mdash; it's a fluent thing to say, not a verified report of internal state. The same fluency that makes the agent useful makes its self-narration untrustworthy. Verify behavior, never announcements.</p>
+
+    <h2>Why the agent applies the wrong lens</h2>
+
+    <p>Now the third verification question, which is really a debugging checklist. If lenses come from the context and are applied by attention, then every failure mode is a failure of one of those two things: either the criteria didn't make it cleanly into the context, or the model's attention got pulled toward something else. Here are the usual culprits.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">What You Think You Configured</div>
+        <p>"I put 'apply a critical lens' in the system prompt, so the agent reviews critically. One clear instruction, set once, governs the whole session."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">What Actually Governs Behavior</div>
+        <p>Everything in the context window competes for attention: the system prompt, the user's framing, the paper's own persuasive language, prior turns, and any retrieved text. The "lens" the model applies is the <em>net</em> of all of it &mdash; and a confidently-worded paper or a leading user question can quietly outvote a one-line system prompt.</p>
+      </div>
+    </div>
+
+    <p>Concretely, the agent drifts to the wrong lens when:</p>
+
+    <ul>
+      <li><strong>Conflicting instructions.</strong> The system prompt says "be critical," but the user turn says "this looks great, right?" The model attends to both and often splits the difference &mdash; or follows the more recent, more specific instruction. Later context tends to win, which is why a leading user message can override a system prompt.</li>
+      <li><strong>The input hijacks the lens.</strong> A paper written in confident, jargon-heavy prose can pull the model toward agreement, because that's how the surrounding text "wants" to be continued. The persuasive content competes with your criteria for the model's attention, and sometimes wins. This is a mild, benign cousin of prompt injection &mdash; the data is steering the agent.</li>
+      <li><strong>Vague criteria.</strong> "Be critical" is not a lens; it's a vibe. Without concrete standards (find the weakest link, check effect sizes, flag overgeneralization), the model has nothing specific to attend to, so it defaults to its generic, agreeable baseline.</li>
+      <li><strong>Context dilution over long sessions.</strong> Twenty turns in, the original system prompt is far away in the context, and the recent conversation dominates attention. The lens fades not because it was deleted but because it's been crowded out. Re-stating critical criteria periodically is a real fix, not a hack.</li>
+      <li><strong>Lens collision across sub-tasks.</strong> When an agent decomposes a goal into steps &mdash; the topic of <a href="g23-goal-decomposition.html">G23 &mdash; Goal Decomposition</a> &mdash; a sub-task can carry a different implied lens than the parent task, and the wrong one can leak across the boundary.</li>
+    </ul>
+
+    <p>Notice that none of these are mysterious. Every one of them is "the criteria you intended lost an attention contest to something else in the context." That single framing turns lens-debugging from guesswork into a search: find what's competing with your criteria, and either remove it or make your criteria win.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>An agent's "lens" is not a personality stored in its weights &mdash; it's a set of decision criteria sitting in the context window, applied to novel input by the same in-context reasoning that powers few-shot learning. The system prompt supplies the criteria, attention binds them to the new input, and reasoning produces the verdict. That's why the same frozen model can review one paper two opposite ways with no retraining &mdash; and why you verify a lens by checking the fingerprints in its reasoning, never by trusting its self-report.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If the lens lives in the system prompt and is applied via in-context reasoning, how would you detect at runtime that the agent silently drifted to the wrong lens mid-task?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the underlying mechanism &mdash; a single frozen model steered to different tasks purely by what's placed in its context &mdash; is the few-shot in-context learning result documented in Brown et al. (2020), "Language Models are Few-Shot Learners" (the GPT-3 paper), the same source that anchors <a href="../module-3/g03-in-context-learning.html">G3</a>.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

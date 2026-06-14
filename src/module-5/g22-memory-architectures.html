@@ -59,10 +59,153 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture the best consultant you have ever worked with. Not the one who memorized every framework in business school, but the one who, the night before a client meeting, pulls exactly the right three case files from a cabinet that holds a thousand &mdash; the 2019 supply-chain turnaround that rhymes with this client's problem, the pricing study from a different industry that happens to apply, the regulatory memo nobody else remembered. They are not smarter than their peers because they hold more in their head. They are smarter because they have a system for retrieving the right thing at the right moment. The knowledge lives in the filing cabinet. The intelligence lives in knowing which file to grab.</p>
+
+    <p>That is the whole idea of memory architectures for AI agents, and the most important version of it has a name: <strong>retrieval-augmented generation</strong>, or RAG (Lewis et al., 2020). An agent's reasoning ability lives in its weights and is fixed at training time. The world's knowledge &mdash; your company's documents, last quarter's numbers, the API docs that changed yesterday &mdash; lives outside, in files the model never saw. RAG is the filing system that connects the two. Before the model answers, it retrieves the relevant files and lays them on the desk. The model then reasons over what is in front of it. This page is about how that filing system actually works, why it is far more than copy-paste from a database, and what new ways it can fail.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in <a href="../module-3/g03-in-context-learning.html">G3</a> you learned the model can pick up a new pattern from examples placed in its prompt &mdash; without any weight changes. What does that tell you about how RAG could possibly work?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It tells you RAG needs no retraining. Because of <a href="../module-3/g03-in-context-learning.html">in-context learning</a>, anything you put into the prompt is something the model can immediately use &mdash; it conditions its next-token predictions on the whole context, treating freshly inserted text as if it had always known it. RAG exploits exactly this: it does not teach the model new facts by adjusting weights; it stuffs the relevant facts into the context window at inference time and lets in-context learning do the rest. No fine-tuning, no training run, no waiting. Retrieve, inject, answer.</p>
+      </div>
     </div>
+
+    <h2>The problem RAG solves: a brilliant mind with no desk space</h2>
+
+    <p>A base LLM has two hard limits that RAG is built to attack. The first is a <strong>knowledge cutoff</strong>: the model only knows what was in its training data, frozen on the day training stopped. Ask it about an event from last week, your internal Q3 report, or a library released this morning, and it has nothing &mdash; or worse, it improvises something that sounds right. The second is the <strong>context window</strong>: the model can only "see" a finite amount of text at once. Even a generous window of a few hundred thousand tokens cannot hold your company's entire document store, which might run to millions of pages.</p>
+
+    <p>RAG turns the context window from a hard wall into a smart, refreshable workspace. You do not try to pour the whole filing cabinet onto the desk. You retrieve the handful of pages that matter for <em>this</em> question and place only those into the context. The model still reasons inside its finite window &mdash; that limit never goes away &mdash; but the window now holds the most relevant slice of an effectively unbounded knowledge base. This is the precise sense in which RAG "extends the context window": not by making the window physically bigger, but by ensuring the right external knowledge occupies it at the moment it is needed. The consultant's desk is still small. The cabinet behind it is not.</p>
+
+    <h2>How the filing system actually works</h2>
+
+    <p>The magic of the consultant's cabinet is not the cabinet &mdash; it is the indexing scheme. A cabinet sorted alphabetically by client name is useless when the question is "have we ever solved a problem <em>like</em> this one?" You need files organized by <em>meaning</em>, so that "this engagement reminds me of that one" becomes a lookup you can actually perform. The technology that makes meaning searchable is the <strong>embedding</strong>, the same idea you met in <a href="../module-1/g11-tokenization.html">G11 &mdash; Tokenization &amp; Embedding Spaces</a>: every chunk of text is converted into a vector, a long list of numbers, positioned in a space where distance equals dissimilarity of meaning. Two passages about the same idea, even with no words in common, land close together. Two passages that share words but mean different things land far apart.</p>
+
+    <p>Store millions of those vectors in a structure built for fast nearest-neighbor lookup &mdash; a <strong>vector store</strong> or vector database &mdash; and you have a filing cabinet indexed by meaning. When a question arrives, you embed the question into the same space and ask: which stored chunks sit closest to this point? Those are your relevant files. Let me walk the full pipeline end to end, because every stage matters.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The query arrives</h4>
+        <p>A user asks the agent: "What was our refund policy for enterprise customers in 2023?" This is the raw question &mdash; natural language, no keywords flagged, no database query written. The agent's reasoning has not started yet. First it needs the relevant files.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Embed the query</h4>
+        <p>The question is passed through an embedding model, which converts it into a single vector &mdash; a point in the same high-dimensional meaning-space where every document chunk already lives. Crucially, the question and the documents are embedded by the same model, so they share one coordinate system. The question now has an address in meaning-space.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Semantic search over the vector store</h4>
+        <p>The system measures the distance between the query's vector and the millions of pre-computed document vectors, returning the closest matches &mdash; say, the top five chunks. A chunk titled "Enterprise Account Terms &mdash; Returns and Credits (FY2023)" scores high even though it never uses the word "refund," because <em>refund</em>, <em>returns</em>, and <em>credits</em> sit near each other in meaning-space. This is the step a keyword search would have missed.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Inject the retrieved chunks into the prompt</h4>
+        <p>The system assembles a new prompt: the retrieved chunks, clearly delimited as source material, followed by the original question and an instruction like "Answer using only the provided sources." The relevant case files are now physically on the desk &mdash; in the context window where the model can read them.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>The model reasons and answers</h4>
+        <p>Only now does generation begin. The model reads the injected sources and the question together and produces an answer grounded in that text &mdash; ideally citing which chunk it drew from. Because of <a href="../module-3/g03-in-context-learning.html">in-context learning</a>, it treats the retrieved 2023 policy as authoritative even though that policy was never in its training data. Retrieve, embed, search, inject, answer.</p>
+      </div>
+    </div>
+
+    <p>Notice what the model contributes and what the retrieval system contributes. The retrieval system is the librarian: it finds and fetches. The model is the analyst: it reads, synthesizes, resolves contradictions between sources, and writes a coherent answer. RAG is the collaboration. This division of labor is exactly why it is wrong to call RAG "copy-paste from a database." A database lookup returns rows. RAG returns rows <em>and then runs them through a reasoning engine</em> that can summarize three conflicting policy memos into one nuanced answer, flag that the sources disagree, or notice that none of them actually addresses the question. The retrieval is mechanical. What happens after retrieval is not.</p>
+
+    <h2>Semantic search vs. keyword search: matching meaning, not letters</h2>
+
+    <p>The single most important upgrade RAG brings over old document search is the shift from matching <em>words</em> to matching <em>meaning</em>. Both verification questions in this course's second slot point at this, so let me make the contrast sharp.</p>
+
+    <p><strong>Keyword search</strong> &mdash; the technology behind a classic search bar or a <code>SELECT ... WHERE text LIKE '%refund%'</code> query &mdash; matches character strings. It is fast, transparent, and excellent when you know the exact term you want. But it is brittle in two opposite directions. It misses synonyms: search "refund" and you will never find the document that only ever says "reimbursement" or "credit issued." And it produces false hits on shared words across different meanings: search "java" for the programming language and you drown in coffee and Indonesian-island results. Keyword search has no concept of meaning. It sees letters.</p>
+
+    <p><strong>Semantic search</strong> matches embeddings &mdash; positions in meaning-space &mdash; so it retrieves on the basis of what the text is <em>about</em>. "How do I get my money back?" retrieves a passage titled "Reimbursement procedure for cancelled orders" with zero shared keywords, because the two phrases sit near each other in the embedding space. And it separates the coffee from the code, because "Java the programming language" and "Java the coffee" land in different neighborhoods despite the identical spelling. This is the same geometry of meaning you saw build distance-equals-difference in <a href="../module-1/g11-tokenization.html">G11</a>, now put to work as a retrieval index.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Two search methods compared: keyword search matches letters and misses synonyms; semantic search matches meaning and finds related concepts.">
+        <text x="180" y="28" text-anchor="middle" fill="#f87171" font-size="15" font-weight="700">Keyword Search</text>
+        <text x="540" y="28" text-anchor="middle" fill="#34d399" font-size="15" font-weight="700">Semantic Search</text>
+        <line x1="360" y1="45" x2="360" y2="285" stroke="#1e2640" stroke-width="2"/>
+
+        <rect x="40" y="55" width="280" height="40" rx="6" fill="#161c30" stroke="#1e2640"/>
+        <text x="180" y="80" text-anchor="middle" fill="#e2e8f0" font-size="13">Query: "get my money back"</text>
+
+        <rect x="40" y="115" width="280" height="36" rx="6" fill="#0f1221" stroke="#34d399"/>
+        <text x="180" y="138" text-anchor="middle" fill="#8892a4" font-size="12">"money back guarantee" &#8212; MATCH (shared words)</text>
+
+        <rect x="40" y="160" width="280" height="36" rx="6" fill="#0f1221" stroke="#f87171"/>
+        <text x="180" y="183" text-anchor="middle" fill="#8892a4" font-size="12">"reimbursement policy" &#8212; MISSED</text>
+
+        <rect x="40" y="205" width="280" height="36" rx="6" fill="#0f1221" stroke="#f87171"/>
+        <text x="180" y="228" text-anchor="middle" fill="#8892a4" font-size="12">"refund procedure" &#8212; MISSED</text>
+
+        <text x="180" y="270" text-anchor="middle" fill="#f87171" font-size="11">Matches letters. Synonyms invisible.</text>
+
+        <rect x="400" y="55" width="280" height="40" rx="6" fill="#161c30" stroke="#1e2640"/>
+        <text x="540" y="80" text-anchor="middle" fill="#e2e8f0" font-size="13">Query: "get my money back"</text>
+
+        <rect x="400" y="115" width="280" height="36" rx="6" fill="#0f1221" stroke="#34d399"/>
+        <text x="540" y="138" text-anchor="middle" fill="#8892a4" font-size="12">"reimbursement policy" &#8212; MATCH (near in meaning)</text>
+
+        <rect x="400" y="160" width="280" height="36" rx="6" fill="#0f1221" stroke="#34d399"/>
+        <text x="540" y="183" text-anchor="middle" fill="#8892a4" font-size="12">"refund procedure" &#8212; MATCH (near in meaning)</text>
+
+        <rect x="400" y="205" width="280" height="36" rx="6" fill="#0f1221" stroke="#34d399"/>
+        <text x="540" y="228" text-anchor="middle" fill="#8892a4" font-size="12">"credit for cancelled order" &#8212; MATCH</text>
+
+        <text x="540" y="270" text-anchor="middle" fill="#34d399" font-size="11">Matches meaning. Synonyms found.</text>
+      </svg>
+      <p class="diagram-caption">The same query, two indexing schemes. Keyword search collapses the moment the wording shifts; semantic search retrieves on what the text is about, not which letters it contains.</p>
+    </div>
+
+    <p>In practice, serious systems often combine both &mdash; a technique called <em>hybrid search</em> &mdash; because keyword matching still wins for exact identifiers like part numbers, names, and error codes, where you want the literal string and nothing close-but-wrong. Semantic search is not strictly superior; it is superior for meaning and inferior for exactness. The good engineer uses each where it is strong.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Your support docs only ever use the phrase "reimbursement procedure," but customers always search "how do I get a refund." Why would semantic search outperform keyword search here?</div>
+      <button class="quiz-option" data-letter="A">Because semantic search scans the documents faster than keyword search does.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because the query and the document are embedded into the same meaning-space, where "refund" and "reimbursement" sit close together &mdash; so the match is on meaning, not on shared words.</button>
+      <button class="quiz-option" data-letter="C">Because semantic search secretly rewrites the customer's query to include the word "reimbursement" before matching.</button>
+      <div class="quiz-feedback" data-correct="Right. There are no shared keywords, so a LIKE-style match returns nothing. Semantic search compares vector positions: 'refund' and 'reimbursement' are near-neighbors in embedding space, so the relevant doc is retrieved despite zero word overlap." data-incorrect="Speed isn't the issue, and there's no hidden query rewriting. The key is geometry: both the question and the document become vectors in one meaning-space, and 'refund' lands near 'reimbursement' &mdash; so the match is on meaning, not on matching letters."></div>
+    </div>
+
+    <h2>Why this is not "copy-paste from a database"</h2>
+
+    <p>The skeptic's frame here is that RAG is a glorified lookup &mdash; you searched a database, you pasted the result, the model parroted it back. That misreads both halves of the system. Compare the two framings directly.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The Skeptic's Frame</div>
+        <p>"RAG is just search-and-paste. The database finds the row, the model copies it into a sentence. There's no understanding &mdash; it's a fancy <code>SELECT</code> statement with a chatbot wrapper."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"Retrieval finds candidate sources by meaning, not exact words. Then the model reasons over them &mdash; reconciling contradictions, synthesizing across documents, judging relevance, and flagging when the sources don't answer the question. The lookup is mechanical; the synthesis is not."</p>
+      </div>
+    </div>
+
+    <p>The proof that RAG is more than paste-back is what the model does when retrieval returns <em>several</em> chunks that do not agree. A pure copy-paste system would emit garbage &mdash; three contradictory policies stapled together. A reasoning model reads all three, notices that the 2021 and 2023 versions conflict, and tells you the policy changed and what it changed to. That is comprehension applied to retrieved evidence, which is precisely the kind of capability earlier modules argued the model genuinely has. RAG does not replace the model's intelligence with a database. It feeds the model's intelligence the right inputs.</p>
+
+    <h2>The new failure modes RAG introduces</h2>
+
+    <p>Here is the honest part, and the answer to the third verification question. A base LLM, left alone, fails in its own characteristic way: when it lacks knowledge, it can <a href="../module-3/g33-hallucination.html">hallucinate</a> &mdash; confidently generate a plausible-sounding answer with no factual basis. The hope is that RAG fixes this by grounding answers in real retrieved text. It often does. But RAG also introduces a fresh family of failures the base model never had, precisely because it adds a retrieval stage between the question and the answer.</p>
+
+    <ul>
+      <li><strong>Retrieval miss.</strong> The right document exists in the store but the search doesn't surface it &mdash; the embedding of the question landed too far from the embedding of the answer, or a better-worded but less-relevant chunk crowded it out. The model then answers from whatever it <em>did</em> retrieve, which may be irrelevant. Garbage in, fluent garbage out.</li>
+      <li><strong>Confidently wrong source.</strong> The retrieved passage is itself outdated, mistaken, or contradictory &mdash; an old policy, a typo'd figure, a draft someone never deleted. The model has no independent way to know the source is wrong. It reasons faithfully from a false premise and produces a confident, <em>sourced-looking</em> error, which is more dangerous than an unsourced guess because the citation makes it look trustworthy.</li>
+      <li><strong>Chunking damage.</strong> Documents are split into chunks before embedding, and a clumsy split can sever a sentence from the context that makes it true &mdash; retrieving "the rate is 4%" without the line above it that says "for accounts opened before 2020."</li>
+      <li><strong>Stale index.</strong> The vector store is a snapshot. If the underlying documents change and the index is not re-embedded, retrieval serves yesterday's truth with today's confidence.</li>
+    </ul>
+
+    <p>The throughline is that RAG moves the point of failure. A base model's errors come from gaps in its weights; a RAG system's errors come from gaps in its retrieval &mdash; and because the model reasons faithfully over whatever it is given, a retrieval error gets laundered into a fluent, well-structured, wrong answer. RAG reduces one failure mode (knowledge-gap hallucination) and adds others (retrieval errors that propagate). It is a powerful tool, not a cure, and treating it as a cure is how teams get burned.</p>
+
+    <p>Worth saying plainly: RAG is one kind of agent memory, the kind for retrieving external knowledge. It sits alongside other memory forms &mdash; short-term <em>working memory</em> (the running context of the current task), and <em>episodic memory</em> (an agent remembering what it did and learned in past sessions, often implemented as a RAG store over its own history). The same retrieve-and-inject machinery underlies all of them. Once an agent can remember, the next question is what it does with that memory &mdash; how it breaks a large goal into retrievable, executable steps, which is where <a href="g23-goal-decomposition.html">G23 &mdash; Goal Decomposition</a> picks up.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>RAG does not give a model new knowledge by retraining it &mdash; it retrieves the relevant external text by <em>meaning</em> and injects it into the context window, where <a href="../module-3/g03-in-context-learning.html">in-context learning</a> lets the model use it instantly. The retrieval is a mechanical librarian; the answer is a reasoning analyst working over what the librarian fetched. That division is why RAG is not copy-paste &mdash; and also why its failures are new: when retrieval brings back the wrong file, the model reasons faithfully from it and produces a fluent, sourced-looking error.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>RAG can retrieve a confidently wrong passage and the model will reason faithfully from it. How do you design memory so retrieval failures degrade gracefully instead of producing fluent, sourced-looking errors?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the term and architecture of retrieval-augmented generation come from Lewis et al. (2020), "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks," NeurIPS, which combined a neural retriever with a generator and showed it beat both pure parametric models and extractive systems on open-domain QA. The embedding-as-meaning foundation underlying semantic search is covered in <a href="../module-1/g11-tokenization.html">G11</a>.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

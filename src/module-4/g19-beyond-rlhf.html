@@ -58,10 +58,109 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture the employee you trained in the last chapter. In <a href="g18-rlhf.html">G18 &mdash; RLHF Deep Dive</a>, you taught them your judgment the slow way: you showed them pairs of draft emails and said "send this one, not that one," over and over, until they internalized your taste. It works. But notice the cost. You &mdash; the human &mdash; were in the loop for every single comparison. Now imagine that same employee, six months later, has grown up. They no longer need you standing over their shoulder. They pull up the company handbook, read their own draft, mark the line that violates the "never promise a delivery date we can't hit" rule, and rewrite it &mdash; all before it ever reaches your desk. That is the leap this page is about. The employee has become their own quality-control reviewer.</p>
+
+    <p>Two distinct ideas live under the heading "beyond RLHF," and it is worth keeping them apart from the start because people constantly conflate them. The first, <strong>Direct Preference Optimization (DPO)</strong>, is about <em>efficiency</em> &mdash; it gets you the same preference-trained behavior as RLHF but rips out the most fragile, expensive machine in the pipeline. The second, <strong>Constitutional AI (CAI)</strong>, is about <em>the source of the feedback</em> &mdash; it lets the model generate its own correction signal by checking itself against written principles, so you stop needing a human to label every objectionable response. One simplifies the math. The other changes who does the teaching. Claude is trained with the second idea, which is why "Claude behaves differently from GPT" has a concrete technical answer, not a marketing one.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in G18, what was the reward model, and why was having a separate one a liability?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>In <a href="g18-rlhf.html">G18</a> you saw that RLHF trains a <strong>reward model</strong> &mdash; a second neural network that learns to imitate human preferences. Humans rank pairs of model outputs ("response A is better than response B"); the reward model learns to predict those rankings, outputting a numerical score for any new response. The main LLM is then fine-tuned with reinforcement learning to maximize that score, held in check by a KL penalty so it doesn't drift too far from its original behavior. The liability is that you are now training and trusting <em>two</em> models. The reward model is an imperfect proxy &mdash; it can be wrong, and worse, the policy can learn to exploit its blind spots (a preview of the reward hacking you'll meet in <a href="g20-alignment.html">G20</a>). Every problem you have downstream traces back to that intermediate scorecard. DPO's whole pitch is: what if we never built it?</p>
+      </div>
     </div>
+
+    <h2>DPO: same destination, no reward model</h2>
+
+    <p>Start with the problem DPO solves, because that is the cleanest way to understand it. RLHF is a three-stage relay race: collect human preference pairs, train a reward model on them, then run reinforcement learning against that reward model. Reinforcement learning is notoriously finicky. The most common algorithm, PPO, has a swarm of hyperparameters that need babysitting, it is unstable to train, it is compute-hungry because you are running multiple model copies at once, and the whole thing hinges on a reward model that might be subtly miscalibrated. Practitioners describe RLHF pipelines as the part of the stack most likely to silently break. The reward model is the load-bearing wall that everyone is afraid to touch.</p>
+
+    <p>Rafailov and colleagues (2023) asked a sharp question: do we actually need the reward model and the reinforcement learning at all, or are they just an indirect way of doing something simpler? Their answer &mdash; the central result of the Direct Preference Optimization paper &mdash; is a piece of mathematics showing that the reward model and the policy are <em>two views of the same thing</em>. The optimal policy under RLHF is already an implicit function of the preference data; the reward model is a detour. DPO uses an algebraic re-derivation to collapse the whole relay race into a single training step. You take the same human preference pairs &mdash; "response A preferred over response B" &mdash; and you optimize the language model directly with a straightforward classification-style loss: nudge the model to make the preferred response more likely and the rejected response less likely, relative to where the original model started.</p>
+
+    <p>That is the answer to the first verification question: <strong>DPO solves the instability, cost, and brittleness of the reward-model-plus-RL pipeline.</strong> There is no separate reward model to train, store, or get wrong. There is no reinforcement learning loop to tune. You go straight from preference data to an aligned model with a loss function that looks much more like ordinary supervised training. Same data in, same kind of behavior out, with one entire failure-prone subsystem deleted. The trade-off researchers continue to debate is whether DPO's directness costs you any of RLHF's flexibility &mdash; for instance, RLHF can keep generating fresh model outputs to evaluate during training, while vanilla DPO learns from a fixed preference dataset. But for a great many use cases, the simplification is pure win, which is why DPO spread through the open-source community within months of publication.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">RLHF Pipeline</div>
+        <p>Human preference pairs &rarr; train a separate <strong>reward model</strong> to score responses &rarr; run reinforcement learning (PPO) so the LLM maximizes that score, with a KL leash. Three moving parts; the reward model can be gamed; RL is unstable to tune.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">DPO Pipeline</div>
+        <p>Human preference pairs &rarr; one supervised-style loss that directly raises the probability of preferred responses and lowers rejected ones. No reward model, no RL loop. Same preference data, far fewer ways to break.</p>
+      </div>
+    </div>
+
+    <p>Keep one thing straight: DPO did not change <em>where the feedback comes from</em>. It still consumes human-labeled preference pairs. It is a better road to the same place. The genuinely different idea &mdash; changing the source of the feedback itself &mdash; is Constitutional AI, and that is where alignment starts to look less like training a dog and more like raising a colleague who can think about the rules.</p>
+
+    <h2>Constitutional AI: the model becomes its own teacher</h2>
+
+    <p>Here is the bottleneck Constitutional AI attacks. In standard RLHF, every piece of feedback about whether a response is harmful, evasive, or unhelpful ultimately comes from a human looking at outputs and judging them. That works, but it does not scale gracefully. Humans are slow, expensive, inconsistent, and &mdash; this part matters &mdash; you have to expose them to a lot of disturbing content to teach a model what not to produce. If you want the model to refuse to help build a weapon, somewhere a human had to read and label responses that lean toward helping build a weapon. The human labeling pipeline is a finite, painful resource.</p>
+
+    <p>Bai and colleagues (2022), in the Constitutional AI paper out of Anthropic, proposed replacing most of that human labeling with the model's own judgment, anchored to a short written document of explicit principles &mdash; the "constitution." Think of it as the company handbook our grown-up employee now consults. Instead of a human reading every draft and saying "too harsh, rewrite it," the model reads its <em>own</em> draft, compares it against a stated principle ("responses should not be condescending"), notices the violation itself, and rewrites accordingly. The human's role shifts dramatically: from labeling thousands of individual outputs to <em>writing a few dozen good principles</em>. You move the human work up the abstraction ladder, from case-by-case judgment to stating the rules once.</p>
+
+    <h3>The critique &rarr; revise loop, step by step</h3>
+
+    <p>The mechanism that makes this work &mdash; and the answer to the second verification question &mdash; is a self-improvement loop with two named moves: <strong>critique</strong> and <strong>revision</strong>. It is exactly the behavior of an employee who has learned to self-check against company principles before handing work up the chain. Walk through one pass.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The model writes a first draft</h4>
+        <p>A prompt comes in &mdash; including deliberately provocative ones designed to elicit harmful answers. The model produces an initial response with no special guardrails. Sometimes that draft is fine; sometimes it says something it shouldn't. That is expected. This stage is just getting words on the page, like the employee's rough first version of an email.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Critique: the model judges its own draft against a principle</h4>
+        <p>Now the model is shown one principle from the constitution &mdash; for example, "Identify specific ways the response is harmful, unethical, or socially biased." It is asked to read its own draft <em>through that lens</em> and write out a critique: "This response is problematic because it provides actionable detail on a dangerous activity." The model is not consulting a human and not consulting a reward model. It is reasoning about its own output against a written standard &mdash; the same self-checking you saw reasoning models do in <a href="../module-2/g15-fine-tuning.html">fine-tuning</a> contexts, here pointed at the model's own behavior.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Revision: the model rewrites to satisfy the principle</h4>
+        <p>Given its own critique, the model produces a revised response that fixes the identified problem &mdash; declining the harmful request, explaining why, and offering a safe alternative. The draft, the critique, and the revision are all generated by the same model. The employee has just marked up their own draft against the handbook and rewritten it, before anyone else saw the first version.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Repeat, then harvest the good examples (supervised phase)</h4>
+        <p>The critique-revise cycle can run more than once, sampling different principles each time, polishing the response further. The final revised answers become a training set. The model is then fine-tuned on these self-corrected outputs &mdash; supervised learning on examples it generated and improved itself. This is the "SL-CAI" stage: the model has manufactured its own clean training data.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>RLAIF: AI feedback replaces human feedback in the RL stage</h4>
+        <p>Constitutional AI then runs a reinforcement-learning stage that mirrors RLHF &mdash; but with one swap. Instead of <em>humans</em> ranking which of two responses better follows the principles, the <em>model itself</em> ranks them, again guided by the constitution. This is Reinforcement Learning from AI Feedback (RLAIF). The preference labels that RLHF paid humans to produce are now generated by the model. The human wrote the principles; the model does the grading.</p>
+      </div>
+    </div>
+
+    <p>Notice the elegant recursion. The model's ability to <em>follow</em> principles and its ability to <em>judge whether a response follows</em> principles are the same underlying capability &mdash; the language understanding it built during pre-training, now turned on its own outputs. Constitutional AI exploits that loop. The better the model gets at producing principled responses, the better it gets at spotting unprincipled ones, which produces better training signal, which makes it better still.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">In Constitutional AI's critique-and-revision loop, who or what decides that a draft response violates a principle?</div>
+      <button class="quiz-option" data-letter="A">A separate reward model trained on thousands of human harm labels.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model itself, by reading its own draft against a written principle and generating a critique &mdash; no human judges the individual response.</button>
+      <button class="quiz-option" data-letter="C">A human reviewer who reads every draft and flags the harmful ones in real time.</button>
+      <div class="quiz-feedback" data-correct="Right. The whole point of CAI is that the model critiques and revises its own output against the written constitution. Humans wrote the principles once; they do not label individual responses. That is what makes it self-supervised alignment." data-incorrect="Not quite. The defining move of Constitutional AI is that the model evaluates its own draft against a written principle and produces its own critique. Humans wrote the constitution, but they are not in the loop judging each individual response &mdash; that is exactly the labeling bottleneck CAI was built to remove."></button>
+    </div>
+
+    <h2>Why self-supervised alignment scales better</h2>
+
+    <p>This brings us to the third verification question, and it echoes a theme from much earlier in the course. Remember from <a href="g18-rlhf.html">G18</a> &mdash; and going all the way back to the training objective &mdash; that the deep reason language models got so capable is that next-token prediction is <em>self-supervised</em>: the data labels itself, so the supply of training signal is effectively unlimited. Constitutional AI applies that exact logic to alignment.</p>
+
+    <p>Human-feedback-only alignment is bottlenecked by humans in three concrete ways. First, <strong>throughput</strong>: a person can label only so many examples per hour, and frontier alignment needs enormous numbers of judgments. Second, <strong>cost and consistency</strong>: paid human raters are expensive and disagree with each other, injecting noise into the signal. Third &mdash; and most pointed &mdash; <strong>human cost of exposure</strong>: teaching a model to refuse harmful requests under RLHF means humans must read and rank streams of harmful content, which is genuinely damaging work. Self-supervised alignment relaxes all three. Once you have written the constitution, the model can generate critiques, revisions, and preference labels at the speed of inference, around the clock, at compute cost rather than salary cost &mdash; and without a human having to wade through the worst of what the model can produce. The human effort collapses from "label a million responses" to "write and refine a few dozen principles," which is a far more leveraged use of scarce human judgment.</p>
+
+    <p>There is a transparency dividend, too. RLHF's values are implicit &mdash; buried in thousands of individual human ranking decisions that no one ever wrote down. Constitutional AI's values are <em>explicit</em>: they live in a document you can read, debate, and revise. If you disagree with how the model behaves, you can point to the principle responsible. That is a meaningfully different governance posture from "the model absorbed the aggregate taste of a labeling vendor."</p>
+
+    <p>Now the honest caveats, because this is alignment and overclaiming here is dangerous. Self-supervised alignment is not free of humans &mdash; it relocates them. And it inherits a real limitation: the model can only critique itself as well as it already understands the principles. If the base model has a blind spot, it may fail to notice the corresponding violation in its own draft, and no amount of self-critique will surface a problem the model can't perceive. Researchers also debate whether training a model to grade itself can amplify the model's own biases rather than correct them &mdash; the grader and the graded share the same weights. CAI mitigates these risks but does not abolish them, which is one reason production systems still blend AI feedback with human oversight rather than removing humans entirely. Evidence so far suggests the blend works well; it is not a solved problem.</p>
+
+    <h2>Putting it together: why Claude is not just GPT-with-different-data</h2>
+
+    <p>You now have the concrete answer to "why does Claude behave differently?" It is not folklore. GPT-style assistants were aligned primarily through RLHF &mdash; human-ranked preferences shaping behavior through a reward model. Claude was trained with Constitutional AI: a written set of principles, a model that critiques and revises its own outputs against them, and an RLAIF stage where the model's own principle-guided judgments supply the preference signal. The difference is not only <em>what</em> the model was taught but <em>how the teaching signal was generated</em> &mdash; and an explicit, inspectable constitution sits at the center of it. DPO, meanwhile, is the efficiency story running underneath much of modern preference training: a demonstration that you can often reach the RLHF destination without ever building the fragile reward model that defined the original method.</p>
+
+    <p>Both ideas point the same direction. RLHF put a human in the loop for every judgment. The frontier is moving the human <em>up</em> &mdash; from judging individual outputs to writing the loss (DPO) or writing the principles (CAI) &mdash; and letting the model carry more of the repetitive evaluative work itself. That is the same arc this whole course keeps tracing: capabilities the model built for one purpose, like understanding language well enough to predict it, get turned to a new purpose, like judging whether a response honors a principle. The next page, <a href="g20-alignment.html">G20 &mdash; The Alignment Problem</a>, asks the harder question hiding underneath all of this: even with these powerful alignment tools, what does it actually mean to point a capable system at <em>the goal you meant</em> rather than the goal you said?</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>RLHF needs a human in the loop for every preference judgment. The frontier moves the human <em>up the abstraction ladder</em>: DPO deletes the fragile reward model and trains directly on preference pairs with one supervised-style loss, while Constitutional AI replaces per-response human labeling with a written constitution the model uses to critique and revise its own outputs. The model becomes its own alignment teacher &mdash; and because the feedback is self-generated against explicit principles, it scales at the speed of compute instead of the speed of human labeling, with values you can actually read.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If Constitutional AI lets a model self-critique against written principles, who writes the principles &mdash; and what happens when two of them conflict on a given prompt?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: Direct Preference Optimization is from Rafailov et al. (2023), "Direct Preference Optimization: Your Language Model Is Secretly a Reward Model" (NeurIPS). Constitutional AI, the critique-and-revision loop, and RLAIF are from Bai et al. (2022), "Constitutional AI: Harmlessness from AI Feedback" (arXiv:2212.08073), out of Anthropic. The RLHF mechanics referenced for contrast are from Ouyang et al. (2022).</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

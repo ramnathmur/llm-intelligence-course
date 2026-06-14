@@ -59,10 +59,117 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Think about how the car industry talks about self-driving. Nobody serious says a car is "autonomous" or "not autonomous" as a yes-or-no fact. They use a number, L0 through L5, because the honest answer lives on a dial. An L2 car steers and brakes on the highway but expects your hands near the wheel. An L4 car drives itself inside a mapped city but won't leave its zone. Each step up the ladder hands the car more independence and takes a little more control out of your hands &mdash; and at every single transition, the engineering, the liability, and the failure modes change shape. The dial is not marketing. It is the only honest way to describe a machine that does <em>some</em> of the driving.</p>
+
+    <p>Agents are exactly the same, and most arguments about "AI autonomy" go sideways because people treat it as a switch. It isn't. Autonomy is a spectrum that runs from an agent that proposes and waits for your approval on every move, to an agent you hand a goal and walk away from. This page gives you the dial &mdash; the vocabulary to say <em>where</em> a given agent sits, the factors that decide where it should sit, and why moving one notch up the spectrum is never free. The whole point of a self-driving car analogy is that the interesting questions are at the transitions, not the endpoints.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: Recall G20's literal-minded intern &mdash; what changes about the cost of one misaligned action as you move from human-in-the-loop to full autonomy?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>In <a href="../module-4/g20-alignment.html">G20 &mdash; The Alignment Problem</a>, the agent is a brilliant but literal-minded intern: it optimizes exactly what you told it, even when that's not what you meant. With a human in the loop, a misaligned action is cheap &mdash; the intern shows you the draft, you catch the misread, nothing ships. The mistake costs one rejected suggestion. Push toward full autonomy and the same misread executes before anyone sees it: the intern doesn't ask, it acts. The <em>blast radius</em> of a single misaligned action scales with autonomy. Same misalignment, wildly different cost, purely because you removed the checkpoint. That is the entire reason this page exists &mdash; autonomy is the multiplier on every alignment failure you didn't catch in <a href="../module-4/g20-alignment.html">G20</a>.</p>
+      </div>
     </div>
+
+    <h2>Why "more autonomy" is not the goal</h2>
+
+    <p>The instinct, especially for builders, is to treat autonomy as a score to maximize. A fully autonomous agent feels like the finished product; anything that pauses to ask permission feels like a prototype. That instinct is wrong, and the self-driving analogy shows why. An L5 car that drives itself anywhere is the dream, but an L5 system handling a slow parking-lot crawl is wild overkill &mdash; expensive, fragile, and pointless when a human could do it in five seconds with zero risk. Autonomy is not better. Autonomy is <em>appropriate</em> or <em>inappropriate</em> for a given task, and the engineering skill is matching the level to the job.</p>
+
+    <p>Anthropic's "Building Effective Agents" (2024) makes this argument from the implementation side, and it is the key citation for this page. The authors draw a sharp line between <strong>workflows</strong> &mdash; systems where the LLM and tools are orchestrated through predefined code paths the human wrote &mdash; and <strong>agents</strong> &mdash; systems where the LLM dynamically directs its own process and tool use. That distinction <em>is</em> a point on the autonomy spectrum. Their headline guidance is blunt: don't build an agent when a workflow will do. Use the simplest thing that solves the problem, and add autonomy only when the task genuinely needs the model to decide its own steps. The most capable teams are not the ones racing to full autonomy; they're the ones who reach for it last.</p>
+
+    <h2>The spectrum, level by level</h2>
+
+    <p>Here is the dial, mapped onto the self-driving levels you already understand. Read each step as a trade: you hand the agent more independence, and in exchange you give up a checkpoint where a human could have caught a mistake. The walkthrough below is the heart of this page &mdash; each level names what the human still controls, what the agent now decides for itself, and a concrete agent example.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>L0 &mdash; No autonomy: the human does everything, the model only advises</h4>
+        <p>Car analogy: a plain car. You steer, you brake, the car just goes where you point it. Agent example: a code assistant that answers a question in chat. It generates a suggestion, but <em>you</em> copy, paste, run, and verify. The model never touches the world. Control: total, human. Independence: zero. This is the floor, and it is the right level whenever a mistake is expensive and the task is quick to do yourself.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>L1 &mdash; Suggest-and-approve: the agent proposes a single action, you confirm each one</h4>
+        <p>Car analogy: adaptive cruise control &mdash; the car manages speed, but you can override instantly and you're watching constantly. Agent example: an agent that drafts an email and shows it to you before sending, or proposes a single shell command and waits for "yes." The agent decides <em>what</em> to do next; the human holds a veto on <em>every</em> action. This is true human-in-the-loop: nothing executes without explicit sign-off. The cost of a misaligned action is still near zero, because you see it before it happens.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>L2 &mdash; Human-on-the-loop: the agent acts in a bounded sandbox, you supervise and can interrupt</h4>
+        <p>Car analogy: highway assist &mdash; the car steers and changes lanes on its own, but you're in the seat ready to grab the wheel. Agent example: a coding agent running inside a git worktree or a container, editing files and running tests on its own, while you watch the activity feed and can hit stop. The human moved from approving <em>each</em> action to supervising a <em>stream</em> of them. You're no longer in the loop on every step &mdash; you're <em>on</em> the loop, watching the whole, intervening only when something looks wrong. The blast radius is now bounded by the sandbox, not by your attention to each action.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>L3 &mdash; Conditional autonomy: the agent runs the whole task, but escalates on defined triggers</h4>
+        <p>Car analogy: traffic-jam pilot &mdash; the car fully drives in specific, well-defined conditions, and hands control back when it hits something outside its envelope. Agent example: a customer-support agent that resolves routine tickets end-to-end but escalates to a human the moment it sees a refund over $500, an angry-customer signal, or a request it has low confidence on. The human is now <em>out</em> of the loop for the common case and only pulled in by tripwires the agent itself fires. The design work shifts entirely to defining good triggers &mdash; what must the agent never decide alone?</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>L4 &mdash; High autonomy: the agent pursues a goal independently inside a fixed domain</h4>
+        <p>Car analogy: a robotaxi that drives anywhere <em>inside its mapped service area</em> with no one in the car &mdash; but it will not leave the zone. Agent example: a research agent you hand "produce a competitive landscape report on these five vendors" and it plans, searches, reads, synthesizes, and delivers &mdash; no check-ins. It decomposes its own goal (see <a href="g23-goal-decomposition.html">G23 &mdash; Goal Decomposition</a>) and may coordinate sub-agents (see <a href="g24-multi-agent.html">G24 &mdash; Multi-Agent Systems</a>). Crucially, it operates inside a fixed domain: research-and-report, with read-only tools. It is autonomous within walls, not in the open.</p>
+      </div>
+      <div class="walkthrough-step" data-step="6">
+        <h4>L5 &mdash; Full autonomy: the agent sets and pursues open-ended goals across domains</h4>
+        <p>Car analogy: a car that drives anywhere a human could, in any conditions, with no operational walls. Agent example: an agent you give a standing objective &mdash; "grow this account" &mdash; that decides its own sub-goals, picks its own tools, spends real resources, and acts across many domains without a fixed envelope. This level barely exists in production today, for the same reason genuine L5 cars don't: the moment there are no walls, every alignment failure runs with no checkpoint and no boundary. The cost of one misaligned action is now whatever the agent can reach.</p>
+      </div>
+    </div>
+
+    <p>Notice the through-line. Every step up the ladder removes a human checkpoint. L0 to L1 removes nothing &mdash; you still approve everything. L1 to L2 removes per-action approval. L2 to L3 removes live supervision. L3 to L4 removes the escalation triggers. L4 to L5 removes the domain walls. By the time you reach the top, there is nothing between the model's decision and the world. That is what "more autonomy" actually costs: not capability, but checkpoints. And checkpoints are exactly where misalignment gets caught.</p>
+
+    <h2>What factors decide where an agent should sit</h2>
+
+    <p>So how do you choose a level? It is a deliberate engineering decision, not a vibe. Four factors do most of the work, and the second verification question &mdash; what determines where an agent should sit &mdash; is answered by weighing them together.</p>
+
+    <h3>1. The cost of a wrong action (the blast radius)</h3>
+    <p>This is the single biggest factor. Ask: if the agent does the worst plausible wrong thing, how bad is it, and is it reversible? An agent that drafts text can sit high on the spectrum &mdash; a bad draft costs a delete. An agent that runs <code>DELETE FROM customers</code> against production, sends money, or emails clients must sit low, because the worst case is catastrophic and irreversible. Reversibility is the quiet hero here: anything you can cleanly undo can tolerate more autonomy, because the checkpoint moves from "before" to "after." Anything irreversible needs the checkpoint <em>before</em> the action, which means a low level.</p>
+
+    <h3>2. The model's reliability on this specific task</h3>
+    <p>Autonomy should track competence. If the agent succeeds on this kind of task 99.9% of the time, supervising every step is waste. If it succeeds 80% of the time, removing the human means one in five runs goes wrong unattended. This is why honest measurement (the subject of <a href="../module-6/g28-benchmarking.html">G28 &mdash; Benchmarking Intelligence</a>) is a prerequisite for granting autonomy: you cannot responsibly move an agent up the spectrum without evidence of how often it fails on the exact work you're handing it. "It usually works" is not a number you can build on.</p>
+
+    <h3>3. How well you can define success and guardrails</h3>
+    <p>An agent can be trusted with more independence when "done correctly" is crisply checkable and the boundaries are enforceable. A task with an automated test that passes or fails, or a sandbox the agent physically cannot escape, supports higher autonomy because the environment itself catches errors. A task whose success is fuzzy and subjective &mdash; "write something on-brand" &mdash; needs a human judge in the loop, because no guardrail can verify it. The crisper your success criteria and the harder your walls, the higher you can safely climb.</p>
+
+    <h3>4. The value of speed and scale versus the value of oversight</h3>
+    <p>Autonomy buys throughput. An L1 agent that waits for approval on every action is gated by human attention &mdash; it can only go as fast as you can click. An L4 agent runs unattended at scale. When the volume is high and the per-task stakes are low (triaging thousands of routine tickets), the speed is worth surrendering oversight. When volume is low and stakes are high (a single contract review), the oversight is worth the slowdown. You are constantly trading human attention against machine independence, and the exchange rate is set by the three factors above.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You're building an agent that issues customer refunds. Refunds are immediate and irreversible. The model gets the right refund amount about 95% of the time. Where on the spectrum should it sit, and why?</div>
+      <button class="quiz-option" data-letter="A">L4 &mdash; high autonomy. 95% is good enough to let it run unsupervised; the 5% is an acceptable cost of scale.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Low &mdash; L1 suggest-and-approve, or L3 with a hard escalation trigger on amount. The action is irreversible and the failure rate is high enough that an unsupervised wrong refund is unacceptable.</button>
+      <button class="quiz-option" data-letter="C">L0 &mdash; no autonomy at all; a human should calculate and issue every refund manually.</button>
+      <div class="quiz-feedback" data-correct="Right. Irreversibility plus a 1-in-20 error rate is the textbook case for keeping the checkpoint before the action. L1 approval works; so does L3 if you auto-approve tiny refunds and escalate anything above a threshold. L0 throws away the model's value entirely &mdash; you want it to do the work, just not without a human gate on the irreversible step." data-incorrect="Reconsider the two danger signals: the action is irreversible (no undo) and the model is wrong 1 time in 20. Together those push the checkpoint to *before* the action, which means a low level &mdash; not L4. But L0 over-corrects: the model can still do the work, it just shouldn't execute the irreversible step without a human gate."></div>
+    </div>
+
+    <h2>Why alignment gets harder, not just riskier, as autonomy rises</h2>
+
+    <p>The third verification question asks why the alignment problem from <a href="../module-4/g20-alignment.html">G20</a> becomes more severe at higher autonomy. The callback above gave the short version &mdash; the blast radius grows &mdash; but there are three distinct mechanisms stacking on top of each other, and it's worth separating them.</p>
+
+    <p><strong>First, the cost per failure multiplies.</strong> A misaligned action that a human would have vetoed at L1 simply executes at L4. The literal-minded intern who would have shown you the draft now sends it. Same misread of your intent, but the consequence lands in the world instead of in a review queue. Nothing about the model got worse; you just removed the net.</p>
+
+    <p><strong>Second, errors compound across steps.</strong> A high-autonomy agent doesn't take one action &mdash; it takes a chain of them, each building on the last. If step three rests on a subtly wrong conclusion from step one, the agent doesn't notice; it confidently builds the rest of the tower on a cracked foundation. At L1 you'd have caught the bad step-one before step two ran. Autonomy means small early errors get amplified into large late ones with no intermediate human to halt the cascade. This is also where hallucination (<a href="../module-3/g33-hallucination.html">G33</a>) gets dangerous: a confident-but-wrong intermediate fact, unchecked, propagates through every downstream step.</p>
+
+    <p><strong>Third, oversight itself gets harder.</strong> As an agent acts faster and over more steps than a human can follow, it becomes genuinely difficult to verify <em>whether</em> it's aligned, even if you want to. You can read one proposed email. You cannot read a thousand actions a minute. Researchers call this the scalable-oversight problem, and it's why high autonomy and trustworthy alignment are in tension: the very independence that makes an agent useful is what makes its behavior hard to audit. Evidence so far suggests we can partly close this gap with automated checks, sandboxes, and agents that monitor other agents &mdash; but it remains an open engineering challenge, not a solved one, and the honest position is that our oversight tools have not yet caught up to the autonomy levels we can technically build.</p>
+
+    <p>Put those three together and the lesson is structural, not just cautious: every notch up the spectrum makes alignment failures more expensive, more compounding, and harder to see. That is precisely why the discipline from "Building Effective Agents" &mdash; start with the least autonomy that solves the problem, add more only with evidence &mdash; is the responsible default. You climb the spectrum the way you'd test a self-driving feature: one bounded condition at a time, with the human ready to take the wheel, until the data earns the next level.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The "Autonomy = Better" Frame</div>
+        <p>"The goal is full autonomy. An agent that needs human approval is unfinished. Ship the most independent agent you can build &mdash; capability is the metric."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"Autonomy is a dial, not a destination. The right level is the lowest one that solves the task &mdash; set by how reversible the worst action is, how reliable the model is, how checkable success is, and whether speed is worth surrendering oversight."</p>
+      </div>
+    </div>
+
+    <p>One more practical note for anyone actually building these systems. The spectrum is not something you pick once per agent and freeze. A mature stack often runs <em>different</em> agents at different levels &mdash; an L4 research agent feeding an L1 publish agent that still asks before posting &mdash; and individual agents can shift levels as you gather evidence. The standard, sane trajectory is to start an agent low, watch it under supervision, measure its failure rate on real work, and promote it up the dial only when the numbers justify it. And the trajectory runs both ways: the first time an autonomous agent does something irreversible and wrong, you move it back down a notch and add a checkpoint. The dial earns its setting; it is never assumed.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Autonomy is a spectrum (L0&ndash;L5), and every step up trades a human checkpoint for machine independence. "More autonomous" is not "better" &mdash; the right level is the <em>lowest</em> one that solves the task, chosen by weighing the cost and reversibility of a wrong action, the model's measured reliability, how checkable success is, and the value of speed versus oversight. Because every notch up makes misalignment more expensive, more compounding, and harder to see, the responsible default is to start low and earn each promotion with evidence.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Where on the L0&ndash;L5 autonomy spectrum should each agent in your stack sit &mdash; and what concrete failure would force you to move one step DOWN toward more human control?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the L0&ndash;L5 framing is adapted from SAE International's "Levels of Driving Automation" standard (SAE J3016), used here as an analogy for agent autonomy. The workflow-versus-agent distinction and the "use the least autonomy that works" guidance are from Anthropic (2024), "Building Effective Agents." "Scalable oversight" refers to the open research problem of supervising AI systems that act faster or more capably than human reviewers can directly check.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

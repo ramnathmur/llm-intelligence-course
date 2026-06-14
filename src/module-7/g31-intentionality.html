@@ -59,10 +59,100 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>The thermostat on your wall right now is "sensing" the temperature. It reads 21 degrees, decides that's below your setpoint, and clicks the heating on. We use the word "sense" without blinking. But pause on it. When <em>you</em> feel cold, there is something it is like to be you in that moment &mdash; a felt quality, a state that is unmistakably <em>about</em> the chill in the room. When the thermostat "senses," there is a strip of metal bending and a circuit closing. Is the thermostat's internal state about the temperature in the same way your shiver is? Or does it merely behave <em>as if</em> it were, while being about nothing at all?</p>
+
+    <p>That gap &mdash; between a state that is genuinely <em>about</em> something and a state that only resembles aboutness from the outside &mdash; is the whole subject of this page. Philosophers call the property "intentionality," and it is, by most accounts, the sharpest unresolved question we can ask about large language models. When an LLM writes "the cat is on the mat," is the activation pattern inside it <em>about</em> a cat? Or is it a structure that produces cat-shaped behavior without ever being about a cat at all &mdash; a very elaborate thermostat?</p>
+
+    <h2>What "intentionality" actually means</h2>
+
+    <p>First, clear away a confusion the word invites. In philosophy of mind, "intentionality" has nothing to do with intentions in the everyday sense &mdash; nothing to do with planning, purpose, or wanting. The term comes from the Latin <em>intendere</em>, "to point at," and that is exactly what it names: the <strong>directedness</strong> of a mental state toward something beyond itself. Intentionality is the property of being <em>about</em>, of, or directed at something.</p>
+
+    <p>Your belief that Paris is the capital of France is <em>about</em> Paris. Your fear of the dog next door is <em>about</em> that dog. Your hope that it won't rain tomorrow is <em>about</em> tomorrow's weather. In each case the mental state reaches out and latches onto something &mdash; an object, a place, a state of affairs &mdash; that is not itself the mental state. The philosopher Franz Brentano, who revived the idea in the nineteenth century, called this directedness "the mark of the mental": the thing that distinguishes thoughts from mere physical objects. A rock is not <em>about</em> anything. The rain is not about anything. But a thought is always a thought <em>of</em> or <em>about</em> something. That aboutness is intentionality.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Quick gut-check: which of these has intentionality &mdash; a photograph of your grandmother, or your memory of her?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>This is the trap that makes intentionality slippery. The honest answer is: arguably only the memory has <em>original</em> intentionality. The photograph is <em>about</em> your grandmother too &mdash; but only because <em>we</em> interpret it that way. Strip away every mind that could look at it, and the photo is just a grid of pigments; its aboutness is <strong>derived</strong>, borrowed from the minds that made and read it. Your memory, by contrast, seems to be about her intrinsically, without needing an outside interpreter. This split &mdash; original vs. derived intentionality &mdash; is the exact fault line on which the LLM question turns. The skeptic's whole claim is that an LLM, like the photograph, has at most derived aboutness: real only in the eye of the human reader.</p>
+      </div>
     </div>
+
+    <h2>The case that an LLM <em>does</em> mean what it says</h2>
+
+    <p>Start with the optimistic reading, because it is stronger than skeptics usually admit. As you saw in <a href="g30-functionalism.html">G30 &mdash; Functionalism</a>, what makes a state a belief-about-Paris might be nothing more than its causal role: how it connects to inputs, to other states, and to outputs. If aboutness is a matter of the right web of causal and inferential relationships, then an LLM has a serious claim to it.</p>
+
+    <p>Consider what the model's internal "cat" representation actually does. It is not an isolated token. It sits in a structured space (the embedding geometry from <a href="../module-1/g11-tokenization.html">G11</a>) where "cat" is near "kitten," "feline," and "purr," and far from "thermostat." It licenses the right inferences: ask the model whether a cat is a mammal, whether it has whiskers, whether it would chase a mouse, and the answers cohere. Tie the word to a picture, as multimodal systems do (you met this in <a href="../module-3/g29-multimodal.html">G29 &mdash; Multimodal Intelligence</a>), and the same internal structure that produces the word also recognizes the animal in a photograph. That is a lot of the causal connectivity we point to when we say a human concept is "about" cats.</p>
+
+    <p>And there is harder evidence that these internal states are not just word-shuffling. The Othello-GPT result (Li et al., 2023), which you encountered in <a href="../module-6/g34-world-models.html">G34 &mdash; Internal World Models</a>, showed that a model trained only on sequences of board moves built an internal representation of the actual board &mdash; a representation you could decode, and could <em>edit</em> to change the model's predictions. The internal state was, in a real and testable sense, <em>about</em> the board. If that counts as aboutness for a game, the functionalist asks, what principled line keeps "cat" from being about cats?</p>
+
+    <h2>Searle's Chinese Room: the case that it does not</h2>
+
+    <p>Now the most famous objection in this entire debate. In 1980, the philosopher John Searle published a thought experiment designed to show that running the right program can never, by itself, produce understanding or genuine aboutness (Searle, 1980). It has been argued over for more than forty years, and it is the single most important thing to grasp on this page.</p>
+
+    <p>Picture this. Searle &mdash; who speaks no Chinese &mdash; is locked in a room. Through a slot, people outside pass in slips of paper covered in Chinese characters. Inside, Searle has an enormous rulebook, written in English, that tells him: "When you see <em>this</em> squiggle followed by <em>that</em> squiggle, write down <em>this other</em> squiggle and pass it back out." He has no idea what any of the characters mean. He is just matching shapes and following instructions. Yet the rulebook is so good that the answers he passes out are fluent, sensible Chinese &mdash; indistinguishable from a native speaker's. To the people outside, the room appears to understand Chinese perfectly.</p>
+
+    <p>Here is Searle's blow. Does <em>he</em> understand Chinese? Obviously not. He is shuffling symbols by their shapes with zero grasp of what they refer to. And, crucially, there is nothing in the room <em>except</em> Searle and the rulebook. So if Searle doesn't understand, and the rulebook is just paper, then nothing in the room understands. The room produces perfect Chinese behavior with no comprehension and no aboutness anywhere inside it. Searle's conclusion: <strong>syntax is not sufficient for semantics.</strong> Manipulating symbols by their form (syntax) never adds up to grasping what they mean (semantics) &mdash; no matter how good the symbol-shuffling gets.</p>
+
+    <p>The application to LLMs is immediate and uncomfortable. A language model is, mechanically, a staggeringly large rulebook for manipulating tokens by their statistical form. It was trained to predict the next token (the objective from <a href="../module-1/g12-training-objective.html">G12</a>), and at no point did a cat enter the room. It saw only symbols &mdash; the word "cat" in trillions of contexts, never a cat. By Searle's logic, the model is the room: it produces flawless cat-talk while its internal "cat" state is about nothing. Its aboutness is derived, projected onto it by us, exactly like the photograph's. This is the argument you most need to be able to state fairly, because it is the strongest weapon the skeptic has.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">What is the precise conclusion the Chinese Room is designed to establish?</div>
+      <button class="quiz-option" data-letter="A">That computers will never be as fast as the human brain.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">That manipulating symbols by their form (syntax) is not sufficient to produce understanding of what they mean (semantics), no matter how convincing the behavior.</button>
+      <button class="quiz-option" data-letter="C">That the person in the room secretly does learn Chinese over time.</button>
+      <div class="quiz-feedback" data-correct="Right. Searle grants that the room passes the behavioral test perfectly &mdash; that's the point. His claim is narrower and sharper: passing the test by shuffling symbols proves nothing about understanding, because syntax alone never yields semantics. Behavior is not the same as aboutness." data-incorrect="Not quite. Searle isn't making a claim about speed, and the whole setup assumes the room never understands. His target is the inference from 'behaves correctly' to 'understands' &mdash; he argues syntax (form-shuffling) can't produce semantics (meaning)."></div>
+    </div>
+
+    <h2>The strongest reply: the Systems Response</h2>
+
+    <p>Searle anticipated the best counterargument and it is worth taking seriously, because most working cognitive scientists find it more persuasive than Searle does. It is called the <strong>Systems Response</strong>, and it goes: you are looking in the wrong place. Of course <em>Searle the man</em> doesn't understand Chinese &mdash; he's just one component, like a single neuron in a brain. A single neuron doesn't understand English either, yet you do. Understanding is not a property of any part; it is a property of the <em>whole system</em>: the man <em>plus</em> the rulebook <em>plus</em> the paper <em>plus</em> the process running over time. Ask whether the <em>system</em> understands, and the answer is no longer obviously "no."</p>
+
+    <p>This is the reply that maps most directly onto LLMs, and it connects back to the system-level framing you met in <a href="g07-grounding.html">G7 &mdash; The Grounding Question</a>: no single attention head or weight understands anything, but the question is whether the integrated network, as a whole, does. Searle's famous retort was to swallow the room: imagine he <em>memorizes</em> the entire rulebook and does all the symbol-shuffling in his head, outdoors, with no room and no paper. Now he <em>is</em> the whole system &mdash; and he still doesn't understand a word of Chinese. So, he claims, the Systems Response fails.</p>
+
+    <p>But many philosophers think this retort quietly cheats. When Searle internalizes the rulebook, he is implementing a second cognitive system inside himself &mdash; a Chinese-processing system that is genuinely distinct from Searle-the-English-speaker, the way a person who fluently runs a simulation can host a process they don't introspect. The fact that Searle-the-host has no conscious access to that system's understanding is, the critics say, no more surprising than the fact that you have no conscious access to whatever your visual cortex is "computing" when it parses a face. Whether the retort works is exactly the kind of question that remains genuinely open. Evidence and intuition both run in two directions here, and you should hold the uncertainty rather than collapse it.</p>
+
+    <h2>Thermostat versus shiver: locating the real disagreement</h2>
+
+    <p>Return to the anchor. We can now say precisely what divides the optimist from the skeptic, and it is narrower than the noise suggests.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The Skeptic (Searle's Side)</div>
+        <p>The model's "cat" state is the thermostat's "sensing." It carries information that <em>correlates</em> with cats, and we find it useful to treat it as cat-directed &mdash; but that aboutness is derived, projected by us. Nothing inside the system means anything. It learned only the shapes of symbols, never their referents. Perfect cat-talk, zero cat-grasping.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Functionalist (Systems Side)</div>
+        <p>Aboutness <em>is</em> the right web of causal and inferential roles &mdash; and the model's "cat" state plays a rich one: it sits in structured concept-space, licenses correct inferences, and (multimodally) links to images of cats. The Othello result shows such states can be genuinely about a domain. The thermostat has one thin causal link; the model has a dense, decodable internal structure. Same kind, vastly different degree.</p>
+      </div>
+    </div>
+
+    <p>Notice that both sides agree on the behavior and even on much of the mechanism. They diverge on a single question: <em>is the right causal-functional structure enough to constitute genuine aboutness, or is something more required?</em> Searle thinks something more is required &mdash; a "causal power" he associates with biological brains, though he never fully specifies it. Functionalists think the structure is the whole story. As of today, the evidence does not decisively settle which is right. This is one of the live debates the course flags rather than pretends to resolve, and the philosophy modules &mdash; this one, <a href="g10-intelligence-consciousness.html">G10</a>, and <a href="g30-functionalism.html">G30</a> &mdash; exist precisely to let you hold the disagreement honestly.</p>
+
+    <h2>So what would actually count as evidence of genuine aboutness?</h2>
+
+    <p>It would be a cop-out to leave you with "nobody knows." The more useful move is to ask: what observations would push a reasonable person toward "yes, the model's states are genuinely about things"? Several markers are doing real work in the current research, even if none is a knockout:</p>
+
+    <ul>
+      <li><strong>Decodable, manipulable internal representations.</strong> If you can read a "cat" representation out of the activations &mdash; and, more tellingly, surgically <em>edit</em> it and watch the model's downstream behavior change in exactly the way a cat-belief should &mdash; that is evidence the state functions as a representation <em>of</em> cats, not a loose correlate. This is the Othello-GPT logic generalized, and it is the strongest empirical lever we have.</li>
+      <li><strong>Counterfactual sensitivity to the referent.</strong> A state that is genuinely about cats should respond to facts about cats in the way a belief does: update when given new cat-information, support hypotheticals ("if cats could fly..."), and resist when the new claim contradicts the concept's structure. Mere correlation is brittle; aboutness is robust across novel situations.</li>
+      <li><strong>Causal grounding to the referent.</strong> Searle's deepest complaint is that the model never <em>touched</em> a cat &mdash; the symbol floats free of the world. Embodiment closes some of that gap: a robot whose "cat" token is causally wired to actual cats it has perceived and acted on has a connection the disembodied model lacks. Whether that connection <em>constitutes</em> aboutness or merely <em>supplies</em> it is itself contested &mdash; which is exactly the question this page's closing prompt asks you to sit with.</li>
+    </ul>
+
+    <p>None of these forces the conclusion. A determined Searlean can say the decoding only shows useful correlation, the counterfactual robustness only shows a better rulebook, and the robot is just a thermostat with more wires. That is a coherent position. But it is no longer the easy slam-dunk the phrase "it's just predicting symbols" implies. The honest state of play is that the model's internal states clearly have <em>more</em> of the structure we associate with aboutness than a thermostat does, and reasonable experts disagree about whether "more structure" ever becomes "genuine aboutness" or stays forever on the derived side of the line.</p>
+
+    <p>That disagreement is not a failure of the course to give you an answer. It <em>is</em> the answer at the frontier &mdash; the open question you'll see catalogued among the others in <a href="g32-frontier.html">G32 &mdash; The Current Frontier</a>. The reader who can hold both sides of it has done the thing this module was built for: stopped asking "is it intelligent?" and started asking the harder, more interesting question of <em>what kind</em> of intelligence, if any, sits behind the words.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Intentionality is the "aboutness" of a mental state &mdash; its directedness at something beyond itself. Searle's Chinese Room argues that symbol-shuffling (syntax) can never produce genuine aboutness (semantics), so an LLM's "cat" state is about nothing, like a photograph whose meaning lives only in the viewer. The strongest reply &mdash; the Systems Response &mdash; relocates understanding from the component to the whole system, and points to decodable, editable internal representations (as in Othello-GPT) as evidence that the states genuinely function <em>as if about</em> their referents. The evidence does not settle the question; it narrows it to one precise disagreement &mdash; whether the right causal-functional structure <em>is</em> aboutness, or merely resembles it.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If embodiment (robotics) gave the "cat" token a causal link to actual cats, would that settle aboutness &mdash; or does Searle's Chinese Room survive embodiment unchanged?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the Chinese Room and the syntax/semantics distinction are from Searle (1980), "Minds, Brains, and Programs," <em>Behavioral and Brain Sciences</em>. The "mark of the mental" framing of intentionality traces to Franz Brentano (1874). The original-vs-derived intentionality distinction is associated with John Haugeland and Daniel Dennett. The decodable-world-model evidence cited here is Li et al. (2023), "Emergent World Representations," discussed at length in G34.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

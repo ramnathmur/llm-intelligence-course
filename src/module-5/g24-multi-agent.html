@@ -59,10 +59,110 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture the McKinsey engagement team again, because the whole page lives inside it. A partner sets the question. An engagement manager breaks it into workstreams. Three associates go deep &mdash; one on market sizing, one on the cost model, one on the competitive landscape. Then they come back into a room and argue. The associate who built the cost model challenges the market-sizing number. The partner pushes back on an assumption nobody had questioned. By the time the deck ships, the answer is sharper than anything a single brilliant consultant could have produced alone, working at the same speed. That last clause matters, and we'll come back to it: the team wins not because each person is smarter, but because the <em>structure</em> of specialization plus disagreement plus synthesis catches errors and combines strengths.</p>
+
+    <p>That is multi-agent intelligence in one image. Take the agent you built up over the last several pages &mdash; a model that <a href="g08-lens-picking.html">picks the right lens</a>, <a href="g23-goal-decomposition.html">decomposes a goal</a>, calls tools, and iterates &mdash; and run several copies of it at once, give them roles, and let them talk. What emerges is collective behavior that no single instance produces on its own. But here is the catch this page is built around: putting agents in a room together is not the same as making them a team. Most of what people call "multi-agent" is just running the same model five times in parallel and stapling the outputs together. Genuine collaboration is rarer, harder, and more expensive &mdash; and knowing the difference is what lets you design teams that actually beat a solo model instead of just costing five times as much.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in <a href="g23-goal-decomposition.html">G23</a>, a single agent broke a big goal into sub-tasks and worked them in sequence. So what does adding <em>more agents</em> buy you that one well-organized agent doesn't already have?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>A single decomposing agent works the sub-tasks one mind, one context window, one chain of reasoning at a time &mdash; if it makes an early mistake, that mistake threads through everything downstream, because there's nobody to catch it. Multiple agents buy you two things a solo agent structurally cannot have: <strong>parallel specialization</strong> (different agents can hold different roles, tools, and contexts simultaneously, so a 100,000-token research job doesn't have to be crammed into one window) and <strong>independent perspectives that can disagree</strong>. The second is the deep one. A solo agent can't truly check its own work, because the same reasoning that produced the error also evaluates it. A second agent reasoning independently can. As you'll see, that independence is the active ingredient in the debate results.</p>
+      </div>
     </div>
+
+    <h2>Parallel is not collaboration</h2>
+
+    <p>Start with the distinction that the first verification question hangs on, because almost everyone gets it wrong. There is a world of difference between agents running <em>in parallel</em> and agents <em>genuinely collaborating</em>.</p>
+
+    <p>Parallel means independent. You hand the same task to five copies of the model, they each produce an answer without ever seeing each other's work, and then something &mdash; a vote, a ranking function, a final aggregator &mdash; combines the five outputs into one. This is real, useful, and widely used. "Self-consistency" sampling, where you generate many chain-of-thought solutions and take the majority answer, is exactly this pattern. It helps. But notice what is missing: at no point does agent 2 read agent 3's reasoning, spot a flaw, and change its mind. There is no exchange. The agents are like five associates locked in separate rooms, each writing a memo, with a manager who only ever reads the final memos and never lets the associates talk to each other.</p>
+
+    <p>Collaboration means the agents' outputs become each other's inputs, in a loop. Agent A produces a draft. Agent B reads it, critiques it, proposes a change. Agent A reads the critique and revises. Information flows <em>between</em> the agents, not just up to a central collector. The associates are in the same room, looking at each other's slides, saying "wait, your cost number can't be right if her market number is right." That back-and-forth &mdash; where one agent's reasoning genuinely shapes another's &mdash; is the line between a parallel ensemble and a collaborating team. Everything interesting about multi-agent systems lives on the collaboration side of that line.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Agents in Parallel (No Collaboration)</div>
+        <p>Five copies of the model each answer the same question alone, never seeing one another's work. A vote or an aggregator picks the most common answer. Like five associates in separate rooms each writing a memo, with a manager who reads only the finished memos. Cheap to run &mdash; the calls happen simultaneously &mdash; but no agent ever catches another's mistake, because no agent ever sees it. The ceiling is "the best single answer the model can produce, surfaced by majority vote."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Agents Collaborating (Debate / Critique)</div>
+        <p>Each agent proposes an answer, then <em>reads the others' answers and reasoning</em> and revises across multiple rounds. The cost-model associate challenges the market-sizing associate; both update. Errors get caught because a second independent mind is examining the first one's logic. The ceiling rises above any single answer &mdash; but you pay for it: many more model calls, run in sequence (round 2 needs round 1's output), plus the tokens to pass everyone's reasoning to everyone else. That sequential, quadratic message-passing is the coordination overhead.</p>
+      </div>
+    </div>
+
+    <h2>How debate actually improves the answer</h2>
+
+    <p>This is the mechanism the page's key paper pins down, so it's worth being precise. Du et al. (2023), "Improving Factuality and Reasoning in Language Models through Multiagent Debate," ran a clean experiment: instead of asking one model for one answer, they instantiated several copies of the same model, had each one produce an initial answer with its reasoning, and then &mdash; this is the whole trick &mdash; fed every agent the <em>other agents' answers and reasoning</em> and asked each to produce a new, updated response in light of what its peers said. Repeat for a few rounds. Take the final consensus.</p>
+
+    <p>The result: across arithmetic, grade-school math, chess-move reasoning, and factual-recall tasks, multi-agent debate beat both a single model answering once and a single model using chain-of-thought. Factual accuracy went up. Reasoning errors went down. And crucially, the gains came from the <em>debate</em>, not just from sampling more &mdash; debate outperformed simply generating many independent answers and voting. Something happens when the agents read each other that does not happen when they only get counted.</p>
+
+    <p>What happens is error correction through independent review. Here is the intuition. Suppose one agent makes a calculation slip &mdash; it carries a digit wrong and gets 142 instead of 132. In a voting setup, that wrong 142 just becomes one ballot. But in a debate, the other agents <em>see the work</em>. They each did the arithmetic independently, most of them got 132, and now agent 1 is staring at three peers who all show 132 with legible reasoning. Faced with that, the model very often revises &mdash; not because it was told the answer, but because seeing competing reasoning makes the flaw in its own visible. Mistakes tend to be idiosyncratic and uncorrelated across agents; correct reasoning tends to converge. So when agents exchange reasoning, the correct path gets reinforced from multiple directions while the random errors fail to find support and wash out.</p>
+
+    <p>The deeper point, and the reason this belongs in a course arguing that LLMs are genuinely intelligent: a model revising its answer because it found a peer's reasoning more compelling is not retrieving a stored response. It is <em>evaluating an argument</em> &mdash; weighing its own logic against another's and updating. That is a cognitive operation, not a lookup. The same machinery that makes a single model reason (which you met in extended thinking and chain-of-thought) is being turned on the <em>products of other reasoners</em>, and it produces better answers. Collective reasoning is reasoning, scaled up a level.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Du et al. found that multi-agent debate beat simply generating many answers and taking a majority vote. What does that comparison tell us about <em>why</em> debate works?</div>
+      <button class="quiz-option" data-letter="A">Debate works only because it generates more candidate answers, so the majority vote has more ballots to draw from.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The gain comes from agents <em>reading and responding to each other's reasoning</em> &mdash; not just from producing more answers &mdash; because exchanging arguments lets agents catch and correct flaws that voting alone never surfaces.</button>
+      <button class="quiz-option" data-letter="C">It tells us the individual model is too weak, so any aggregation method would have produced the same improvement.</button>
+      <div class="quiz-feedback" data-correct="Right. If extra answers were the whole story, plain majority voting over many samples would match debate &mdash; but it didn't. The exchange of reasoning is the active ingredient: seeing a peer's logic lets an agent revise a flawed step, which counting ballots can never do." data-incorrect="Look again at what debate adds over voting. Both produce multiple answers, so 'more answers' can't explain the difference. The thing debate has that voting lacks is agents reading each other's reasoning and updating in response."></div>
+    </div>
+
+    <h2>Specialization: roles, not just copies</h2>
+
+    <p>Debate uses identical agents arguing. The other half of multi-agent design uses <em>different</em> agents with different jobs &mdash; the McKinsey team where the partner, the manager, and the associates each play a distinct role. This is the pattern that maps most directly onto how Ram works inside Claude Code's multi-agent workflows: a lead agent that plans and delegates, sub-agents that go deep on specific pieces, each with its own focused context.</p>
+
+    <p>Why does specialization help when, in principle, the same underlying model could do every role itself? Two concrete reasons, both about resources rather than raw smarts:</p>
+
+    <ul>
+      <li><strong>Context is finite and gets noisy.</strong> A single agent trying to research a market, model the costs, and analyze competitors all in one conversation has to hold every detail in one context window &mdash; and as that window fills with thousands of tokens of mixed material, the model's attention to any one thread degrades. Give each sub-agent its own clean window for its own job, and each operates at full focus. The lead agent then receives only the distilled findings, not the raw mess. This is the same logic a manager uses when she doesn't want every associate's scratch work in her inbox &mdash; just the conclusions.</li>
+      <li><strong>Roles can carry different instructions and tools.</strong> A "critic" agent can be prompted to be skeptical and look for holes; a "researcher" agent can be given web-search tools; a "writer" agent can be told to optimize for clarity. The same base model behaves differently under different role instructions, so you get functional diversity for free &mdash; a team of specialists out of one generalist.</li>
+    </ul>
+
+    <p>This connects directly to what you saw in <a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>. There, new abilities appeared at scale within a single model. Here, a related thing happens at the level of the system: a structured team of agents can exhibit problem-solving behavior that no single agent in the team reliably produces alone &mdash; not because any agent got smarter, but because the organization of specialization, critique, and synthesis is itself a kind of intelligence. The whole exceeds the parts. That is what "emergent collective intelligence" means, and it's why the curriculum names this gap that way.</p>
+
+    <h2>The bill always comes due: coordination overhead</h2>
+
+    <p>Now the honest part, and the third verification question. Everything above sounds like free upside &mdash; just add agents, get smarter behavior. It is not free. Multi-agent systems introduce real coordination overhead, and it can easily outweigh the benefit.</p>
+
+    <p>Count the costs concretely. A single model answering once is one model call. A three-agent, three-round debate is roughly nine model calls &mdash; and because round two needs round one's outputs, you can't fully parallelize them; they run partly in sequence, so latency stacks up. Worse, every agent has to be <em>told</em> what the other agents said, which means re-sending all that reasoning as input on every round. Pass everyone's output to everyone else and the message volume grows with the square of the team size: doubling the agents roughly quadruples the cross-talk. More agents, more rounds, more tokens, more time, more money. The same back-and-forth that produces error correction is the thing running up the meter.</p>
+
+    <p>There are subtler failure modes too. Agents can <strong>converge prematurely</strong> &mdash; reach false consensus, all confidently agreeing on a wrong answer, especially if one agent states an error early and assertively and the others defer to it (the AI version of groupthink). Long collaborations can drift off-task as each agent's context fills with the others' chatter. And debugging gets genuinely harder: when a five-agent system produces a bad result, finding which agent's reasoning went wrong, in which round, is far more work than tracing a single chain.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>State the task and its failure cost</h4>
+        <p>You want to extract a date from an invoice. The task is simple, the model gets it right alone ~99% of the time, and a rare miss is cheap to catch downstream. Write that down before reaching for agents.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Ask whether independent perspectives would actually change the answer</h4>
+        <p>For date extraction, no &mdash; there's nothing to debate; the date is on the page. Multi-agent debate helps on problems with reasoning that can go wrong in <em>uncorrelated</em> ways (math, multi-step logic, factual synthesis). If three agents would all approach the task identically, debate adds cost and zero correction.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Price the overhead against the value</h4>
+        <p>A debate costs ~9&times; the calls and stacks latency. For the invoice, you'd pay 9&times; for a problem that wasn't going to be solved any better &mdash; pure waste. For a hard, high-stakes analysis where a wrong answer is expensive, that 9&times; can be the cheapest insurance you'll ever buy. The decision is always overhead-versus-stakes, never "agents are good."</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Default to the simplest thing that works</h4>
+        <p>The discipline: start with one agent. Add collaboration only when you can name the specific failure it prevents &mdash; an error type a second independent perspective would catch. If you can't name it, you're paying coordination cost for theater, not correction.</p>
+      </div>
+    </div>
+
+    <p>This "simplest thing first" principle is exactly the spirit of Anthropic's guidance on building effective agents (Anthropic, 2024), which repeatedly warns against reaching for elaborate multi-agent orchestration when a single well-prompted agent, or even a simple chain, would do the job. Complexity is a cost you must justify, not a feature you get to brag about.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Running agents in parallel and having agents collaborate are different things. Parallel agents never see each other's work, so a vote can only surface the best single answer the model already had. Collaborating agents read and respond to each other's reasoning, which lets independent minds catch idiosyncratic errors and reinforce convergent correct logic &mdash; that exchange, not the extra answers, is why multi-agent debate beats majority voting. But the same back-and-forth that produces the gain is the coordination overhead: more calls, more latency, quadratic message-passing, and harder debugging. Multi-agent intelligence is real and emergent, and it is never free &mdash; the design question is always whether the independent-perspective payoff exceeds the coordination tax for <em>this specific task</em>.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Multi-agent debate adds coordination cost. For what tasks does one strong model with extended thinking (G17) beat a team of weaker agents &mdash; and how would you decide before building?</p>
+    </div>
+
+    <p>That Think Further question points straight at the next design fork. Sometimes the right move is not more agents but a deeper single agent &mdash; the <a href="../module-3/g17-extended-thinking.html">extended thinking</a> approach, where you give one strong model more time and tokens to reason through a hard problem in a single long chain, the way a chess grandmaster reads many lines before moving. A useful first cut: if the bottleneck is <em>depth</em> (one hard reasoning chain), spend on extended thinking; if the bottleneck is <em>breadth or independent verification</em> (many sub-tasks, or an answer that needs cross-checking from genuinely separate perspectives), spend on a team. And from here the path runs to <a href="g25-autonomy-spectrum.html">G25 &mdash; The Autonomy Spectrum</a>, where the question shifts from how many agents you coordinate to how much independence you hand any of them in the first place.</p>
+
+    <p class="diagram-caption">Reference note: the "self-consistency" majority-vote baseline discussed above is from Wang et al. (2022), "Self-Consistency Improves Chain of Thought Reasoning in Language Models"; the "start simple, justify complexity" design discipline is drawn from Anthropic (2024), "Building Effective Agents."</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

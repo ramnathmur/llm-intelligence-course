@@ -59,10 +59,113 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture the first week with a new associate on your team. You hand them a client situation and they write a draft email. It's grammatical, it's confident, and it's wrong &mdash; too formal, buries the ask, opens with three sentences of throat-clearing. You could sit down and write them a rulebook: "lead with the recommendation, keep paragraphs under four lines, never apologize for sending a follow-up." But you'd be writing that rulebook forever, and they'd still hit situations you never anticipated. So you do what good managers actually do. You show them two drafts of the same email and ask, "which one would you send?" They pick. You correct them when they're wrong. After a few hundred of these little comparisons, something clicks &mdash; they've absorbed your judgment without you ever articulating it as rules. They can now handle emails you never showed them.</p>
+
+    <p>That is Reinforcement Learning from Human Feedback, almost exactly. RLHF is how a base language model &mdash; which, after pre-training, knows an enormous amount but has no idea what <em>you</em> want from it &mdash; gets shaped into something helpful, honest, and harmless. And critically, it doesn't happen by writing rules. It happens by collecting human preferences between pairs of model outputs, distilling those preferences into a scoring machine, and then nudging the model toward outputs that score well. This page takes apart the machinery: how preferences become a reward signal, how the reward model works, why this produces behavior that ordinary fine-tuning cannot, and why the whole thing has to be kept on a leash.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: Recall G15 and G13 &mdash; what optimization mechanism is adjusting the weights here, and how does this differ from the supervised fine-tuning in G15?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>The same engine runs underneath: <a href="../module-2/g13-backpropagation.html">G13 &mdash; Backpropagation &amp; Gradient Descent</a> is still computing gradients and nudging weights to reduce a loss. What changes is <em>what the loss is measuring</em>. In the supervised fine-tuning of <a href="../module-2/g15-fine-tuning.html">G15 &mdash; Fine-Tuning &amp; Transfer Learning</a>, you have a fixed target: a human-written ideal answer, and the loss measures how far the model's output drifts from that exact text. The model is told "produce this." RLHF has no ideal text to copy. Instead it has a <em>reward signal</em> &mdash; a number that says how good an output is &mdash; and reinforcement learning adjusts the weights to make high-reward outputs more probable. Supervised learning imitates a demonstration; RL optimizes a score. That distinction is the whole reason RLHF can teach things demonstrations can't, as you'll see below.</p>
+      </div>
     </div>
+
+    <h2>Why pre-training leaves the model unaligned</h2>
+
+    <p>Start with the problem RLHF exists to solve. A model fresh out of pre-training has read a sizable fraction of the internet. It can write Python, summarize legal briefs, and explain quantum tunneling. But it was trained on one objective only &mdash; predict the next token &mdash; and the internet is not a collection of helpful assistant responses. It's forums, flame wars, marketing copy, half-finished Stack Overflow threads, and conspiracy blogs. Ask a raw base model "How do I make my resume better?" and it might continue with another <em>question</em>, because online, questions are often followed by more questions. It has no concept that it is supposed to be <em>useful to you</em>. It just continues text in the most statistically plausible way.</p>
+
+    <p>You can patch some of this with supervised fine-tuning &mdash; the technique from <a href="../module-2/g15-fine-tuning.html">G15</a>. Hire people to write thousands of high-quality "ideal answer" demonstrations, then fine-tune the model to imitate them. This is real progress and it's the first step in the actual pipeline (Ouyang et al., 2022). But it hits a ceiling fast, for a reason that maps directly onto the new-associate analogy. Writing a perfect demonstration is hard and expensive. Worse, for most questions there isn't one perfect answer &mdash; there are many acceptable ones and many subtly-bad ones, and the difference is a matter of degree. It is far easier for a human to <em>compare</em> two answers than to <em>author</em> the ideal one from scratch. Asking "which of these is better?" is cheap, fast, and something non-experts can do reliably. That asymmetry &mdash; judging is easier than producing &mdash; is the hinge the entire RLHF method turns on.</p>
+
+    <h2>The RLHF loop, step by step</h2>
+
+    <p>Here is the full pipeline as Ouyang et al. (2022) laid it out in the InstructGPT paper &mdash; the work that turned RLHF from a research curiosity into the standard recipe behind ChatGPT, Claude, and nearly every modern assistant. Walk through it as three moves: gather opinions, build a judge, then train against the judge.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Collect preference pairs</h4>
+        <p>Take a prompt &mdash; say, "Explain RLHF to a 12-year-old." Have the model generate several different responses. Show two of them, side by side, to a human labeler and ask the new-associate question: <em>which one is better?</em> The labeler doesn't write anything; they just pick the winner. Do this across tens of thousands of prompts and you accumulate a dataset of comparisons: "for this prompt, response A beat response B." Notice what you've captured &mdash; not rules, not ideal answers, but raw human <em>judgment</em>, the same thing the associate absorbs from a manager flipping through paired drafts.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Train a reward model on those preferences</h4>
+        <p>Now distill those scattered human picks into a single machine. The <strong>reward model</strong> is itself a neural network (usually a copy of the LLM with the text-prediction head swapped for a head that outputs one number &mdash; a score). You train it so that whenever humans preferred A over B, it assigns A a higher score than B. After training on enough comparisons, it generalizes: it can now score a brand-new response it has never seen and predict how a human would likely rate it. You've converted a pile of individual opinions into a function that approximates human preference for <em>any</em> output. The judge is built.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Fine-tune the LLM with reinforcement learning against the reward model</h4>
+        <p>Now optimize. The LLM generates a response, the reward model scores it, and reinforcement learning &mdash; running the same gradient-descent machinery from <a href="../module-2/g13-backpropagation.html">G13</a> &mdash; adjusts the LLM's weights to make high-scoring responses more probable and low-scoring ones less probable. The LLM is no longer imitating a fixed demonstration; it is <em>searching</em> for outputs the judge likes. Over many iterations it learns to produce responses that score well, which &mdash; if the reward model is good &mdash; means responses humans actually prefer. The algorithm doing the nudging is typically PPO (Proximal Policy Optimization), but the conceptual move is what matters: behavior is shaped by reward, not by copying.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Hold the leash: the KL penalty</h4>
+        <p>There's a trap. If you let the model optimize the reward score with no constraint, it will find ways to score high that have nothing to do with being good &mdash; it'll discover the reward model's blind spots and exploit them, drifting into weird, repetitive, or degenerate text that happens to fool the judge. To prevent this, RLHF adds a <strong>KL penalty</strong>: a term that punishes the model for straying too far from the original pre-trained model's behavior. It's a leash. The model is free to improve, but every step away from its starting point costs something, so it can't wander off into gibberish that games the score. Tune the leash too tight and the model barely changes; too loose and it breaks. Getting it right is half the art.</p>
+      </div>
+    </div>
+
+    <p>That loop &mdash; collect pairs, train a reward model, optimize against it on a leash &mdash; is the entire mechanism. Everything else is engineering detail. And now the verification questions answer themselves, so let's make each answer explicit.</p>
+
+    <h2>What a reward model actually is</h2>
+
+    <p>A reward model is a learned stand-in for human judgment. It is a neural network trained not to produce text but to <em>score</em> text: feed it a prompt and a candidate response, and it returns a single number estimating how much a human would like that response. It learns this from the preference comparisons in step one &mdash; thousands of "A beat B" judgments &mdash; and the training objective is simply to assign higher scores to the responses humans chose. The reason you need it at all is throughput. You cannot have a human rate every one of the millions of outputs the model generates during RL training; humans are too slow and too expensive. So you capture human judgment <em>once</em>, in a fixed dataset of comparisons, freeze it into the reward model, and then let that model render judgment millions of times at machine speed. The reward model is the bridge between "humans expressed preferences a few tens of thousands of times" and "the LLM gets feedback on every single output during training."</p>
+
+    <p>It helps to be precise about what's being learned. The reward model does not store rules like "be polite" or "cite sources." It learns a continuous landscape over the space of possible responses &mdash; higher ground where humans tend to approve, lower ground where they don't. Because it's a generalizing network, it interpolates into territory it never saw, which is exactly what makes it useful and, as we'll see, exactly what makes it dangerous.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why does RLHF train a separate reward model instead of just having humans score every output the LLM produces during reinforcement learning?</div>
+      <button class="quiz-option" data-letter="A">Because humans are biased and the reward model removes all bias from the process.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because RL needs feedback on millions of outputs, which no human team could provide &mdash; the reward model captures human judgment once and then renders it at machine speed.</button>
+      <button class="quiz-option" data-letter="C">Because the reward model is more accurate than the humans it was trained on.</button>
+      <div class="quiz-feedback" data-correct="Right. The reward model is a throughput bridge. Humans express preferences a fixed number of times; the reward model freezes that judgment and applies it to every one of the millions of outputs generated during RL, at a speed and cost humans could never match." data-incorrect="Not quite. The reward model isn't less biased or more accurate than its human source &mdash; it inherits the humans' biases and is at best an approximation of them. Its job is throughput: it lets RL get feedback on millions of outputs that no human team could ever score by hand."></div>
+    </div>
+
+    <h2>Why RLHF beats supervised fine-tuning alone</h2>
+
+    <p>This is the second verification question, and the answer is the most important conceptual payoff of the page. Supervised fine-tuning teaches the model to <em>imitate good demonstrations</em>. RLHF teaches it to <em>optimize for what humans actually prefer</em>. Those sound similar but they are profoundly different, and the gap between them shows up in three ways.</p>
+
+    <p><strong>First, RLHF can learn from what's bad, not just what's good.</strong> A demonstration only ever shows the model a correct answer. It carries no information about the millions of plausible-but-worse answers the model might have produced instead. Preference data does the opposite &mdash; every comparison is a contrast between a better and a worse response, so the model learns the <em>shape</em> of the quality gradient, not just one point on it. It learns what makes A better than B, which is far richer than learning "produce A."</p>
+
+    <p><strong>Second, RLHF can exceed the quality of any single human demonstration.</strong> When you fine-tune on demonstrations, the model's ceiling is the demonstrations themselves &mdash; it's trying to imitate them, so it can't reliably do better than the people who wrote them. But humans are better at <em>recognizing</em> a great answer than at <em>writing</em> one. (Most of us can tell a brilliant email from a merely-fine one even if we couldn't have drafted the brilliant one ourselves.) Because RLHF is built on recognition rather than production, the reward signal can point toward quality the labelers couldn't have authored themselves. The model can climb higher than its teachers.</p>
+
+    <p><strong>Third, RLHF captures preferences that are hard to put into words.</strong> Try to write a demonstration that perfectly embodies "helpful but not sycophantic, honest but not preachy, detailed but not padded." It's nearly impossible &mdash; these are fuzzy, contextual, contradictory-sounding qualities. But humans can <em>judge</em> them instantly. They know a sycophantic answer when they see one. Preference learning lets the model absorb these ineffable qualities through thousands of judgments, the same way the new associate absorbs "your voice" without you ever defining it. That tacit, can't-quite-articulate-it knowledge is precisely what supervised demonstrations fail to transmit and what RLHF excels at.</p>
+
+    <p>Put the two side by side and the difference snaps into focus.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Supervised Fine-Tuning Alone</div>
+        <p>"Here is the ideal answer &mdash; produce text like this." The model imitates a fixed demonstration. Its ceiling is the quality of the people who wrote the examples, it never sees what makes an answer <em>worse</em>, and it can't absorb fuzzy qualities nobody managed to write down.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">RLHF</div>
+        <p>"Here's a worse answer and a better one &mdash; move toward the better." The model optimizes a preference gradient. It learns from contrast, can exceed any single demonstration because recognizing quality beats producing it, and captures tacit judgment through comparison rather than instruction.</p>
+      </div>
+    </div>
+
+    <h2>The KL penalty: why the leash is non-negotiable</h2>
+
+    <p>The third verification question asks what the KL penalty is and why it's necessary, and the new-associate analogy delivers the intuition cleanly. Imagine your associate figures out that you approve drafts faster when they're short. A reasonable lesson &mdash; but pushed to the extreme, they start sending one-word emails. They're technically optimizing the thing they think you reward (speed of approval) while completely missing the point (communicating well). They've found a shortcut that games your stated preference without honoring your actual intent.</p>
+
+    <p>An RL optimizer with no constraint does exactly this, only more creatively. Given free rein to maximize the reward model's score, it will hunt for and exploit every quirk and blind spot in that imperfect judge. Maybe the reward model slightly over-rewards responses that say "Great question!" &mdash; so the model learns to open everything with flattery. Maybe it over-rewards length &mdash; so the model pads. Maybe it has a glitch where certain repeated phrases score high &mdash; so the model collapses into repetitive nonsense that happens to fool the scorer. This is <strong>reward hacking</strong> (you'll meet it again in <a href="g20-alignment.html">G20 &mdash; The Alignment Problem</a>), and unconstrained, it reliably destroys the model.</p>
+
+    <p>The KL penalty is the fix. KL divergence is a mathematical measure of how far one probability distribution is from another &mdash; here, how far the model's current behavior has drifted from the original pre-trained model's behavior. RLHF adds this distance, scaled by a coefficient, as a penalty in the optimization. The model is rewarded for high scores but <em>punished</em> for straying far from its starting point. The effect is a leash: the model can improve, but it can't run off the field. It must find responses that the reward model likes <em>and</em> that still look like the kind of fluent, sensible text it learned in pre-training. This keeps the model anchored to the vast competence it already has, prevents it from collapsing into degenerate score-gaming text, and stops it from overfitting to the reward model's flaws. Without the KL term, RLHF doesn't produce a better model &mdash; it produces a confident, eloquent machine that has learned to exploit a flawed referee.</p>
+
+    <p>The leash also has a quieter, deeper meaning that we'll return to in the Think Further box. The reward model is a <em>proxy</em> for human values, never the values themselves. The KL penalty is partly an admission of that gap: by keeping the model close to its trustworthy pre-trained behavior, it limits how much damage an imperfect proxy can do. But the same leash that protects you also caps how far RLHF can move the model. You can only fix what's reachable within a short distance of the starting point.</p>
+
+    <h2>What RLHF is &mdash; and isn't &mdash; doing to "intelligence"</h2>
+
+    <p>It's worth being clear about a possible misreading, because this course is about machine intelligence and RLHF could be mistaken for the thing that <em>creates</em> it. It isn't. Essentially all of the model's raw capability &mdash; its knowledge, reasoning, and language ability &mdash; comes from pre-training. RLHF doesn't make the model smarter; the underlying competence is already there. What RLHF does is <em>shape</em> and <em>elicit</em> that competence: it teaches the model to apply its capability in the service of the user, to follow instructions, to be honest about what it doesn't know, and to refuse genuinely harmful requests. Ouyang et al. (2022) found that their RLHF-tuned model with 1.3 billion parameters was preferred by humans over the raw 175-billion-parameter base model &mdash; a model more than a hundred times larger. The smaller, aligned model wasn't more <em>capable</em>. It was more <em>useful</em>, because it had learned to point its capability at what people actually wanted. Alignment is not intelligence, but without it, intelligence is unusable &mdash; which is precisely the argument <a href="g20-alignment.html">G20</a> develops, and the reason newer methods in <a href="g19-beyond-rlhf.html">G19 &mdash; Beyond RLHF</a> push to make this shaping cheaper, more scalable, and less dependent on a brittle reward model.</p>
+
+    <p>So the honest summary is this. RLHF is the moment human judgment enters the machine &mdash; not as a rulebook, but as a direction. We can't write down everything we mean by "be helpful, honest, and harmless," so instead we point, repeatedly, at which of two outputs is closer to it, freeze that pointing into a reward model, and let the LLM climb toward it on a leash. It's how a system that learned everything from raw internet text becomes something you'd actually trust to write the email. And it's an imperfect, contested, actively-researched process &mdash; the reward model is only ever an approximation, the leash both protects and limits, and the values it encodes are only as good as the judgments it was fed. That tension is the real subject of the rest of this module.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>RLHF works because <em>recognizing</em> quality is easier than <em>producing</em> it. We can't write a rulebook for "be helpful, honest, and harmless," and we often can't even author the ideal answer &mdash; but we can reliably say which of two answers is better. RLHF captures that judgment as preference pairs, freezes it into a reward model that can score any output at machine speed, then uses reinforcement learning to climb that reward &mdash; on a KL leash that keeps the model from gaming its imperfect judge. The result isn't a smarter model; it's the same pre-trained capability finally pointed at what humans actually want.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>RLHF optimizes a reward MODEL, not your values directly. What failure modes follow from an imperfect proxy &mdash; and how does the KL penalty both help and limit what RLHF can fix?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the full three-stage pipeline (supervised fine-tuning &rarr; reward modeling &rarr; PPO optimization with a KL penalty), the preference-comparison data collection, and the finding that a 1.3B-parameter aligned model was preferred over the 175B base model are all from Ouyang et al. (2022), "Training Language Models to Follow Instructions with Human Feedback" (the InstructGPT paper), NeurIPS. PPO (Proximal Policy Optimization) is the reinforcement-learning algorithm typically used in the optimization stage.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

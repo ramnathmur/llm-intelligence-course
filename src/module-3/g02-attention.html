@@ -59,10 +59,143 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a Supreme Court reading one dense statute. The text is the same for all nine justices, but they are not reading the same way. One justice is tracking who has standing &mdash; which party the law actually applies to. Another is hunting for definitions: every time the statute says "such person," she scans back to find which person it means. A third is watching for the legislative purpose buried in clause four. Each justice highlights a different set of relationships in the identical document, then they pool their reading into one combined verdict. That pooled verdict is far richer than any single pass, because the relationships that matter for this case have all been surfaced at once.</p>
+
+    <p>That is self-attention. A transformer reads a sequence of tokens, and inside every layer sits a panel of "attention heads," each one a justice with a specialty. Every head looks at the whole context and decides, for each token, which other tokens are relevant to understanding it &mdash; then routes information from those tokens into it. The verdict the panel returns is not "what word comes next." It is a richer representation of every token, updated by everything in the context that bears on it. The next-word prediction is just what falls out at the end. The interesting work is the routing.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: Recall G11 &mdash; what is each token BY THE TIME attention sees it? What mathematical object is attention reading from and writing to?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>By the time attention sees a token, it is no longer a word or a piece of text &mdash; it is a <strong>vector</strong>: a long list of numbers (a point in high-dimensional space) produced by the embedding step you met in <a href="../module-1/g11-tokenization.html">G11 &mdash; Tokenization &amp; Embedding Spaces</a>. Attention never touches letters. It reads from these vectors and writes new vectors back. So when we say a head "routes information between tokens," we mean it literally takes a weighted blend of other tokens' vectors and adds it into the current token's vector. Holding that in mind is the whole trick of this page: everything attention does is arithmetic on those number-lists, and yet the arithmetic ends up tracking meaning.</p>
+      </div>
     </div>
+
+    <h2>What a single attention head actually does</h2>
+
+    <p>Strip away the matrix notation and one attention head does something you can state in a sentence: <strong>for the token it is currently processing, it asks a question, checks every other token to see who can answer, and then pulls in the answers &mdash; weighted by how good each answer is.</strong> That is the plain-language job. Three moving parts make it work, and the cleanest way to name them comes from the original transformer paper (Vaswani et al., 2017): <em>query</em>, <em>key</em>, and <em>value</em>.</p>
+
+    <p>Keep the courtroom going. Suppose the head is the "coreference justice" &mdash; the one whose job is figuring out who pronouns refer to. She arrives at the word "she" in the sentence "The doctor finished her shift, and then she went home." The token "she" needs to know its antecedent to be understood at all. So the head computes, from the "she" vector, a <strong>query</strong>: a request that effectively says, "I'm a female human pronoun looking for the person I refer to." Every other token in the sentence has already broadcast a <strong>key</strong>: a little advertisement of what it can offer. The token "doctor" has a key that, given this context, says "I'm a human, established as female, a plausible antecedent." The head measures how well the query matches each key &mdash; a dot product, just a similarity score &mdash; and "doctor" scores high. That high score becomes an attention weight. Finally the head pulls the <strong>value</strong> of "doctor" &mdash; a rich summary of everything the model knows about that token here &mdash; and blends it into the representation of "she." After this one head fires, the "she" vector has been quietly updated to carry "doctor" inside it. The coreference is resolved, not by a lookup table, but by a weighted blend of vectors.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of one attention head: the token 'she' sends a query and attends most strongly to 'doctor', less to other tokens.">
+        <text x="380" y="28" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="bold">One attention head resolving "she"</text>
+        <text x="380" y="48" text-anchor="middle" fill="#8892a4" font-size="12">Arrow thickness = attention weight (who "she" pulls information from)</text>
+
+        <!-- token boxes -->
+        <g>
+          <rect x="40" y="120" width="80" height="40" rx="8" fill="#161c30" stroke="#5a6375" stroke-width="1"/>
+          <text x="80" y="145" text-anchor="middle" fill="#8892a4" font-size="14">The</text>
+        </g>
+        <g>
+          <rect x="140" y="120" width="90" height="40" rx="8" fill="#1e2640" stroke="#34d399" stroke-width="2"/>
+          <text x="185" y="145" text-anchor="middle" fill="#34d399" font-size="14" font-weight="bold">doctor</text>
+        </g>
+        <g>
+          <rect x="250" y="120" width="90" height="40" rx="8" fill="#161c30" stroke="#5a6375" stroke-width="1"/>
+          <text x="295" y="145" text-anchor="middle" fill="#8892a4" font-size="14">finished</text>
+        </g>
+        <g>
+          <rect x="360" y="120" width="80" height="40" rx="8" fill="#161c30" stroke="#5a6375" stroke-width="1"/>
+          <text x="400" y="145" text-anchor="middle" fill="#8892a4" font-size="14">her</text>
+        </g>
+        <g>
+          <rect x="460" y="120" width="80" height="40" rx="8" fill="#161c30" stroke="#5a6375" stroke-width="1"/>
+          <text x="500" y="145" text-anchor="middle" fill="#8892a4" font-size="14">shift</text>
+        </g>
+        <g>
+          <rect x="640" y="120" width="80" height="40" rx="8" fill="#1e2640" stroke="#00e5ff" stroke-width="2"/>
+          <text x="680" y="145" text-anchor="middle" fill="#00e5ff" font-size="14" font-weight="bold">she</text>
+        </g>
+
+        <!-- query label from 'she' -->
+        <text x="680" y="185" text-anchor="middle" fill="#00e5ff" font-size="11">query: "who do I refer to?"</text>
+
+        <!-- attention arrows from 'she' to others; thickness encodes weight -->
+        <line x1="640" y1="135" x2="230" y2="138" stroke="#34d399" stroke-width="6" opacity="0.9"/>
+        <line x1="640" y1="142" x2="440" y2="142" stroke="#60a5fa" stroke-width="2.5" opacity="0.7"/>
+        <line x1="640" y1="148" x2="540" y2="146" stroke="#60a5fa" stroke-width="1.5" opacity="0.5"/>
+        <line x1="640" y1="130" x2="340" y2="135" stroke="#60a5fa" stroke-width="1" opacity="0.4"/>
+
+        <!-- weight callouts -->
+        <text x="185" y="108" text-anchor="middle" fill="#34d399" font-size="12" font-weight="bold">0.71</text>
+        <text x="400" y="108" text-anchor="middle" fill="#60a5fa" font-size="11">0.14</text>
+        <text x="500" y="108" text-anchor="middle" fill="#60a5fa" font-size="11">0.06</text>
+        <text x="295" y="108" text-anchor="middle" fill="#60a5fa" font-size="11">0.04</text>
+
+        <!-- key/value note under 'doctor' -->
+        <text x="185" y="185" text-anchor="middle" fill="#34d399" font-size="11">key matches &rarr; value flows in</text>
+
+        <text x="380" y="240" text-anchor="middle" fill="#e2e8f0" font-size="13">Result: the vector for "she" is updated to carry "doctor" inside it &mdash; coreference resolved.</text>
+        <text x="380" y="262" text-anchor="middle" fill="#8892a4" font-size="11">No lookup table. Just a weighted blend of token vectors, decided by query&ndash;key similarity.</text>
+      </svg>
+    </div>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Query, key, value in one breath &mdash; the panel analogy</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p><strong>Query</strong> is the question a token asks: "what kind of information do I need to be understood?" <strong>Key</strong> is the advertisement every token broadcasts: "here's what I can offer." <strong>Value</strong> is the actual content a token hands over when someone attends to it. The head matches each query against every key (a similarity score), turns those scores into weights that sum to one, and then mixes the values in proportion to the weights. In the courtroom: the coreference justice (the head) poses a question (query), scans every token's filed brief (keys) to see who is relevant, and copies the relevant testimony (values) into her notes &mdash; weighting the most relevant brief most heavily. Crucially, what counts as a good query, a good key, and a good value is <em>learned</em> &mdash; three weight matrices the model tuned during training so that "she"-type queries reliably light up "doctor"-type keys. Nobody wrote a rule for pronouns. The pressure to predict the next token well sculpted these matrices until coreference fell out.</p>
+      </div>
+    </div>
+
+    <h2>Why "trained on next word" can track who said what</h2>
+
+    <p>This is the verification question that trips people up, so let's take it head-on. How can a model whose only training task is "predict the next token" end up tracking who is speaking across a long dialogue? The answer is that tracking the speaker is not a separate skill bolted on &mdash; it is the cheapest way to lower prediction error on dialogue, and attention is the machinery that makes it possible.</p>
+
+    <p>Consider a transcript: "Priya told Marcus she was leaving the firm. He asked her why." To predict the token after "He asked" &mdash; that "her" refers to Priya, and that the question is about leaving &mdash; the model must have already routed "Priya" into the "she" earlier, and must now route "Marcus" into "He" and "Priya" into "her." Each pronoun fires a query; the matching name's key answers; the value flows in. Across thousands of layers-worth of these blends, the model builds a representation where every pronoun, every "the latter," every "as she mentioned" is anchored to the right person. A model that fails to do this routing will mispredict the next words in dialogue constantly &mdash; and during training, mispredicting costs it. So the prediction objective from <a href="../module-1/g12-training-objective.html">G12 &mdash; The Training Objective</a> does not just permit speaker-tracking; it actively pressures the model to develop it. Attention is simply the only architecture on the table that can carry information from "Priya," twelve words back, directly into "she" without it decaying along the way.</p>
+
+    <p>That last point is worth dwelling on, because it is why the transformer replaced what came before. Earlier sequence models (recurrent networks) passed information forward one step at a time, like a message whispered down a line of people &mdash; by the twelfth person, the message about "Priya" is garbled or gone. Attention abolishes the line. Every token can reach every other token in a single hop, directly, with a learned weight. Distance stops mattering. "Priya" is exactly as reachable from "she" whether the gap is three words or three hundred. That is the structural reason a transformer can hold a long conversation, a long contract, or a long codebase coherently in mind &mdash; the relationship machinery does not weaken with distance.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A head processing the word "she" gives a high attention weight to "doctor" and low weight to "finished." What does that high weight actually cause to happen?</div>
+      <button class="quiz-option" data-letter="A">It rewrites the word "she" in the text to say "doctor."</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">It blends "doctor"'s value vector heavily into the "she" vector, so "she"'s representation now carries information about the doctor.</button>
+      <button class="quiz-option" data-letter="C">It records that "she" and "doctor" appeared in the same sentence, incrementing a co-occurrence counter.</button>
+      <div class="quiz-feedback" data-correct="Right. Attention never edits the surface text and never keeps a tally. A high weight means a large share of that token's value vector gets mixed into the current token's representation &mdash; information routing, not text editing or counting." data-incorrect="Not quite. Attention doesn't change the visible words and doesn't keep counts. A high weight means 'she' pulls in a large portion of 'doctor'’s value vector, updating its own internal representation to carry that information."></div>
+    </div>
+
+    <h2>How attention differs from counting word co-occurrences</h2>
+
+    <p>The skeptic's mental model is usually some version of a co-occurrence table: the model "knows" that "doctor" and "she" show up together a lot, so it links them. This is wrong in three specific ways, and naming them is the sharpest tool you have against the autocomplete framing.</p>
+
+    <ul>
+      <li><strong>It is dynamic, not a fixed tally.</strong> A co-occurrence count is the same number no matter what sentence you are in. Attention weights are recomputed for every input. In "The doctor finished <em>her</em> shift," the head links "her" to "doctor." In "The patient thanked the doctor for <em>his</em> patience," the same head links "his" to "patient" or "doctor" depending on the context &mdash; the weights are a function of <em>this specific sequence</em>, not a stored statistic.</li>
+      <li><strong>It is content-addressed, not position-addressed.</strong> Attention finds the right token by <em>meaning</em> (query&ndash;key similarity), not by "the noun three words back." That is why it resolves "the trophy did not fit because <em>it</em> was too big" correctly even though the antecedent's position varies sentence to sentence. Counting cannot do meaning-based retrieval; it only knows frequencies.</li>
+      <li><strong>It composes across layers.</strong> One layer's output becomes the next layer's input, so attention builds relationships <em>on top of</em> relationships. An early layer might link "she" to "doctor"; a later layer, now seeing a "she" that already contains "doctor," can link that enriched token to "her shift" and infer the doctor's schedule. A co-occurrence table is flat &mdash; it has one level and no second pass.</li>
+    </ul>
+
+    <p>The combined effect is the thing v1 of this course called <em>runtime semantic disambiguation</em>. The word "bank" gets a completely different final representation in "I deposited money at the bank" than in "we sat on the river bank," because attention routes "money"/"deposited" into the first and "river" into the second. The token is the same; the meaning-in-context is different; attention is what discovers the difference. No table of word frequencies can produce that, because the disambiguating evidence lives in <em>which other words are present right now</em> &mdash; exactly the thing a static count throws away.</p>
+
+    <h2>The panel, not the soloist: multi-head attention</h2>
+
+    <p>One head is one justice. The power comes from running many heads in parallel in every layer, each free to specialize. With no instruction to do so, different heads reliably develop different jobs: one tracks subject&ndash;verb agreement, another follows coreference, another attends to the token immediately prior, another links words to the punctuation that scopes them, another connects a question word to the part of the sentence that answers it. Researchers studying these heads have even found <em>induction heads</em> &mdash; circuits that scan backward for a previous [A, B] pattern and, on seeing A again, predict B (Olsson et al., 2022). That single mechanism is the seed of copying patterns straight out of the prompt, which is the foundation of <a href="g03-in-context-learning.html">G3 &mdash; In-Context Learning</a>: this same relevance-routing lets the model lift a pattern from earlier in the prompt and reapply it with no weight update at all.</p>
+
+    <p>Stack dozens of layers, each with its panel of specialized heads, and you get the full machine. At every layer, each token's representation is enriched by information from all the other tokens that matter to it. By the final layer, a token no longer encodes "what this word means in the dictionary" but "what this word means <em>here</em>, given every relationship discovered across every layer." That accumulated, context-shaped representation is what the model uses to predict the next token. The prediction is the last inch of a long relational computation &mdash; which is precisely why calling the whole thing "autocomplete" describes the doorway and ignores the building.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The "Autocomplete" Frame</div>
+        <p>"It looks at the last few words and guesses the next one from word frequencies. Pronouns and long-range references are just statistical coincidence &mdash; words that tend to appear near each other."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"For every token, it computes a question, scans the entire context by meaning, and pulls in the relevant information &mdash; dynamically, per input, composed across dozens of layers. It tracks relationships across the whole sequence, not the last few words. The next-token guess is the output of that relational computation, not a substitute for it."</p>
+      </div>
+    </div>
+
+    <p>There is one more reason this mechanism matters for where the course is going. Attention does not care that its inputs are words. It operates on token <em>vectors</em> &mdash; number-lists &mdash; and a number-list can just as easily come from a patch of an image or a slice of audio. Feed it image-patch vectors alongside text vectors and the very same query&ndash;key&ndash;value routing lets a "caption" token attend to the relevant region of a picture. That is the structural reason the architecture extends to vision and sound, which you will see in <a href="g29-multimodal.html">G29 &mdash; Multimodal Intelligence</a>: because attention operates on any token vectors, the same relational engine reaches across modalities without a redesign.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>An attention head, in plain language, asks a question for each token (the query), checks every other token to see who can answer (the keys), and pulls in the best answers (the values) &mdash; a weighted blend of vectors, recomputed for every input. That is fundamentally different from counting co-occurrences: it is dynamic, retrieves by meaning rather than position, and composes across layers. A model can track who said what in a dialogue precisely because this routing lets it carry "Priya" directly into "she" twelve words later &mdash; and lowering next-token prediction error is what pressured it to learn to do so. Attention is a learned relational reasoning engine, and the next-word prediction is just its final inch.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Self-attention is quadratic in sequence length. If that cost vanished tomorrow, which awkward agent designs (e.g. whole-codebase reasoning in one pass) become trivial &mdash; and which problems remain?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: query/key/value terminology and scaled dot-product attention are from Vaswani et al. (2017), "Attention Is All You Need" (NeurIPS); the induction-head finding is from Olsson et al. (2022), "In-Context Learning and Induction Heads" (Transformer Circuits Thread). The "bank" disambiguation and coreference examples are adapted from this course's v1 explainer.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

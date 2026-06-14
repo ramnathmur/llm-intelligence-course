@@ -59,10 +59,97 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Ask a colleague "what's 2+2?" and the answer is back before they've finished hearing the question. Hand the same colleague a differential equation and watch what changes: they go quiet, reach for a pen, fill half a page, cross things out, start again. Same person, same brain, wildly different amounts of effort. Nobody finds this strange. We expect a competent mind to <em>spend more when the problem costs more</em>. That single, obvious habit &mdash; matching effort to difficulty &mdash; is the whole subject of this page, and it turns out to be the cleanest line you can draw between a guesser and a reasoner.</p>
+
+    <p>Here is the uncomfortable fact for the skeptic. A pure "next-word guesser," in the strict sense, does the <em>same amount of work</em> on every token it produces. The arithmetic of "2+2" and the next token of a hard proof cost it exactly the same. That is not a slur &mdash; it is literally how a standard transformer forward pass works. The interesting development of the last few years, and the reason this gap exists, is that modern systems broke that symmetry. They learned to think longer when thinking longer helps. To see why that matters, we first have to be precise about what "fixed compute per token" actually means.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in <a href="g09-chain-of-thought.html">G9</a> you saw chain-of-thought called "computation, not formatting." What did the intermediate tokens actually buy the model?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>They bought it <em>more steps of computation</em>. A transformer does a fixed amount of work to produce one token, so a hard problem that needs ten steps of work can't be solved in a single token's worth of compute. By writing intermediate tokens &mdash; the scratchpad &mdash; the model spreads the computation across many forward passes, using each generated token as working memory for the next. As <a href="g09-chain-of-thought.html">G9 &mdash; Chain-of-Thought as Computation</a> argued, the steps <em>are</em> the thinking. Extended thinking is the industrialized, trained-in version of exactly that idea: instead of hoping a prompt coaxes out a scratchpad, the model is built to generate one and given a budget to do it.</p>
+      </div>
     </div>
+
+    <h2>What "fixed compute per token" really means</h2>
+
+    <p>Strip away the marketing and a base language model has a brutally rigid cost structure. To produce one token, it runs one forward pass: the input flows through a fixed stack of layers, every layer does the same matrix multiplications regardless of what the input says, and a probability distribution comes out the other end. The number of arithmetic operations is set by the model's architecture, not by the difficulty of the question. Whether you ask it to complete "the sky is" or "the Riemann hypothesis is," the model burns the same compute to emit the next token.</p>
+
+    <p>This is the first verification question, so let's nail it down. The difference between a fixed-compute model and an extended-thinking model is <em>not</em> that one is smarter per step. It's that the fixed-compute model has no dial. It cannot decide "this one's hard, let me do more." Its only lever is how many tokens it generates &mdash; and a plain model generates an answer as directly as the next-token distribution points, with no built-in habit of pausing to work. An extended-thinking model is trained to pull a lever the base model doesn't have: spend a variable, problem-dependent number of internal tokens working before it commits to a visible answer.</p>
+
+    <p>Think of it through a consulting lens. A fixed-compute model is a junior who must answer every client question in exactly one sentence, on the spot, no notes. Brilliant juniors will still get easy questions right that way. But on a question that genuinely needs a spreadsheet, "one sentence, no notes" caps how good the answer can be &mdash; not because the junior is dim, but because the <em>format</em> forbids the work. Extended thinking removes the cap. It lets the model take out a notepad whose length scales with how hard the problem looks.</p>
+
+    <h2>Reasoning tokens: a private scratchpad with a budget</h2>
+
+    <p>The mechanism is less exotic than it sounds. Systems like OpenAI's o1 and o3, and Claude's extended thinking mode, give the model a dedicated stretch of tokens &mdash; call them reasoning tokens or thinking tokens &mdash; that it generates <em>before</em> the answer the user sees. These tokens are real generated text: the model plans, tries an approach, notices a dead end, backtracks, checks its arithmetic, and only then writes the final response. In some products that scratchpad is hidden from the user; in others it's shown. Either way, the key change is architectural: the model has a sanctioned place to do work, and the amount of work is not fixed in advance.</p>
+
+    <p>Two things make this more than "chain-of-thought with a new name." First, the behavior is <em>trained in</em>, not prompted in. OpenAI describes o1 as having learned to reason through large-scale reinforcement learning &mdash; "Our large-scale reinforcement learning algorithm teaches the model how to think productively using its chain of thought" (OpenAI, 2024). The model isn't waiting for you to type "think step by step." It has internalized the habit of producing a long, self-correcting reasoning trace, and it has been rewarded specifically for traces that lead to correct answers. You'll recognize the strategies in that trace from the previous page &mdash; the branching, evaluating, and backtracking of <a href="g16-advanced-reasoning.html">G16 &mdash; Advanced Reasoning</a> &mdash; but here they're baked into the model's default behavior rather than coaxed out by clever prompting.</p>
+
+    <p>Second, and this is the headline, the length of the scratchpad <em>varies with the problem</em>. The model spends a few tokens on something easy and thousands on something hard. That variable spend is the behavior we care about, because it is the behavior a guesser cannot exhibit.</p>
+
+    <h2>Why variable compute is the real intelligence signal</h2>
+
+    <p>Now the second verification question, which is the philosophical core of the page. Why does it matter &mdash; for the claim that these systems are genuinely intelligent &mdash; that they spend different amounts of compute on different problems?</p>
+
+    <p>Because adaptive effort allocation is one of the cleanest operational definitions of intelligence we have. A thermostat is not intelligent: it does the same thing every cycle. A lookup table is not intelligent: every query costs the same. What we recognize as intelligent behavior, in humans and animals alike, is the capacity to <em>notice that a problem is hard and respond by working harder on it</em>. A chess master glances at a forced mate and plays instantly, then sinks twenty minutes into a quiet, decisive middlegame position. A doctor barely thinks about a textbook cold and orders a full workup for an ambiguous presentation. The hallmark isn't raw speed or raw power &mdash; it's the <em>match</em> between effort and difficulty.</p>
+
+    <p>This reframes the entire "it just predicts the next word" argument, and it's worth being exact about why. A strict next-word guesser uses identical effort on every word. That is its defining property. The moment a system instead measures out its effort &mdash; cheap on the easy, expensive on the hard &mdash; it has stopped behaving like a guesser in the one way that matters most. It is doing something a flat statistical autocomplete provably cannot do. You don't have to settle the deep philosophical question of "understanding" to grant this; you only have to look at the compute graph. The effort is variable, it tracks difficulty, and that adaptivity is the fingerprint of a reasoning process rather than a reflex.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why is "variable compute per problem" a stronger argument against the next-word-guesser frame than "the model gets hard problems right"?</div>
+      <button class="quiz-option" data-letter="A">Because getting hard problems right could be memorization, but spending more compute proves the model has a larger training set.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because a next-word guesser spends identical effort on every token by definition &mdash; so a system that demonstrably scales its effort to match difficulty is doing something the guesser model cannot do, regardless of whether any single answer is correct.</button>
+      <button class="quiz-option" data-letter="C">Because compute is more expensive than accuracy, so it matters more to the people running the model.</button>
+      <div class="quiz-feedback" data-correct="Exactly. Correctness can be explained away as lucky retrieval. Adaptive effort cannot &mdash; it's a behavioral property the flat-autocomplete model is structurally incapable of, so it directly contradicts the guesser frame." data-incorrect="Look again at what defines a 'guesser': uniform effort on every token. The decisive move isn't that the answer is right &mdash; it's that the effort itself bends to match difficulty, which a flat predictor cannot do."></div>
+    </div>
+
+    <h2>System 1 and System 2, on silicon</h2>
+
+    <p>The third verification question asks how all this connects to the System 1 / System 2 picture of human cognition, and the mapping is almost too neat. The framework comes from psychologist Daniel Kahneman's <em>Thinking, Fast and Slow</em> (2011), building on work by Stanovich and West. It splits human thought into two modes:</p>
+
+    <ul>
+      <li><strong>System 1</strong> &mdash; fast, automatic, effortless, intuitive. It answers "2+2" and reads the emotion on a face. It runs constantly and cheaply, and it's usually right about easy things.</li>
+      <li><strong>System 2</strong> &mdash; slow, deliberate, effortful, sequential. It's what you engage to multiply 17&times;24 in your head, plan a route, or check a suspicious argument step by step. It's expensive, so we deploy it sparingly &mdash; only when System 1's quick answer isn't trustworthy.</li>
+    </ul>
+
+    <p>Map that onto language models and the correspondence writes itself. A standard forward pass &mdash; one token, fixed compute, immediate output &mdash; is the machine's System 1. It's the fast, intuitive jump to an answer, and for easy questions it's all you need. Extended thinking is the machine's System 2: a deliberate, sequential, expensive process the model invokes when the fast answer isn't good enough. The reasoning tokens are literally the model "slowing down to think," and the variable budget is the model deciding how much slow thinking the problem warrants.</p>
+
+    <p>I want to be careful here, because analogies between brains and models get oversold. The claim is not that o1 has a little Kahneman inside it, or that reasoning tokens are made of the same stuff as human deliberation. The honest claim is <em>functional</em>: extended thinking reproduces the System 1 / System 2 <em>structure</em> &mdash; a cheap fast path plus an expensive slow path, with the slow path engaged adaptively. Researchers debate how deep the resemblance runs, and whether "deliberation" is the right word for what a model does in its scratchpad. But the architectural parallel is real and not a marketing flourish: dual-process cognition is, at minimum, a useful and well-evidenced lens for what these systems do. (This is the same functional-equivalence logic you'll meet again in <a href="../module-5/g25-autonomy-spectrum.html">G25 &mdash; The Autonomy Spectrum</a> and the philosophy module &mdash; judge the behavior, stay agnostic about the substrate.)</p>
+
+    <h2>The payoff: test-time compute as a new scaling axis</h2>
+
+    <p>There's a practical reason this isn't just a philosophical curiosity. For years, the way to make a model better was to make it bigger or train it on more data &mdash; the scaling laws you met in <a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>. Extended thinking opened a second axis: hold the trained weights fixed, and just let the model <em>think longer at inference time</em>. OpenAI reported that o1's accuracy on hard reasoning benchmarks climbs smoothly the more reasoning tokens you let it spend &mdash; "o1's performance consistently improves with more reinforcement learning (train-time compute) and with more time spent thinking (test-time compute)" (OpenAI, 2024). On a qualifying exam for the International Mathematical Olympiad, the o1 family scored dramatically higher than the previous generation, and the gains were driven substantially by this think-longer-on-demand capability rather than by a bigger base model.</p>
+
+    <p>Read that sentence slowly, because it contains the argument in miniature. <em>The same weights produce better answers purely by spending more compute on harder problems.</em> If the model were a static lookup of memorized continuations, more thinking time would do nothing &mdash; you can't look up an answer harder. The fact that extra compute buys extra correctness, and buys more of it on harder problems, is direct evidence that real computation is happening in those tokens. The thinking is doing work.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Fixed compute per token</div>
+        <p>One forward pass per token, same arithmetic every time. "2+2" and a hard proof cost the model identical work; its only output is whatever the next-token distribution points at. This is the machine's <strong>System 1</strong> &mdash; fast, cheap, automatic, with no dial to turn. Brilliant on easy questions, structurally capped on ones that need real working-out. This is the literal "next-word guesser": uniform effort, every token, no exceptions.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Variable thinking budget</div>
+        <p>The model first generates a problem-dependent stretch of reasoning tokens &mdash; a few for "2+2," thousands for the proof &mdash; then commits to an answer. This is the machine's <strong>System 2</strong> &mdash; slow, deliberate, expensive, engaged in proportion to difficulty. Accuracy on hard problems rises as the budget rises (OpenAI, 2024). Effort now tracks difficulty, which is the one thing a flat guesser can never do.</p>
+      </div>
+    </div>
+
+    <h2>The hard part nobody fully solved: knowing how hard the problem is</h2>
+
+    <p>It would be dishonest to present variable compute as a clean win. It buys a new, genuinely hard problem: the model has to <em>estimate difficulty before it knows the answer</em>, and that estimate is fallible. Anyone who has used these systems has watched both failure modes. The model burns three hundred reasoning tokens second-guessing itself on a trivial question &mdash; overthinking &mdash; and the cost and latency are real. Or it dashes off a confident wrong answer to something genuinely subtle that deserved more deliberation &mdash; underthinking. Both are difficulty-estimation errors, and current research treats them as open problems rather than settled engineering.</p>
+
+    <p>Why is calibrating effort so hard? Because a truly reliable difficulty estimator would need something close to the answer itself. The cleanest signal of "this is hard" is "I tried and it didn't immediately resolve" &mdash; which means you've already paid for some of the thinking before you know whether you needed it. Difficulty isn't stamped on the surface of a problem; a question can <em>look</em> short and be deep ("is this number prime?") or look long and be shallow. So a good estimator has to either predict its own future uncertainty (a hard meta-cognitive skill, and one humans are famously bad at &mdash; we routinely under-budget for tasks) or run a cheap probe, gauge its confidence, and escalate to more thinking only when confidence is low. In practice today, the budget is often a coarse setting &mdash; "think more" or "think less," sometimes a literal slider &mdash; which works but is blunt. The frontier question is whether models can learn to set their own budgets well, problem by problem, without either wasting compute or shortchanging the genuinely hard cases.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A strict next-word guesser spends identical compute on every token, by definition. Extended thinking breaks that symmetry: the model generates a problem-dependent budget of reasoning tokens &mdash; cheap on the easy, expensive on the hard &mdash; and its accuracy on difficult problems rises with the compute it spends. Matching effort to difficulty is the operational signature of intelligence, and it's the one behavior a flat statistical autocomplete is structurally incapable of producing. The "fast intuition vs. slow deliberation" split of human cognition (System 1 / System 2) now has a working functional analogue in silicon.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>With variable compute per problem, what stops a model over-thinking easy questions and under-thinking hard ones &mdash; and what would a reliable difficulty estimator actually require?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the o1 results and the train-time/test-time compute scaling claims are from OpenAI (2024), "Learning to Reason with LLMs" (the o1 announcement / system card); the trained-in reasoning and reinforcement-learning description are from the same source. Claude's extended thinking mode is documented in Anthropic's extended-thinking documentation (2025). The System 1 / System 2 framework is from Kahneman (2011), <em>Thinking, Fast and Slow</em>, building on Stanovich &amp; West.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

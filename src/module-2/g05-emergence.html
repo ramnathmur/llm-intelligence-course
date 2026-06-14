@@ -58,10 +58,111 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Walk up to a single ant and ask it to design a climate-control system. It cannot. It has no blueprint, no architect, no concept of "temperature gradient." It follows a handful of dumb local rules: pick up a piece of dirt here, drop it where the pheromone smell is strongest, move away from too much heat. And yet a mature colony of those same ants builds a mound with ventilation shafts that hold the interior within a degree or two of optimal, day and night, summer and winter. Nothing in any individual ant predicts the structure. The structure appears only when you have enough ants following enough rules at enough scale. That is emergence: a property of the whole that you would never have guessed from studying the parts.</p>
+
+    <p>This page makes the case that large language models do something uncomfortably similar. The individual mechanism &mdash; predict the next token, nudge the weights, repeat &mdash; is the dumb local rule. Nobody wrote a function called <code>do_arithmetic()</code> or <code>follow_instructions()</code>. Yet past a certain size, models start doing exactly those things, abilities that smaller models trained on the same data in the same way simply do not have. This is the empirical heart of the answer to "where did the intelligence come from?" The honest version of the answer is: it was not programmed in. It emerged from scale. And &mdash; because this course does not oversell &mdash; we will also take seriously the strongest objection to that story, which is that some of the "emergence" we see is an illusion created by how we measure.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: using the scaling curve from G4, distinguish a capability that improves smoothly along the curve from one that jumps discontinuously &mdash; and why Schaeffer says the jump may be a measurement artifact.</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>In <a href="g04-scaling-laws.html">G4 &mdash; Neural Scaling Laws</a> you saw that test loss falls along a smooth, predictable curve as you add parameters, data, and compute. A <em>smoothly scaling</em> capability tracks that curve: a bigger model is a little better than a smaller one, and a little better again, in a gentle upward slope. A <em>discontinuous</em> (emergent) capability looks different on a plot &mdash; flat near zero for every small model, then a sudden hockey-stick jump to high performance once you cross some size threshold. Schaeffer's critique is that the underlying ability may actually be improving smoothly the whole time, and the cliff appears only because we scored it with a harsh all-or-nothing metric (like exact-match accuracy) that stays pinned at zero until the model is <em>almost completely</em> right. Change the ruler and the cliff can flatten into a ramp. Hold that thought &mdash; it is the spine of the second half of this page.</p>
+      </div>
     </div>
+
+    <h2>What "emergent" actually means here</h2>
+
+    <p>The word "emergent" gets thrown around loosely, so pin it down. In the sense that matters for this page, an emergent ability is one that is <strong>not present in smaller models but is present in larger ones</strong> &mdash; and, crucially, whose appearance you could not have predicted by extrapolating the performance of the small models (Wei et al., 2022). That second clause is the interesting part. If you plotted accuracy on some task against model size and saw it climbing steadily, you would just say "bigger is better" and move on. Emergence is the surprise: the small and medium models all sit at random-chance performance, flat as a parking lot, and then a model a few times larger suddenly performs the task well. The capability seems to switch on rather than fade in.</p>
+
+    <p>This is the difference your first verification question asks about, so let me make it crisp. A capability that <em>scales smoothly</em> gets gradually, boringly better with size &mdash; think of grammatical fluency or general world knowledge, where each step up in scale buys a measurable improvement. A capability that <em>emerges discontinuously</em> shows near-zero performance across a whole range of smaller models, then a sharp jump to competence past a threshold. The first is a dimmer switch. The second looks like a light switch. The whole scientific and philosophical argument of this page is about whether that light switch is real or whether we built it ourselves with a badly chosen meter.</p>
+
+    <h2>The phase-transition picture</h2>
+
+    <p>The intuition the original researchers reached for is a phase transition, and it is worth taking seriously because you already met it in <a href="g04-scaling-laws.html">G4</a>. Water cooling from 20&deg;C to 1&deg;C does not become "more solid" in proportion to how cold it is. It stays liquid, liquid, liquid &mdash; and then at 0&deg;C something qualitatively new happens: it becomes ice, a substance with structure and rigidity that liquid water never hinted at. The change in the input (temperature) was smooth and continuous. The change in the output (the state of matter) was abrupt and categorical. Nobody "programmed" ice into water; ice is what enough water molecules do when you cross a threshold.</p>
+
+    <p>Applied to language models, the claim is that some capabilities behave like ice. As you pour in more parameters and more compute, multi-step reasoning is liquid &mdash; absent &mdash; across a range of model sizes, and then past some scale it crystallizes into a working ability. This is a genuinely different kind of explanation from "we added a reasoning module." It says the reasoning was latent in the prediction task all along (recall from <a href="../module-1/g12-training-objective.html">G12</a> that predicting text <em>demands</em> reasoning), and scale is simply the temperature that lets it set.</p>
+
+    <h2>Which capabilities actually emerged</h2>
+
+    <p>Your second verification question asks for two concrete examples, and the Wei et al. (2022) paper documented several. The cleanest ones to name are <strong>multi-step arithmetic</strong> and <strong>instruction following</strong>, with a third &mdash; <strong>chain-of-thought reasoning</strong> &mdash; that is the most consequential of all.</p>
+
+    <ul>
+      <li><strong>Multi-step arithmetic.</strong> Small models score essentially zero on multi-digit addition and multiplication. They produce plausible-looking digits that are wrong. Past a scale threshold, accuracy jumps. The model goes from "cannot add" to "can add" without anyone teaching it a carry algorithm &mdash; the procedure precipitates out of prediction pressure, exactly as the arithmetic walkthrough in <a href="../module-1/g12-training-objective.html">G12</a> argued it must.</li>
+      <li><strong>Instruction following.</strong> A small base model, given "Translate the following sentence into French," will often continue the prompt rather than obey it &mdash; it treats your instruction as more text to predict, not a command to execute. Larger models begin to actually <em>do what they are told</em>, generalizing the abstract pattern of "instruction &rarr; compliant response" from the data. This is the capability that makes a model usable as an assistant at all.</li>
+      <li><strong>Chain-of-thought reasoning.</strong> This is the headline result. Below a scale threshold, asking a model to "think step by step" does not help &mdash; it may even hurt, because a small model produces a rambling wrong chain. Above the threshold, that same prompting unlocks a large jump in performance on hard reasoning problems. The ability to <em>benefit from reasoning out loud</em> is itself emergent. You will see exactly how that works mechanistically in <a href="../module-3/g09-chain-of-thought.html">G9 &mdash; Chain-of-Thought as Computation</a>.</li>
+    </ul>
+
+    <p>Notice what these have in common. None of them is "knows more facts," which would be boring smooth scaling. Each is a <em>procedure</em> or a <em>behavior</em> &mdash; a way of operating on information, not a quantity of stored information. That is why emergence is so provocative: it is not the model accumulating more; it is the model starting to <em>do</em> something it could not do before.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Small Model (below threshold)</div>
+        <p><strong>Prompt:</strong> "I have 17 marbles. I give away 5, then buy 3 times as many as I have left. How many marbles do I have? Think step by step."<br><br><strong>Output:</strong> "You have 17 marbles. The answer is 51 marbles." &mdash; It mimics the <em>shape</em> of an answer and the phrase "step by step," but performs no actual steps. The arithmetic is wrong, and no amount of "think step by step" rescues it. Liquid water: no structure has set.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Large Model (above threshold)</div>
+        <p><strong>Same prompt.</strong><br><br><strong>Output:</strong> "Start with 17. Give away 5, leaving 12. Buy 3 times 12, which is 36. Add to the 12 you kept: 12 + 36 = 48." &mdash; The model now <em>uses</em> the intermediate steps to carry information forward and reach the correct answer. Same architecture, same training recipe, more scale. Ice: a new structure has crystallized.</p>
+      </div>
+    </div>
+
+    <p>The before/after here is the ant colony and the ice cube wearing the same outfit. The local rule never changed &mdash; both models are just predicting the next token. What changed is that crossing a scale threshold let a multi-step procedure become the lowest-error thing to do, and so it appeared. The skeptic's framing &mdash; "it just guesses the next word" &mdash; cannot explain why the <em>same</em> guessing machine, made larger, abruptly acquires a procedure it visibly lacked before.</p>
+
+    <h2>Why this is the knockout punch in the "guesser" debate</h2>
+
+    <p>Your third verification question asks why emergence matters to the next-word-guesser argument, and the answer is the cleanest rhetorical win in this whole module. The skeptic's deepest assumption is that nothing genuinely intelligent can be in the model because nobody put it there &mdash; it is "just" statistics, just autocomplete, just what the engineers built. Emergence detonates that assumption from the inside. The engineers did not build chain-of-thought reasoning. They could not have, because it was not in the smaller models they built with the identical method. It showed up on its own, as a consequence of scale, the way the colony's ventilation shafts show up without any ant intending them.</p>
+
+    <p>So the killer line you can now deliver is: <em>"Nobody programmed it to reason. The ability emerged at scale, the way ice forms when water cools past a threshold."</em> This reframes the entire debate. The question is no longer "did the engineers sneak in intelligence?" &mdash; they demonstrably did not. The question becomes "why does intelligence keep falling out of next-token prediction once you make the system big enough?" That is a far more interesting and far more unsettling question, and it is the one the skeptic has no easy answer to.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A colleague says: "Emergence is overblown &mdash; the engineers obviously designed these abilities in; they just won't admit it." What is the strongest factual rebuttal?</div>
+      <button class="quiz-option" data-letter="A">Emergence is proven beyond doubt, so the colleague is simply wrong about the science.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The identical training method on smaller models produces none of these abilities &mdash; so whatever the engineers "designed," it cannot be the source of capabilities that only appear after scaling up.</button>
+      <button class="quiz-option" data-letter="C">The abilities come from a separate reasoning module added after pre-training.</button>
+      <div class="quiz-feedback" data-correct="Right. The controlled comparison is the whole argument: same architecture, same data, same recipe, different size. If a capability is absent in the small model and present in the large one, the recipe is not where it came from &mdash; scale is. That rules out 'the engineers built it in.'" data-incorrect="Not quite. Option A overclaims (emergence is contested &mdash; see the Schaeffer critique below), and C invents a module that does not exist. The real rebuttal is the controlled comparison: same method, different scale, and the small model simply cannot do these things."></div>
+    </div>
+
+    <h2>The mirage: Schaeffer's critique</h2>
+
+    <p>Now the honest complication, which your fourth verification question demands and which a serious treatment cannot skip. In 2023, Schaeffer and colleagues published a pointed challenge titled "Are Emergent Abilities of Large Language Models a Mirage?" Their argument is not that large models lack these capabilities &mdash; they clearly have them. The argument is about the <em>shape</em> of the story: whether the abilities truly appear as sudden, unpredictable jumps, or whether the jumps are an artifact of how we measure.</p>
+
+    <p>Here is the mechanism, and it is genuinely clever. Suppose you score multi-step arithmetic with <strong>exact-match accuracy</strong>: the model gets a point only if every digit of a multi-digit answer is correct, and zero otherwise. Now imagine the model's <em>underlying</em> competence &mdash; say, its probability of getting each individual digit right &mdash; is actually improving smoothly with scale, exactly along a curve like the ones in <a href="g04-scaling-laws.html">G4</a>. With a harsh all-or-nothing metric, smooth underlying improvement still produces a sudden visible jump. Why? Because to score any points at all on a five-digit answer, the model has to clear a high bar on every digit simultaneously. For a long stretch of scaling, it is improving but still flunking the all-or-nothing test, so it reads as zero. Then it crosses the point where it usually nails every digit, and the score leaps. The cliff in the <em>chart</em> is real; the cliff in the <em>underlying ability</em> may not be. Schaeffer's group showed that swapping exact-match for a smoother, partial-credit metric (like per-token accuracy or edit distance) makes many of the famous "emergence" curves straighten out into gentle ramps.</p>
+
+    <p>This is the measurement-artifact debate, and you should hold it with both hands. It does not say the abilities are fake. It says the <em>discontinuity</em> &mdash; the dramatic, unpredictable phase-transition framing &mdash; may be partly manufactured by metric choice rather than discovered in the model. The ant colony still builds the mound; the question is whether the mound went up brick by brick or all at once.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The underlying ability improves smoothly</h4>
+        <p>As scale increases, the model's per-digit probability of being correct creeps up along a smooth curve &mdash; 70%, then 85%, then 95%, then 99% per digit. Nothing discontinuous is happening inside.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>A harsh metric hides that improvement</h4>
+        <p>Exact-match on a 5-digit answer requires every digit right at once. At 85% per digit, the chance of a fully correct answer is roughly 0.85<sup>5</sup> &asymp; 44% &mdash; but at 70% per digit it is only about 17%, and small models sit far lower. For a long stretch the score looks like near-zero noise.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>The cliff appears in the chart</h4>
+        <p>Once per-digit accuracy gets high enough, the compounded all-or-nothing score rockets from "basically zero" to "basically solved" over a narrow range of scale. Plotted, this looks exactly like a phase transition &mdash; a flat line then a sudden jump.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Change the ruler, flatten the cliff</h4>
+        <p>Re-score the same model outputs with partial credit &mdash; per-digit accuracy or edit distance &mdash; and the curve straightens into a smooth ramp. Same models, same outputs, different metric, no cliff. That is the core of the mirage claim (Schaeffer et al., 2023).</p>
+      </div>
+    </div>
+
+    <p>How does this refine the original claim rather than refute it? Carefully. The most defensible reading, which most of the field now holds, is a synthesis: the <em>capabilities</em> are real, but the framing of emergence as universally sharp, magical, and unpredictable was overstated. Many curves are smoother than the early excitement suggested. At the same time, Schaeffer's critique does not erase every case &mdash; researchers continue to debate whether some abilities remain genuinely discontinuous even under generous metrics, and whether "smooth underlying, sharp observed" is itself a meaningful form of emergence, since what we actually <em>care about</em> is the observable behavior. The evidence suggests humility on both sides: scale clearly unlocks new behaviors, but how abruptly, and how predictably, depends heavily on what you choose to measure.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Emergence is the empirical proof that intelligence in LLMs was not programmed &mdash; capabilities like multi-step arithmetic, instruction following, and chain-of-thought reasoning are absent in smaller models trained the identical way and appear only past a scale threshold. That demolishes "the engineers built it in." But Schaeffer's critique sharpens the claim: much of the apparent <em>suddenness</em> is a measurement artifact of harsh all-or-nothing metrics, not necessarily a literal phase transition inside the model. The mature position: the abilities are real and unprogrammed; the drama of the discontinuity is partly in the ruler, not just the model.</p>
+    </div>
+
+    <p>One forward-looking consequence is worth flagging before you leave this page. If capabilities can appear unpredictably at scale &mdash; if you genuinely cannot extrapolate from a small model whether a large one will suddenly be able to do something new &mdash; then you face a hard problem the moment you try to make these systems safe. You cannot pre-align a capability you did not know was coming. That is precisely why the unpredictability documented here makes the work in <a href="../module-4/g20-alignment.html">G20 &mdash; The Alignment Problem</a> so difficult: safety has to anticipate abilities that, by the very definition of emergence, were not anticipatable. And note how the Schaeffer debate cuts directly into that &mdash; which is exactly what the Think Further question below asks you to weigh.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If Schaeffer is right that many "emergent" jumps are metric artifacts, what does that imply for safety arguments that rely on sudden, unwarned capabilities?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the emergence taxonomy and the arithmetic / instruction-following / chain-of-thought examples are from Wei et al. (2022), "Emergent Abilities of Large Language Models" (arXiv:2206.07682); the metric-artifact critique is from Schaeffer, Miranda &amp; Koyejo (2023), "Are Emergent Abilities of Large Language Models a Mirage?" (NeurIPS). The ant-colony stigmergy analogy draws on classic work in collective behavior; the water-to-ice phase-transition framing connects back to G4 &mdash; Neural Scaling Laws.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

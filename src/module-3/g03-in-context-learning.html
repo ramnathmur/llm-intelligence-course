@@ -59,10 +59,107 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>You hire a senior consultant on a Friday. Monday morning you hand her three of your firm's old client memos &mdash; not a style guide, not a training course, just three finished documents &mdash; and say "we need a fourth, for the Henderson account, by noon." She reads the three. She notices the house format: the one-line situation summary up top, the three-bullet recommendation, the risk caveat in italics at the end. By 11:45 she hands you a Henderson memo that looks like it belongs in the same folder. Nobody retrained her. Nobody rewired her brain over the weekend. She inferred the pattern from the examples and applied it on the spot.</p>
+
+    <p>That is in-context learning, and it is one of the strangest, most consequential things a large language model does. You put a few examples of a task into the prompt &mdash; a task the model may never have seen in exactly that form &mdash; and the model figures out the pattern and continues it correctly. No gradient descent. No weight changes. No new training run. The "learning" happens entirely inside a single forward pass, using only what is sitting in the prompt right now. The skeptic who says "it just retrieves what it memorized" has a real problem here, because there is nothing to retrieve. The model is reasoning from the examples in front of it.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: which mechanism from G2 lets a later token "see" and copy the structure of earlier in-prompt examples? Name it before revealing.</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Attention &mdash; specifically the pattern researchers call an <strong>induction head</strong>. As you saw in <a href="g02-attention.html">G2 &mdash; Transformer Attention</a>, attention lets any token route information from any earlier token based on relevance, not just proximity. An induction head is a learned attention circuit that does something very specific: it looks back for a place where the current pattern appeared before, then copies what came next. If the prompt already showed "apple &rarr; fruit" and now says "apple &rarr;", the induction head finds the earlier "apple", looks at the token that followed it, and predicts "fruit". That copy-the-continuation move, generalized, is the mechanical backbone of in-context learning. Hold onto it &mdash; we come back to it below.</p>
+      </div>
     </div>
+
+    <h2>What "learning without learning" actually means</h2>
+
+    <p>The word "learning" is doing two completely different jobs in machine learning, and conflating them is the source of most confusion about ICL. Pull them apart and the whole thing snaps into focus.</p>
+
+    <p>The first kind of learning is <strong>training</strong>. This is the slow, expensive process from earlier modules: the model sees billions of examples, computes how wrong it was, and adjusts its weights a hair at a time. The result is baked into the model permanently. As you saw in <a href="../module-1/g01-weights.html">G1 &mdash; What Weights Actually Encode</a>, this is where the model's knowledge physically lives &mdash; in the numbers that make up the network. Training is how the consultant got her education: years of cases, slowly shaping her judgment.</p>
+
+    <p>The second kind is <strong>in-context learning</strong>, and it changes nothing permanent at all. The weights are frozen. After the conversation ends, the model remembers nothing &mdash; the next user gets the exact same model, untouched. What changed was not the model but the model's <em>input</em>. The examples in the prompt steered the frozen network toward a particular behavior for the duration of that one response. It is the difference between the consultant's education (training) and the consultant reading your three memos this morning (in-context learning). One reshaped who she is; the other just told her what you need right now.</p>
+
+    <p>This distinction is the cleanest answer to the second verification question &mdash; how ICL differs from fine-tuning. Fine-tuning is real training: you take a base model and run more gradient updates on it using a curated dataset, and you walk away with a new set of weights. It is permanent, it costs compute and engineering, and it changes the model for everyone who uses that fine-tuned copy. In-context learning costs nothing but prompt space, changes no weights, and applies only to the single request that contains the examples. Fine-tuning is sending the consultant back to school for a semester on tax law. In-context learning is dropping three tax memos on her desk before a meeting. When you need the model to behave differently across millions of future calls, you fine-tune. When you need it to follow a pattern for this one task, you show it examples in the prompt. The table below makes the contrast concrete.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Fine-Tuning</div>
+        <p>Runs gradient updates on a curated dataset. <strong>Changes the weights permanently.</strong> Costs compute and engineering time. Affects every future call to that model copy. Use it when you need durable new behavior at scale &mdash; the consultant goes back to school.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">In-Context Learning</div>
+        <p>Puts examples in the prompt. <strong>Changes no weights at all.</strong> Costs only context-window space. Affects only the single request that contains the examples. Use it when you need a pattern followed right now &mdash; the consultant reads three memos before the meeting.</p>
+      </div>
+    </div>
+
+    <h2>Watch it happen: a task the model has never seen</h2>
+
+    <p>The first verification question is the heart of this page: why can a model solve a task format it has never seen, given only three examples? The cleanest way to answer is to invent a task that cannot possibly be in any training corpus, show the model three examples, and watch it produce the fourth. Let's define a deliberately made-up format &mdash; call it a "glorp" &mdash; and walk the model through it.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Example one establishes a possible rule</h4>
+        <p>We feed the model: <code>cat &rarr; tac-3</code>. There is no such operation anywhere on the internet; we just made it up. From one example the model can't pin down the rule &mdash; maybe it's reverse-the-word plus the length? Reverse plus letter count? It holds several hypotheses open at once.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Example two narrows the hypotheses</h4>
+        <p>Next: <code>bird &rarr; drib-4</code>. Now the pattern tightens. "bird" reversed is "drib", and 4 is the number of letters. The reverse-plus-length hypothesis survives; the others mostly die. The model is doing hypothesis elimination inside the prompt, exactly the way the consultant ruled out "maybe they always use bullet points" after seeing a memo that used a numbered list.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Example three confirms the rule</h4>
+        <p>Third: <code>hello &rarr; olleh-5</code>. "hello" reversed is "olleh", length 5. Three for three. The rule is now nailed down: reverse the word, append a hyphen, append the letter count. Notice no human ever stated this rule. The model induced it purely from the examples sitting in its context.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>The model produces the fourth with no weight update</h4>
+        <p>We give it <code>table &rarr;</code> and the model returns <code>elbat-5</code>. "table" reversed is "elbat", length 5. Correct &mdash; on a transformation that did not exist until two minutes ago. Crucially, every weight in the network is identical to what it was before we typed the first example. Nothing was trained. The pattern was inferred and applied in a single forward pass.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>How the machinery pulls it off</h4>
+        <p>This is the induction head from the callback, doing its job. Attention heads scan back through the prompt, latch onto the structure of the earlier "word &rarr; transformed" pairs, and route that structure forward to shape the prediction for the new word. The model isn't retrieving "elbat-5" from memory &mdash; it cannot have, because the task is invented. It is composing the answer by applying a pattern it extracted seconds ago from three examples. That is reasoning at runtime, not lookup.</p>
+      </div>
+    </div>
+
+    <p>Put plainly: the model can solve a never-seen task format because the examples in the prompt supply the rule, and the model's attention machinery is general enough to extract that rule and apply it on the fly. The weights don't encode the glorp task &mdash; they encode the far more powerful ability to <em>infer tasks from examples</em>. Brown and colleagues, in the GPT-3 paper that put this phenomenon on the map (Brown et al., 2020), called this "few-shot learning": give the model a handful of demonstrations in the prompt and it performs the task, often nearly as well as a model that was explicitly fine-tuned for it. Their central finding was that this ability gets dramatically stronger as models get larger &mdash; small models barely do it, big ones do it well. ICL is something that <em>emerges</em> with scale.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Your colleague says: "ICL isn't real reasoning &mdash; the model just retrieves a memorized answer that matches the examples." What is the strongest single counter?</div>
+      <button class="quiz-option" data-letter="A">The model was trained on so much data that it has essentially seen every task already.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">You can invent a task that provably never existed before (like the "glorp" rule), give three examples, and the model still produces a correct fourth &mdash; there is nothing to retrieve.</button>
+      <button class="quiz-option" data-letter="C">The model produces its answer very quickly, which proves it is thinking rather than searching.</button>
+      <div class="quiz-feedback" data-correct="Right. The retrieval story collapses the moment you use a task that cannot be in any corpus. If there's no stored answer to fetch and the model still gets it right, the only explanation is that it inferred and applied the pattern at runtime. Speed (option C) proves nothing, and option A is exactly the claim the made-up task refutes." data-incorrect="Think about what 'retrieval' requires: something stored to retrieve. The decisive move is to use a task that cannot possibly be in training data &mdash; an invented transformation &mdash; and show the model still gets the fourth example right. That rules out memorization entirely."></div>
+    </div>
+
+    <h2>Why this is reasoning, not a clever lookup</h2>
+
+    <p>It is worth slowing down on the distinction, because it is the whole intellectual payload of the page. A lookup table maps fixed inputs to fixed outputs. To handle a new input, you must first add a row for it. The model does the opposite: it handles inputs it has no row for, by inferring the function that connects the example inputs to the example outputs and then evaluating that function on the new input. Inferring a function from examples and applying it to novel cases is, in any reasonable sense of the word, reasoning. We call it that without hesitation when a human does it from three memos. The same description fits the model.</p>
+
+    <p>There's a subtle and important research wrinkle here that keeps the claim honest. What exactly is the model "learning" from the examples? One view, supported by a line of work on small transformers, is that the examples let the model implement something like a tiny learning algorithm internally &mdash; effectively fitting a quick rule to the demonstrations, almost as if it were running a miniature training step in its head. Another view is more deflationary: the examples mostly tell the model <em>which</em> of its already-trained abilities to switch on &mdash; less "learning a new skill from three examples" and more "the examples locate a skill the model already has." The evidence suggests both effects are real and the balance depends on the task. The careful statement is this: the model is genuinely computing over the examples, not retrieving a stored answer &mdash; but how much brand-new capability is being constructed versus selected is still an open question, and we'll come back to exactly that tension in the Think Further box.</p>
+
+    <h2>The ceiling: when more examples stop helping</h2>
+
+    <p>If ICL were unlimited runtime learning, then more examples should always help &mdash; the way more relevant memos should make the consultant's draft better. But that is not what happens. Add a few examples and quality jumps. Add a few more and it keeps improving. Keep going and the curve flattens, and past a point performance can actually <em>degrade</em>. This ceiling is real, and it tells you something honest about how much "learning" is happening in the prompt.</p>
+
+    <p>Several forces cap it. The most basic is the <strong>context window</strong> &mdash; the model can only attend to a finite span of tokens at once, so you cannot pour in unlimited examples; eventually the earliest ones fall off the edge or get drowned out. Within that window, the model also weights examples unevenly: research has repeatedly found position effects, where demonstrations near the start and end of the prompt influence the answer more than those buried in the middle. And there is a quieter ceiling: the consultant who has fully grasped your memo format after three examples gains nothing from a fourth, fifth, or twentieth. Once the pattern is unambiguous, additional demonstrations are redundant at best and, if they're noisy or slightly inconsistent, actively confusing. The model is not accumulating skill the way training does; it is locking onto a pattern, and once locked, more data has diminishing &mdash; sometimes negative &mdash; returns.</p>
+
+    <p>That ceiling is exactly why ICL is "learning" in a real but bounded sense. Genuine training compounds: every additional example nudges the weights and the knowledge accumulates permanently. In-context learning doesn't compound &mdash; it adapts the frozen model's behavior for one task, and the adaptation tops out when the pattern is clear. It is potent and it is real reasoning, but it is reasoning <em>within</em> the abilities the weights already hold, not the construction of durable new ones. Recognizing the ceiling is what keeps the intelligence claim defensible rather than starry-eyed.</p>
+
+    <h2>The payoff: this is how an agent picks its lens</h2>
+
+    <p>Now the part that connects straight to building agents. The third verification question asks how you'd use ICL to tell a research agent which lens to apply &mdash; "critical" versus "exploratory", say. The answer is that you don't retrain the agent for each lens. You put the criteria in its context. This is precisely the mechanism behind <a href="../module-5/g08-lens-picking.html">G8 &mdash; How the Agent Picks the Right Lens</a>: an agent "knows" which lens to use because the decision criteria sit in its prompt &mdash; in the system instructions, in a few worked examples, or in retrieved context &mdash; and its in-context reasoning applies those criteria to the task at hand.</p>
+
+    <p>Concretely, you'd write a system prompt that says what each lens means, then show one or two examples of a query being handled under each lens. When the agent meets a new query, it does the same thing the consultant did with the memos and the same thing the model did with the glorp task: it reads the examples, infers the rule (this kind of query gets the critical lens, that kind gets the exploratory one), and applies it &mdash; with no weight update, on the spot, per request. Change the examples and you change the behavior, instantly, no training run required. That flexibility is not a quirk of how agents are wired; it <em>is</em> in-context learning, applied to the choice of how to think rather than the choice of what word comes next. Every prompt you write to steer an agent's judgment is an ICL prompt.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>In-context learning separates two meanings of "learning" that are usually confused. Training reshapes the weights permanently and compounds; in-context learning leaves the weights frozen and adapts behavior for a single request using only the examples in the prompt. Because you can invent a task that provably never existed, give three examples, and still get a correct fourth, ICL cannot be memory retrieval &mdash; it is the model inferring a rule and applying it at runtime. That same mechanism is how every prompt-steered agent "decides" how to behave: the criteria live in the context, and in-context reasoning applies them.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If ICL is genuine runtime reasoning, why does quality degrade past a point as you add more examples &mdash; and what does that ceiling say about how much "learning" really happens in the prompt?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the "few-shot learning" framing and the finding that in-context learning strengthens with model scale come from Brown et al. (2020), "Language Models Are Few-Shot Learners," NeurIPS. The induction-head account of the underlying circuit is developed in Olsson et al. (2022), "In-context Learning and Induction Heads," Transformer Circuits Thread; position-bias effects in prompts are documented in work such as Liu et al. (2023), "Lost in the Middle."</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

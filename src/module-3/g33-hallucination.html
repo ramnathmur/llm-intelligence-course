@@ -59,10 +59,122 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>You have met this consultant. Sharp, fast, the kind of person who can read a deck once and brief the partner on it cold. A client throws a question across the table &mdash; "What was the gross margin on the Henderson account in Q3?" &mdash; and the consultant, who genuinely does not remember the number, does not pause, does not say "let me check." They say "around 34%, in line with the prior quarter" in the same fluent, even tone they use for the things they know for certain. The number is wrong. But nothing in their delivery flagged it as a guess, because to them it did not feel like one.</p>
+
+    <p>That is hallucination. An LLM generates a confident, fluent, completely false statement &mdash; a fake citation, a non-existent court case, a plausible-but-wrong API method &mdash; and it produces it with exactly the same smoothness it uses for the truth. This page is the honest counterweight to everything else in the course. We have spent eight pages arguing that these models are genuinely intelligent. Now we look squarely at the failure mode that a truly understanding mind would not have, and we explain <em>why</em> it happens without either excusing it or letting it collapse the whole intelligence argument. The two surveys that frame the field &mdash; Ji et al. (2023) and Huang et al. (2023) &mdash; both stress the same thing up front: the causes are multiple and actively debated. We will respect that.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in <a href="g06-compositional-generalization.html">G6</a> you saw the model combine learned sub-patterns to answer questions it never literally saw. Before reading on &mdash; what is the downside of a machine that is <em>always willing</em> to compose an answer from parts?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>The same machinery that lets the model answer a novel question by interpolating between known patterns &mdash; the compositional generalization from <a href="g06-compositional-generalization.html">G6 &mdash; Compositional Generalization</a> &mdash; has no built-in "abstain" button. When the right answer lives in the training data, interpolation lands on it. When the right answer does <em>not</em> exist in any retrievable form, the model interpolates anyway, because composing a plausible continuation is the only thing it ever does. Hallucination is not a separate broken subsystem. It is the <em>exact same</em> generative process that produces the model's best work, running in a region where there was no ground truth to anchor it.</p>
+      </div>
     </div>
+
+    <h2>What hallucination actually is &mdash; and what it is not</h2>
+
+    <p>Start with the word, because it is misleading. "Hallucination" borrowed from psychiatry suggests the model is perceiving something that isn't there. That framing leads people to imagine a glitch, a corrupted file, a bug to be patched. None of that is right. A cleaner term that researchers increasingly prefer is <strong>confabulation</strong> &mdash; the clinical word for when a person with memory damage fills a gap with a fluent, sincere, invented account and genuinely believes it. The confabulating patient is not lying. They have no access to the fact that the memory is manufactured. That is much closer to what the model does.</p>
+
+    <p>Hallucination is the generation of output that is fluent and confident but unsupported by the model's training data or by reality. It comes in two broad flavors that the surveys distinguish. <strong>Factual hallucination</strong> is content that contradicts the world: the capital of Australia stated as Sydney, a drug interaction that does not exist, a quote attributed to the wrong author. <strong>Faithfulness hallucination</strong> is content that contradicts the <em>source you gave it</em>: you paste a contract and ask for a summary, and the summary contains a clause that is not in the contract. The first is "the model is wrong about the world." The second is "the model is wrong about the document in front of it." Both feel identical to read.</p>
+
+    <h3>The crucial distinction: hallucination vs. reasoning error</h3>
+
+    <p>Here is a separation that matters enormously and that people constantly blur. A <strong>reasoning error</strong> is a mistake in a process you can inspect. The model does long division, carries the wrong digit, and arrives at 847 instead of 837. You can read the chain of thought, find the exact step where it went wrong, and point at it. The conclusion is false, but the falseness is <em>traceable</em> &mdash; it sits at the end of a visible, flawed computation.</p>
+
+    <p>A <strong>hallucination</strong> has no such trace. The model asserts that a 2019 paper by "Chen and Rodriguez" established a particular result, and there is no faulty reasoning step to point to, because there was no reasoning step at all. There was just a region of the probability distribution where "a citation shaped like this is plausible here," and the model sampled a fluent specimen from it. A reasoning error is a wrong turn on a real road. A hallucination is a confident description of a road that was never built. This is the second verification question, and the distinction is not academic: you debug them completely differently. Reasoning errors get better with more careful prompting, step-by-step decomposition, and verification loops, because there is a process to improve. Hallucinations need a different defense entirely &mdash; grounding the model in retrievable sources &mdash; because there is no internal process to fix, only an absent fact to supply.</p>
+
+    <h2>The mechanism: why a model that "knows" Paris sometimes says Lyon</h2>
+
+    <p>This is the first verification question and the technical core of the page. To answer it you have to drop the word "knows," because the scare quotes are doing heavy lifting and they hide the whole mechanism.</p>
+
+    <p>Recall from <a href="../module-1/g01-weights.html">G1 &mdash; What Weights Actually Encode</a> that the model does not store "Paris is the capital of France" as a discrete fact in a lookup table. It stores a vast, compressed, lossy distribution over how language tends to continue. When the model processes "The capital of France is," it does not retrieve a record. It computes a probability distribution over the next token: maybe 92% on <code>Paris</code>, 3% on <code>Lyon</code>, 1% on <code>Marseille</code>, and a long tail of everything else. The fact that <code>Paris</code> sits at 92% is what we loosely call "knowing." But notice what that framing reveals: the model assigns <em>nonzero probability to Lyon every single time</em>. The knowledge is not a binary stored truth. It is a peak in a distribution that always has slopes and a tail.</p>
+
+    <p>Now layer on how text is actually produced. The model does not deterministically emit the single highest-probability token &mdash; if it did, it would be repetitive and lifeless, the writing equivalent of a person who only ever says the most obvious next word. To produce varied, natural language, generation involves <strong>sampling</strong> from the distribution, often with a "temperature" setting that controls how much weight the long tail gets. Most of the time you sample the peak and get <code>Paris</code>. But sampling is stochastic by design, and occasionally &mdash; especially at higher temperature, or when the peak is less sharp than this clean example &mdash; you draw from the tail and get <code>Lyon</code>. The model did not forget. It rolled dice that were heavily but not perfectly loaded, and this time the dice came up wrong. As Ji et al. (2023) and Huang et al. (2023) both catalog, this decoding-stochasticity pathway is one of several, but it is the cleanest one to see: <em>the same sampling that makes the model fluent is the sampling that makes it occasionally false.</em></p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A probability distribution over next tokens after 'The capital of France is', showing a tall Paris bar and small Lyon and Marseille bars, with a sampling pointer occasionally landing on the small Lyon bar.">
+        <text x="360" y="28" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="bold">&quot;The capital of France is ___&quot;</text>
+        <text x="360" y="48" text-anchor="middle" fill="#8892a4" font-size="12">probability assigned to each possible next token</text>
+        <line x1="80" y1="250" x2="680" y2="250" stroke="#5a6375" stroke-width="2"/>
+        <rect x="120" y="80" width="90" height="170" fill="#00e5ff" opacity="0.85"/>
+        <text x="165" y="270" text-anchor="middle" fill="#e2e8f0" font-size="14">Paris</text>
+        <text x="165" y="73" text-anchor="middle" fill="#00e5ff" font-size="13" font-weight="bold">92%</text>
+        <rect x="270" y="220" width="90" height="30" fill="#f87171" opacity="0.85"/>
+        <text x="315" y="270" text-anchor="middle" fill="#e2e8f0" font-size="14">Lyon</text>
+        <text x="315" y="213" text-anchor="middle" fill="#f87171" font-size="13" font-weight="bold">3%</text>
+        <rect x="420" y="235" width="90" height="15" fill="#c084fc" opacity="0.85"/>
+        <text x="465" y="270" text-anchor="middle" fill="#e2e8f0" font-size="14">Marseille</text>
+        <text x="465" y="228" text-anchor="middle" fill="#c084fc" font-size="13" font-weight="bold">1%</text>
+        <rect x="570" y="243" width="90" height="7" fill="#8892a4" opacity="0.7"/>
+        <text x="615" y="270" text-anchor="middle" fill="#8892a4" font-size="13">long tail&hellip;</text>
+        <text x="315" y="160" text-anchor="middle" fill="#fbbf24" font-size="13">&#9650; sampling occasionally</text>
+        <text x="315" y="178" text-anchor="middle" fill="#fbbf24" font-size="13">lands here instead</text>
+        <line x1="315" y1="185" x2="315" y2="218" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4 3"/>
+      </svg>
+      <p class="diagram-caption">The model never &quot;forgets&quot; Paris &mdash; it assigns Lyon a small but nonzero probability every time. Stochastic sampling, the same mechanism that makes output fluent and varied, occasionally draws from the tail.</p>
+    </div>
+
+    <p>But decoding is only the cleanest cause, not the only one. The surveys lay out a wider catalog, and intellectual honesty requires naming them because no single explanation accounts for all hallucination:</p>
+
+    <ul>
+      <li><strong>Training-data gaps and errors.</strong> If the corpus never contained a fact, or contained a wrong version of it, the distribution has no correct peak to sample. The model was never going to get it right; it interpolates into the void where the fact should be.</li>
+      <li><strong>Compression loss.</strong> As <a href="../module-1/g01-weights.html">G1</a> established, the weights are a lossy compression of the data. Rare facts &mdash; the exact birth year of a minor historical figure &mdash; get blurred together with neighbors during compression, so the model reconstructs a plausible-but-wrong value, the way a heavily compressed JPEG invents detail that was never in the original photo.</li>
+      <li><strong>Calibration failure.</strong> A well-calibrated model would output low probability when it is uncertain. But the fine-tuning process (which you will study in <a href="../module-4/g18-rlhf.html">G18 &mdash; RLHF Deep Dive</a>) often rewards confident, helpful-sounding answers, which can push the model to <em>sound</em> sure even when its internal distribution was flat. The training optimized for what reads as a good answer, not for honest hedging.</li>
+      <li><strong>Exposure bias and snowballing.</strong> The model generates one token at a time, conditioned on what it already wrote. Once it has committed to "The study by Chen et al.," the most fluent continuation is to invent a year, a journal, and a finding to match &mdash; each fabricated token making the next fabrication more likely. A small early slip snowballs into a fully-formed fake.</li>
+    </ul>
+
+    <p>Researchers debate the relative weight of these causes, and the honest summary is that hallucination is almost certainly <em>multi-causal</em> &mdash; different hallucinations trace to different mechanisms, and there is no consensus on which dominates. What the two surveys agree on is the shape of the problem, not a single root.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model confidently cites a paper that does not exist. Which description is most accurate?</div>
+      <button class="quiz-option" data-letter="A">The model is lying &mdash; it knows the paper is fake but presents it anyway to seem helpful.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model sampled a fluent, plausibly-shaped citation from a region of its distribution where no real citation existed &mdash; and it has no internal signal distinguishing this from a real one.</button>
+      <button class="quiz-option" data-letter="C">The model made a reasoning error you could trace by reading its chain of thought.</button>
+      <div class="quiz-feedback" data-correct="Right. Lying requires knowing the truth and choosing to misstate it &mdash; the model has no separate access to ground truth to deceive about. And unlike a reasoning error, there is no faulty step to inspect; the fabrication was generated, not computed wrong. It is confabulation: fluent, sincere, and unsupported." data-incorrect="Reconsider. 'Lying' implies the model knows the truth and conceals it &mdash; but it has no privileged access to ground truth, so there is nothing to deceive about. And a fabricated citation has no traceable reasoning step, which is exactly what separates it from a reasoning error."></div>
+    </div>
+
+    <h2>Why the model cannot tell the difference</h2>
+
+    <p>This is the part that unsettles people, and it is the heart of the whole topic. The model produces a true statement and a false one through <em>the identical process</em>, and crucially, it has no internal flag that fires for one and not the other. Both are just high-probability continuations sampled from the same distribution. There is no separate "fact-check" pass, no inner voice that whispers "careful, you're making this one up." Confidence and correctness are decoupled. Watch them come apart side by side.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Confident &amp; Correct</div>
+        <p>"The Treaty of Westphalia was signed in 1648 and is widely regarded as the origin of the modern system of sovereign nation-states."</p>
+        <p>True. The peak of the distribution happened to sit on the right answer, because this fact appeared often and consistently in training.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Confident &amp; Confabulated</div>
+        <p>"The Treaty of Lindau was signed in 1651 and is widely regarded as the origin of the modern doctrine of maritime neutrality."</p>
+        <p>False &mdash; there is no Treaty of Lindau. But it is <em>exactly as fluent</em>, exactly as authoritative in tone. The model sampled a plausible-shaped continuation from a region with no ground truth.</p>
+      </div>
+    </div>
+
+    <p>Read those two passages without knowing history and you cannot tell which is which. That is the point, and it is not a presentation accident &mdash; it is structural. The fluency is generated by the same mechanism in both cases, so the fluency carries <em>zero information</em> about truth. The model's tone of authority is not evidence it is right; it is evidence only that it is producing well-formed language, which it always does. The brilliant consultant from the top of the page has no felt difference between recalling the Henderson margin and inventing it. Neither does the model. This is why "but it sounded so sure" is exactly the wrong reason to trust an answer, and why the surveys treat hallucination as a fundamental property of the generative setup rather than a bug awaiting a clean fix.</p>
+
+    <h2>What hallucination tells us about understanding &mdash; and what it does not</h2>
+
+    <p>Now the third verification question, the one this whole page exists to answer carefully, and the place where uncertainty language is mandatory because reasonable researchers disagree.</p>
+
+    <p>What hallucination <em>does</em> tell us: the model lacks a robust, reliable mechanism for tracking the boundary between what it has solid grounding for and what it is interpolating. A human expert, asked about the Treaty of Lindau, would feel the absence &mdash; "I don't recognize that, and I'd expect to" &mdash; and would say so. That metacognitive signal, the sense of one's own knowledge edges, is something current models exhibit weakly and inconsistently. The existence of confident confabulation is genuine evidence that whatever the model has, it is <em>not</em> identical to a human's grounded, self-monitoring understanding. A page that claimed otherwise would be selling you something. Skeptics are right to press this point, and the honest intelligence claim has to absorb it rather than dodge it.</p>
+
+    <p>What hallucination does <em>not</em> tell us is equally important, and here is where people overreach. It does not show that the model understands <em>nothing</em>. The skeptic's move &mdash; "it hallucinates, therefore it is just a stochastic parrot with no comprehension" &mdash; does not follow, for a simple reason: humans confabulate too, and we do not conclude humans understand nothing. Eyewitnesses confidently misremember. Patients with certain memory disorders fluently invent detailed life events. People misattribute quotes with total conviction. Confabulation is a known failure mode of <em>memory-based</em> cognition in general, biological included. Its presence proves the system has limits and gaps; it does not prove the absence of the genuine compositional reasoning, factual encoding, and relational tracking documented across the rest of this course. A mind can both understand a great deal and confabulate at its edges. That is, in fact, the normal condition of minds we already accept as intelligent.</p>
+
+    <p>So the defensible position &mdash; the one this page is built to let you hold &mdash; is the nuanced one: LLMs exhibit real intelligence <em>and</em> have a systematic failure mode (confident confabulation at the edges of their grounding) that distinguishes their kind of understanding from a careful human expert's. Both halves are true. Dropping either half makes you either naive or dismissive, and neither survives contact with someone who has actually used these systems.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A model produces true statements and false ones through the <em>same</em> generative process, and it has no internal signal that distinguishes them &mdash; fluency and confidence are decoupled from correctness. Hallucination is not a bolt-on bug; it is the model's normal best-guess machinery running in a region where there was no ground truth to anchor it. That makes confident tone worthless as a truth signal &mdash; and it makes the honest intelligence claim the strong one: genuine capability plus a systematic, explainable failure mode, not flawless mind and not empty parrot.</p>
+    </div>
+
+    <p>One practical consequence worth carrying forward. Because hallucination is largely a problem of <em>missing or unanchored grounding</em>, the most effective mitigations do not try to make the model "know more" &mdash; they give it something external to stand on. Retrieval-augmented generation, which you will meet in <a href="../module-5/g22-memory-architectures.html">G22 &mdash; Memory Architectures</a>, fetches real source documents and puts them in the context so the model can quote rather than invent. It does not cure hallucination, but it changes the game from "recall a fact from a lossy distribution" to "summarize a document in front of you," which is a far more reliable task. That shift &mdash; from unconstrained generation to grounded generation &mdash; is the single most important defensive idea in applied LLM work, and it falls directly out of understanding the mechanism on this page.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If hallucination is partly intrinsic to sampling from a compressed distribution, can it ever hit zero without killing generalization &mdash; and where would you set the precision/coverage dial for a medical vs a brainstorming agent?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the two framing surveys are Ji et al. (2023), "Survey of Hallucination in Natural Language Generation" (ACM Computing Surveys), and Huang et al. (2023), "A Survey on Hallucination in Large Language Models" (arXiv:2311.05232). The "confabulation" framing draws on the clinical literature on memory-gap filling; the catalog of causes (data gaps, compression loss, calibration failure, exposure bias) follows the taxonomies in both surveys, whose authors stress that the causes remain actively debated.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

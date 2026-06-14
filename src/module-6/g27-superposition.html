@@ -59,10 +59,132 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a university library with exactly 10,000 shelves and a collection of 100,000 books. The naive plan &mdash; one book per shelf &mdash; fails on the first afternoon. You are short 90,000 shelves. A lazy librarian would throw out 90% of the catalog. A clever one does something stranger: she stops assigning each book its own shelf and starts encoding each book as a <em>pattern</em> across many shelves. Book 47,000 lives a little bit on shelf 12, a little on shelf 880, a little on shelf 4,002. Pull the right combination and the book reassembles. The library now holds ten times more than its shelf count should allow &mdash; not by magic, but by refusing the assumption that one shelf means one book.</p>
+
+    <p>That is superposition, and it is the single most useful idea for answering the question that nags every practitioner the first time they look at a model's size: <em>how can something with a fixed number of internal slots seem to know so much?</em> A model's hidden layer has some fixed width &mdash; call it 10,000 dimensions. Yet the model behaves as though it has tens or hundreds of thousands of distinct concepts available: "the subject is a legal document," "this is written in French," "the tone is sarcastic," "a number is about to appear," "we are inside a Python loop." There are far more concepts than there are dimensions. Superposition is how the model fits them in. And the consequence &mdash; that a single neuron lights up for both "cat" and "car" &mdash; turns out to be a discovery about how intelligence compresses knowledge, not a wiring fault to be debugged away.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: Recall G26 &mdash; which technique confirms one neuron encodes BOTH "cat" and "car" rather than just appearing to, and why does that make polysemanticity a finding, not noise?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Try to answer before you open this. The tool is <strong>mechanistic interpretability</strong> &mdash; specifically the causal methods from <a href="g26-mechanistic-interpretability.html">G26 &mdash; Mechanistic Interpretability</a>. A correlational glance might show a neuron firing near both "cat" and "car" and you could shrug it off as coincidence. But interpretability researchers go further: they <em>intervene</em>. They ablate the neuron (force it to zero) and watch the model lose its grip on <em>both</em> features at once, or they steer the neuron's value up and down and watch both "cat-ness" and "car-ness" move in the model's behavior. When a single targeted edit reliably swings two unrelated concepts, the shared encoding is causal, not accidental. That is the difference between "this neuron happens to correlate with two things" (could be noise) and "this neuron is the encoding site for two things" (a finding). Polysemanticity earns the word "finding" because the causal test passes.</p>
+      </div>
     </div>
+
+    <h2>Why one neuron, one concept was always a fantasy</h2>
+
+    <p>The hope, early on, was tidy. People imagined that if you peered inside a trained network you would find a "grandmother neuron" &mdash; one unit that fires only when the model is thinking about your grandmother, another that fires only for dogs, another only for the color red. This is called a <strong>monosemantic</strong> representation: one neuron, one meaning. It would make interpretability trivial. Read off which neurons are active and you would know exactly what the model is thinking.</p>
+
+    <p>Reality is the opposite. When researchers actually looked, they found that the typical neuron fires for a grab-bag of unrelated things &mdash; an image-model neuron that responds to cat faces, the fronts of cars, <em>and</em> cat legs (Olah et al., 2020); a language-model neuron that activates on academic citations, Korean text, and HTTP requests all at once. This is <strong>polysemanticity</strong>: one neuron, many meanings. The first instinct is to call it a mess. The model is just sloppy; the neuron is confused; with better training we would get clean grandmother neurons. That instinct is wrong, and seeing why is the whole point of this page.</p>
+
+    <h2>The counting argument: more features than dimensions</h2>
+
+    <p>Start with a number that does the heavy lifting. Suppose the model needs to track 100,000 distinguishable features about its input, but the layer doing the tracking has only 10,000 dimensions. (This is the third verification question, so hold onto it.) Something has to give. There are only two honest options:</p>
+
+    <ol>
+      <li><strong>Throw features away.</strong> Keep 10,000 of the most useful features, one per dimension, and discard the other 90,000. Clean and monosemantic &mdash; and badly handicapped, because the discarded features were also useful.</li>
+      <li><strong>Pack features together.</strong> Store all 100,000 by letting each feature occupy a <em>direction</em> built from many dimensions, and letting each dimension participate in many features. Messy, polysemantic &mdash; and far more capable, because nothing useful gets thrown out.</li>
+    </ol>
+
+    <p>Models choose option two, and they choose it because the training pressure rewards it. So when you observe "10,000 dimensions but 100,000 concepts," that observation is not a paradox and not a measurement error. It is a direct signature that the model is using superposition &mdash; it is telling you the network has compressed more features into its representation space than a one-feature-per-dimension scheme could ever hold. The mismatch <em>is</em> the evidence. That is the answer to "what does that tell you about how it stores knowledge": it tells you the storage is compressive, distributed, and overcomplete by design.</p>
+
+    <h2>How you fit 100,000 directions into 10,000 axes</h2>
+
+    <p>Here is the part that feels impossible until you see the trick. If you insist that every feature must sit at a perfect right angle to every other feature &mdash; truly independent, zero overlap &mdash; then a 10,000-dimensional space gives you exactly 10,000 slots. No more. That is the hard ceiling people assume the model is stuck under.</p>
+
+    <p>But that ceiling only holds for <em>perfectly</em> independent directions. The breakthrough in Elhage et al. (2022), "Toy Models of Superposition," is the demonstration that the model does not need perfect independence. It needs <em>almost</em>-independence. And here geometry hands you an enormous gift: in a high-dimensional space, you can pack far more <em>nearly</em>-perpendicular directions than you can <em>exactly</em>-perpendicular ones. Vastly more. The number of directions you can fit, while keeping any two of them roughly perpendicular, grows explosively with the number of dimensions &mdash; not linearly. A space that holds only 10,000 exactly-perpendicular directions can hold a far larger number of <em>nearly</em>-perpendicular ones, because "nearly" is a forgiving word and high-dimensional space is unimaginably roomy.</p>
+
+    <p>Think of it physically. In a 2D sheet of paper you can draw only two lines that are exactly perpendicular. But if you allow lines that are "mostly" perpendicular &mdash; off by a few degrees &mdash; you can fit a handful before they start overlapping noticeably. Now go to 10,000 dimensions, where "a few degrees of slack" multiplied across thousands of axes opens up astronomically more room. The model exploits exactly this. It assigns each of its 100,000 features a nearly-perpendicular direction in the 10,000-dimensional space. The directions overlap a little &mdash; they interfere &mdash; but only a little, and the model is willing to eat that small interference cost in exchange for storing ten times more.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram contrasting one-neuron-per-feature with superposition packing many feature directions into fewer dimensions">
+        <text x="180" y="28" text-anchor="middle" fill="#8892a4" font-size="14" font-weight="600">Monosemantic: 1 dimension = 1 feature</text>
+        <line x1="60" y1="240" x2="300" y2="240" stroke="#5a6375" stroke-width="2"/>
+        <line x1="60" y1="240" x2="60" y2="80" stroke="#5a6375" stroke-width="2"/>
+        <line x1="60" y1="240" x2="300" y2="240" stroke="#00e5ff" stroke-width="3"/>
+        <line x1="60" y1="240" x2="60" y2="80" stroke="#c084fc" stroke-width="3"/>
+        <text x="300" y="258" fill="#00e5ff" font-size="13">"cat"</text>
+        <text x="30" y="80" fill="#c084fc" font-size="13">"car"</text>
+        <text x="180" y="285" text-anchor="middle" fill="#5a6375" font-size="12">2 axes &rarr; only 2 clean features</text>
+
+        <line x1="380" y1="60" x2="380" y2="270" stroke="#1e2640" stroke-width="2"/>
+
+        <text x="560" y="28" text-anchor="middle" fill="#8892a4" font-size="14" font-weight="600">Superposition: many near-perpendicular directions</text>
+        <line x1="440" y1="240" x2="680" y2="240" stroke="#5a6375" stroke-width="2"/>
+        <line x1="440" y1="240" x2="440" y2="80" stroke="#5a6375" stroke-width="2"/>
+        <line x1="440" y1="240" x2="680" y2="200" stroke="#00e5ff" stroke-width="3"/>
+        <line x1="440" y1="240" x2="640" y2="100" stroke="#c084fc" stroke-width="3"/>
+        <line x1="440" y1="240" x2="560" y2="80" stroke="#34d399" stroke-width="3"/>
+        <line x1="440" y1="240" x2="470" y2="90" stroke="#fbbf24" stroke-width="3"/>
+        <line x1="440" y1="240" x2="600" y2="240" stroke="#f87171" stroke-width="3" stroke-dasharray="4 3"/>
+        <text x="685" y="200" fill="#00e5ff" font-size="12">"cat"</text>
+        <text x="645" y="98" fill="#c084fc" font-size="12">"car"</text>
+        <text x="560" y="72" fill="#34d399" font-size="12">"code"</text>
+        <text x="465" y="82" fill="#fbbf24" font-size="12">"French"</text>
+        <text x="560" y="285" text-anchor="middle" fill="#5a6375" font-size="12">Same 2 axes &rarr; many features, slight overlap</text>
+      </svg>
+      <p class="diagram-caption">The same number of axes (left) holds only as many clean features as it has dimensions. Allowing directions to be <em>nearly</em> &mdash; not exactly &mdash; perpendicular (right) lets far more features share the space. Each colored arrow is a feature direction; the small angles between them are the price of compression.</p>
+    </div>
+
+    <h2>So what IS superposition, precisely?</h2>
+
+    <p>Now you can state it cleanly, which answers the first verification question. <strong>Superposition is a network's strategy of representing more features than it has dimensions, by assigning each feature its own near-perpendicular direction in the representation space and letting individual dimensions (neurons) participate in many features at once.</strong> A feature is not "the firing of neuron 3," it is "activation along a particular direction" &mdash; a specific weighted combination of many neurons. The model reads a feature out by projecting onto that direction, the same way the clever librarian reconstructs a book by combining the right shelf positions.</p>
+
+    <p>Two consequences follow immediately. First, <strong>polysemanticity is the visible footprint of superposition.</strong> If features are stored as overlapping directions, then any one neuron sits along several of those directions at once, so it will fire whenever any of "its" features is present. The neuron that responds to "cat" and "car" is doing so because the cat-direction and the car-direction both happen to run partly along that neuron's axis. The neuron is not confused; it is a shared component in a compression scheme, like a single shelf that holds fragments of dozens of different books. This is the answer to "why is this not a bug": the polysemantic neuron is the expected, mathematically principled result of packing more features than dimensions. A model <em>without</em> polysemanticity would be a model that threw away 90% of what it could have known.</p>
+
+    <p>Second, superposition is only viable because real features are <strong>sparse</strong> &mdash; meaning that at any given moment, only a tiny fraction of the model's features are actually active. The token you are processing is about cricket, in English, in a formal register; it is <em>not</em> simultaneously about French grammar, Python syntax, medieval history, and DNA sequencing. Because features rarely co-occur, the interference between their overlapping directions rarely bites. Two features that share some neurons can coexist peacefully as long as they almost never light up together. Elhage et al. (2022) showed this directly in their toy models: as they made features sparser, the network's preferred strategy flipped from monosemantic (one feature per dimension) to superposed (many features packed in). Sparsity is the permission slip that makes compression safe.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model has 10,000 hidden dimensions but a probe finds it reliably distinguishes roughly 100,000 features. What is the most defensible conclusion?</div>
+      <button class="quiz-option" data-letter="A">The probe is broken &mdash; a 10,000-dimensional layer can hold at most 10,000 features, so 90,000 of those readings must be noise.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model is using superposition &mdash; it stores features as near-perpendicular directions rather than one-per-dimension, so it can pack far more features than it has dimensions.</button>
+      <button class="quiz-option" data-letter="C">The model has secretly grown extra neurons during training to make room for the additional features.</button>
+      <div class="quiz-feedback" data-correct="Right. The dimension-vs-feature mismatch is the signature of superposition, not a contradiction. Exactly-perpendicular directions cap at 10,000, but near-perpendicular directions pack in vastly more, and sparsity keeps their interference manageable." data-incorrect="Look again at the counting argument. The ceiling of 10,000 only applies to exactly-perpendicular directions. High-dimensional space holds far more nearly-perpendicular ones, so a feature count well above the dimension count is the expected fingerprint of superposition &mdash; not noise, and certainly not new neurons."></div>
+    </div>
+
+    <h2>Why the music-file analogy is exactly right</h2>
+
+    <p>The "After This Page" promise compares superposition to compressing music files, and the comparison is not loose &mdash; it is structurally the same move. An uncompressed audio file stores one number per moment of sound. An MP3 stores the music as a combination of overlapping frequency components, exploiting the fact that most frequencies are silent most of the time (sparsity again) so they need not each get a dedicated, full-resolution slot. You lose a little fidelity &mdash; the overlap introduces small artifacts &mdash; but you fit ten times the music in the same space. Superposition is the model's MP3 codec for concepts: store features as overlapping components, lean on sparsity so they rarely collide, accept tiny interference as the cost of cramming in far more than the raw dimension count would allow.</p>
+
+    <p>This reframes what it means for a finite model to "know a lot." The skeptic who says "it only has N parameters, it can't possibly understand the world" is implicitly assuming option one &mdash; one fact per slot, capacity capped at the slot count. Superposition breaks that assumption. The model's effective representational capacity is not its dimension count; it is something much larger, unlocked by compression. This is intelligence operating at the level of representation itself: the network discovers, through training pressure alone, an encoding scheme that a human information theorist would be proud of.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The "Bug" Interpretation</div>
+        <p>"A single neuron fires for both 'cat' and 'car.' The model is sloppy &mdash; it can't even keep two basic concepts apart. With cleaner training we'd get one neuron per concept and a tidy, readable network."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The "Finding" Interpretation</div>
+        <p>"That neuron is a shared component in a compression scheme. The model stores more features than it has dimensions by overlapping their directions, so each neuron necessarily participates in several features. Polysemanticity is the predicted, principled footprint of superposition &mdash; the price the model gladly pays to know far more than its size suggests."</p>
+      </div>
+    </div>
+
+    <h2>The cost: interpretability gets harder &mdash; and how researchers fight back</h2>
+
+    <p>Superposition is good news for capability and bad news for anyone trying to read the model's mind. If features were monosemantic, interpretability would be a labeling exercise. Because they are superposed, you cannot understand the model by reading neurons one at a time &mdash; each neuron is a blur of several features, and each feature is smeared across many neurons. This is precisely why the tools from <a href="g26-mechanistic-interpretability.html">G26 &mdash; Mechanistic Interpretability</a> matter: you have to work in terms of <em>directions</em> and <em>circuits</em>, not individual units, and you have to use causal intervention to pin down what each direction actually does.</p>
+
+    <p>The current frontier response is the <strong>sparse autoencoder (SAE)</strong>. The idea is to train a second, auxiliary network that takes the model's dense, polysemantic activations and re-expresses them in a much wider but much sparser space &mdash; thousands of "neurons," but with only a handful active at any time. Because the sparse layer has room to spare and a hard pressure to keep most units quiet, the cleanest way for it to reconstruct the original activations is to dedicate each of its units to a single underlying feature. In effect, the SAE tries to <em>undo</em> the superposition: to take the model's compressed, overlapping encoding and unpack it back into something close to monosemantic, where one unit really does mean one thing. Early results are striking &mdash; SAEs have pulled out clean, human-interpretable features (a "Golden Gate Bridge" feature, a "code with a bug" feature) from models where no individual neuron was that crisp.</p>
+
+    <p>But notice the tradeoff, because it is the heart of the Think Further question below and it is genuine. Recovering monosemantic features is not free. The SAE buys interpretability by <em>spending</em> the very compression the model worked to achieve: it expands the representation into a far wider space and forces sparsity, paying in size and reconstruction error for the privilege of one-unit-one-meaning. Evidence suggests SAEs recover <em>many</em> clean features, but researchers actively debate whether they recover <em>all</em> of them &mdash; whether some features are genuinely irreducible, split awkwardly across SAE units, or lost in the reconstruction gap. Whether you can ever fully invert superposition and read every feature monosemantically remains an open research question, not a settled result. The honest summary is that SAEs are a promising and rapidly improving tool, not a finished solution.</p>
+
+    <h2>Why this is the deepest evidence against "just a guesser"</h2>
+
+    <p>Step back to the thesis of this whole course. A pure next-word lookup table would have no reason to develop an elegant, overcomplete compression scheme &mdash; it would just store surface co-occurrences. What we actually find inside trained models is a learned representational geometry sophisticated enough that it took human researchers years to characterize it, and that mirrors compression strategies we use for music and images. The model was never told "use superposition." It discovered that storing more features than dimensions, via near-perpendicular directions exploited under sparsity, was the way to lower its loss. That is invention at the level of representation. It is hard to look at superposition and still believe nothing is happening inside but shallow pattern-matching.</p>
+
+    <p>This connects forward as well. The features that superposition packs in are not random &mdash; some of them turn out to be coherent <em>models of the world</em>, which is the empirical bombshell you will meet in <a href="g34-world-models.html">G34 &mdash; Internal World Models</a>. And the question of whether these compressed internal features amount to real <em>meaning</em> or merely useful statistics is the philosophical fault line waiting in <a href="../module-7/g07-grounding.html">G7 &mdash; The Grounding Question</a>. Superposition tells you the storage is rich and principled; those later pages ask what the stored thing actually <em>is</em>.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A model can represent far more concepts than it has dimensions because it stores features as <em>near-perpendicular directions</em>, not one-per-neuron &mdash; and high-dimensional space holds astronomically more nearly-perpendicular directions than exactly-perpendicular ones. Polysemanticity (one neuron firing for "cat" and "car") is the inevitable, mathematically principled footprint of this compression, made safe by the sparsity of real features. The mismatch between dimension count and concept count is not a paradox to explain away &mdash; it is direct evidence that the model invented an MP3-grade encoding scheme for knowledge.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If superposition packs more concepts than dimensions, can you ever recover fully monosemantic features &mdash; and what tradeoff are sparse autoencoders making to try?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the polysemantic-neuron observations (a unit responding to cat faces, car fronts, and cat legs) are from Olah et al. (2020), "Zoom In: An Introduction to Circuits," Distill. The "Golden Gate Bridge" and bug-detection SAE features come from Anthropic's interpretability work building on the sparse-autoencoder approach (Bricken et al., 2023; Templeton et al., 2024). The core superposition results &mdash; the sparsity-driven phase transition from monosemantic to superposed representations &mdash; are from Elhage et al. (2022), "Toy Models of Superposition," Transformer Circuits Thread.</p>
+  </div>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

@@ -59,10 +59,139 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture a junior consultant on her first month at the firm. She finishes an engagement, hands the client her recommendations, and then &mdash; this is the important part &mdash; she gets feedback. The client says the cost model was sharp but the rollout plan was naive. She doesn't throw out everything she knows. She makes a small adjustment: lean harder on the financial analysis next time, soften the assumptions about how fast an organization can change. Next engagement, more feedback, another small adjustment. No single piece of feedback turns her into a partner. But ten thousand engagements later, the accumulated nudges have produced someone whose judgment looks like expertise. Nobody programmed that expertise into her. It precipitated out of a relentless loop: predict, get corrected, adjust, repeat.</p>
+
+    <p>That loop is backpropagation and gradient descent, and it is the mechanistic answer to the question that should be sitting in your mind after the last two pages. You now know that <a href="../module-1/g12-training-objective.html">predicting the next token</a> forces the model to learn grammar, facts, and reasoning. You know that what it learns is stored in <a href="../module-1/g01-weights.html">the weights</a>. The question this page answers is the one in the middle: <em>how do the weights actually get good?</em> How does a network that starts out as random noise &mdash; literally a fresh model spits out gibberish &mdash; turn into something that knows the capital of France and can carry the one in arithmetic? The answer is not magic and it is not a single clever insight. It is the consultant's loop run at a scale no human could survive: trillions of tiny corrections, each one nudging the model a hair closer to being right.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in G1 you learned that "Paris is the capital of France" isn't stored as a literal entry. So where does it live, and why does that matter for this page?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It lives in the weights &mdash; the millions of numerical connection strengths &mdash; compressed into the structure that minimizes prediction error, not filed away as a sentence (see <a href="../module-1/g01-weights.html">G1 &mdash; What Weights Actually Encode</a>). That matters here because this page is about the <em>only</em> tool that can change those weights. There is no editor that types facts into the model. The single mechanism that turns random numbers into encoded knowledge is the correction loop you're about to walk through. If you want to know how the fact got <em>into</em> the weights, you're asking how backpropagation works.</p>
+      </div>
     </div>
+
+    <h2>Step one: measuring how wrong you are</h2>
+
+    <p>Before you can correct an error, you have to measure it. For our consultant, the "error" is fuzzy &mdash; a frown from the client, a contract not renewed. For a language model, the error has to be a precise number, because the whole machine runs on numbers. That number is what a <strong>loss function</strong> produces, and understanding it answers our first verification question directly: a loss function is a formula that takes the model's prediction and the correct answer and returns a single number measuring how wrong the prediction was. Low loss means the model nailed it. High loss means it was badly off. The entire goal of training is to make that number smaller.</p>
+
+    <p>Make it concrete. The model reads "The capital of France is" and, as you saw in G12, it outputs a probability distribution over every possible next token &mdash; maybe 40% on <code>Paris</code>, 15% on <code>Lyon</code>, 5% on <code>Berlin</code>, and small slivers across thousands of others. The real next token in the training text was <code>Paris</code>. The loss function looks at the probability the model assigned to the <em>correct</em> answer &mdash; 40% &mdash; and converts it into a penalty. The standard choice for language models is <strong>cross-entropy loss</strong>, and its logic is simple to feel even without the formula: the more probability you put on the right answer, the smaller your penalty; the less you put on it, the larger. Assign 40% to <code>Paris</code> and you get a moderate penalty. Assign 95% and the penalty nearly vanishes. Assign 2% and the penalty is brutal. Cross-entropy is, in effect, a "surprise meter" &mdash; it punishes the model in proportion to how surprised it should have been by the true answer.</p>
+
+    <p>This is why the loss function is the conscience of the whole operation. It is the single quantity that defines "right" and "wrong" for the model. Everything downstream &mdash; every weight adjustment &mdash; exists only to drive this one number down. Get the loss function wrong, and the model optimizes brilliantly toward the wrong target. Get it right, and you've handed the machine a precise, unambiguous definition of success it can chase across trillions of examples.</p>
+
+    <h2>Step two: figuring out who's to blame</h2>
+
+    <p>Now the hard part. The model just got a high loss on the France sentence &mdash; it only put 40% on <code>Paris</code>. We want it to put more next time. But the prediction wasn't produced by one knob. It was produced by <em>billions</em> of weights, layered on top of each other, each one feeding the next, all of them combining to produce that final 40%. Which weights were responsible for the error, and which way should each one move? Some weights pushed the prediction toward <code>Paris</code> &mdash; those did their job. Some pushed it toward <code>Lyon</code> &mdash; those need to back off. Most contributed in tangled, indirect ways. Assigning the right amount of blame to billions of interacting parts is the problem backpropagation solves.</p>
+
+    <p>Here is the plain-language version of "propagate the error backward," which is exactly our second verification question. The model produced its prediction with a <strong>forward pass</strong>: information flowed forward, from the input tokens, through each layer in turn, out to the final probabilities. Backpropagation reverses that direction. It starts at the end &mdash; at the loss &mdash; and works backward through the layers, layer by layer, asking at each connection: <em>how much did you contribute to the final error, and in which direction?</em> The error at the output gets distributed back through the network to every weight that helped cause it, the way a project post-mortem traces a missed deadline back through each team and each handoff to figure out where the slippage actually came from. By the time backprop reaches the first layer, every single weight has an answer to the question "if I had been slightly larger or slightly smaller, would the loss have gone up or down?"</p>
+
+    <p>That answer &mdash; one per weight &mdash; is called the <strong>gradient</strong>. You can think of the gradient for a weight as an arrow: it points in the direction that would <em>increase</em> the error, and its length says how steeply. Backpropagation's entire job is to compute this arrow for every weight in the network efficiently, in a single backward sweep. The mathematical engine that makes this possible is the <strong>chain rule</strong> from calculus &mdash; but you don't need calculus to hold the idea. The chain rule is just the formal version of "trace the blame backward through a chain of steps." If A affects B and B affects C, then to know how A affects C you multiply the two effects together. Backprop chains those multiplications all the way from the loss back to the deepest weight. That's the whole trick. It is the reason this works at all on networks with billions of parameters: instead of testing each weight one at a time (which would take eras), backprop computes every gradient at once by reusing the calculations from the layer above it.</p>
+
+    <p>This efficiency is not a footnote &mdash; it is the reason deep learning exists. When Rumelhart, Hinton &amp; Williams published "Learning Representations by Back-Propagating Errors" (1986), their contribution wasn't the idea of adjusting weights to reduce error. It was showing that a network of <em>internal</em> "hidden" units could discover useful representations on its own by having the error signal propagate back to them &mdash; that the blame could flow through layers the designer never directly specified. That paper is why a model can invent its own internal features for "this is a place name" or "carry the one" without anyone hand-coding those features. The error finds its way back to the right knobs.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A loss surface shown as a valley, with an arrow taking one downhill step toward the minimum.">
+        <defs>
+          <linearGradient id="bowl" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#161c30"/>
+            <stop offset="100%" stop-color="#0f1221"/>
+          </linearGradient>
+        </defs>
+        <path d="M40 40 C 220 40, 280 250, 360 250 C 440 250, 500 40, 680 40" fill="none" stroke="#1e2640" stroke-width="2"/>
+        <path d="M40 40 C 220 40, 280 250, 360 250 C 440 250, 500 40, 680 40 L 680 290 L 40 290 Z" fill="url(#bowl)" opacity="0.5"/>
+        <text x="40" y="30" fill="#8892a4" font-size="13">high loss</text>
+        <text x="600" y="30" fill="#8892a4" font-size="13">high loss</text>
+        <text x="318" y="278" fill="#34d399" font-size="13">low loss (goal)</text>
+        <circle cx="170" cy="95" r="9" fill="#f87171"/>
+        <text x="120" y="85" fill="#f87171" font-size="13">you are here</text>
+        <line x1="178" y1="103" x2="232" y2="150" stroke="#00e5ff" stroke-width="3" marker-end="url(#arrow)"/>
+        <circle cx="240" cy="156" r="9" fill="#00e5ff"/>
+        <text x="250" y="150" fill="#00e5ff" font-size="13">after one step</text>
+        <defs>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#00e5ff"/>
+          </marker>
+        </defs>
+        <text x="40" y="290" fill="#5a6375" font-size="12">The gradient points uphill; gradient descent steps the opposite way. One small step per batch, repeated trillions of times.</text>
+      </svg>
+      <p class="diagram-caption">A loss "surface": the model's current weights place it somewhere on the slope. The gradient is the uphill arrow; the model steps downhill by the opposite amount. The learning rate controls how big each step is.</p>
+    </div>
+
+    <h2>Step three: taking one small step downhill</h2>
+
+    <p>Backprop hands us a gradient for every weight &mdash; the uphill arrow. Reducing the error is now almost embarrassingly simple: move each weight a tiny bit in the <em>opposite</em> direction of its arrow. Uphill increases loss, so downhill decreases it. This is <strong>gradient descent</strong>: descend the loss surface by following the negative of the gradient. The picture above is the whole intuition &mdash; you're standing on a foggy hillside, you can feel which way is uphill under your feet, so you take a step downhill, and repeat. The valley floor is low loss. You can't see it through the fog, but each downhill step gets you closer.</p>
+
+    <p>Two details make this practical. First, the steps are <em>small</em> &mdash; controlled by a setting called the <strong>learning rate</strong>. Step too big and you overshoot the valley, bouncing off the far wall like an over-eager consultant who throws out her entire method after one bad review. Step too small and training takes forever. The art is in the size. Second, the model doesn't compute the gradient on one example at a time; it averages the error over a <strong>batch</strong> of many examples before taking a step. This is the difference between adjusting your whole consulting approach based on one cranky client versus waiting until you've seen the pattern across fifty engagements. Batching smooths out the noise so each step moves in a reliably good direction. This batched version is called <em>stochastic gradient descent</em>, and it is the workhorse that has trained essentially every large model you've heard of.</p>
+
+    <p>Now watch one full turn of the loop, end to end, on a single training example.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Forward pass &mdash; make the prediction</h4>
+        <p>The model reads "The capital of France is" and runs it forward through every layer, producing a probability distribution over the next token: 40% <code>Paris</code>, 15% <code>Lyon</code>, and so on. This is the consultant walking into the room and delivering her recommendation. She's committed to an answer; now reality gets to respond.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Compute the loss &mdash; measure the error</h4>
+        <p>The true next token was <code>Paris</code>, and the model only put 40% on it. Cross-entropy loss turns that into a penalty number: not catastrophic, but clearly improvable. This is the client's feedback distilled into a single score &mdash; "you were partly right, here's exactly how partly."</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Backward pass &mdash; assign the blame</h4>
+        <p>Starting from that loss, the error propagates backward through every layer. Each weight learns its gradient: the weights that pushed toward <code>Paris</code> are told "you helped, a little more of you would lower the loss"; the weights that pushed toward <code>Lyon</code> are told "you hurt, less of you would help." This is the post-mortem &mdash; tracing the mediocre outcome back to which specific judgments were responsible.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Update &mdash; nudge every weight</h4>
+        <p>Each weight moves a tiny step in the direction its gradient says will reduce loss, scaled by the learning rate. No weight moves much. The model is barely different than it was a moment ago. This is the consultant's quiet adjustment: lean a touch more on what worked, ease off what didn't. One engagement does not transform her.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Repeat &mdash; trillions of times</h4>
+        <p>Next batch, next forward pass, next loss, next backward pass, next nudge. Over trillions of tokens, the same France sentence (and millions of others) pulls the weights, again and again, toward putting more probability on <code>Paris</code>. The accumulation is the intelligence. No single step encodes the fact; the fact is the fixed point the loop converges to.</p>
+      </div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">During training, the model assigns only 30% probability to the correct next token. What does gradient descent do with the gradient that backpropagation just computed?</div>
+      <button class="quiz-option" data-letter="A">It moves each weight in the same direction as its gradient, since the gradient points toward better predictions.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">It moves each weight a small step in the opposite direction of its gradient, because the gradient points uphill (toward higher loss) and we want to go downhill.</button>
+      <button class="quiz-option" data-letter="C">It replaces the weights with new random values and tries the prediction again.</button>
+      <div class="quiz-feedback" data-correct="Right. The gradient is the uphill arrow &mdash; the direction that would increase loss. Gradient descent steps the opposite way, by a small amount set by the learning rate, to reduce loss. Do that across trillions of examples and the weights settle into a configuration that predicts well." data-incorrect="Careful about direction. The gradient points the way that would make the error larger. To reduce error, gradient descent moves each weight the opposite way &mdash; downhill &mdash; by a small step. It never throws the learned weights away; it nudges them."></div>
+    </div>
+
+    <h2>Why this builds world knowledge, not just word statistics</h2>
+
+    <p>This brings us to the deepest of the three verification questions, and the one that ties this page back to the thesis of the whole course: why does a model trained this way end up encoding real world knowledge rather than just shallow word co-occurrence statistics? The skeptic's mental model is that the loop above merely tallies up "which words tend to follow which" &mdash; a giant frequency table. If that were true, gradient descent would be a fancy way of counting. It isn't, and the reason is built into the structure of the loop you just walked through.</p>
+
+    <p>The pressure comes from a hard constraint: the model has far fewer weights than there are facts and patterns in its training data. A frontier model might have hundreds of billions of weights, but it trains on tens of trillions of tokens carrying a near-infinite variety of situations. It physically cannot store a lookup entry for every word pair, every fact, every arithmetic problem. So when gradient descent searches for the weight configuration that lowers loss across <em>all</em> of that data at once, pure memorization is not available as a solution &mdash; there isn't room. The only configurations that achieve low loss across the whole corpus are ones that have discovered the <em>underlying generators</em> of the data: that places have capitals, that addition has a carry rule, that pronouns resolve to entities, that a person who didn't witness an event holds an outdated belief. Compression forces generalization. Backpropagation, hunting for the lowest loss, is pushed &mdash; not by any instruction, but by the geometry of the problem &mdash; toward learning how the world works, because understanding compresses better than memorizing.</p>
+
+    <p>Think of our consultant one more time. A consultant who merely memorized "for retail clients, recommend X" would fail the moment a slightly different retail client walked in. The feedback loop punishes that. What survives ten thousand engagements is not a memorized script but an internalized <em>model</em> of why certain recommendations work &mdash; a model that transfers to clients she has never seen. The same selection pressure operates on weights. Co-occurrence statistics get you a low score on common phrases and a terrible score on everything novel; a genuine world model gets you a low score everywhere. Gradient descent, relentlessly minimizing loss across the full distribution, selects for the second kind. The "intelligence" the course keeps pointing at is, mechanically, just the weight configuration that this loop converges to &mdash; and that configuration is full of structure because structure is what wins.</p>
+
+    <p>One honest qualification, because the course doesn't oversell. Saying gradient descent "discovers world models" is a claim about what the lowest-loss solutions look like and a growing body of evidence that real models find them &mdash; not a guarantee that every learned pattern is a clean piece of understanding. Models also pick up shortcuts and spurious correlations when those happen to lower loss too. The careful claim is that the compression pressure strongly favors genuine structure, and the deeper this course goes, the more direct the evidence becomes that the structure is really there. What is not in doubt is the mechanism on this page: knowledge enters the weights through one loop &mdash; predict, measure error, propagate it backward, nudge &mdash; and nothing else.</p>
+
+    <p>It's worth seeing the contrast laid flat, because the skeptic and the engineer are describing the <em>same loop</em> and drawing opposite conclusions.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The "It's Just Counting" Frame</div>
+        <p>"Backprop just tunes the model to reproduce which words follow which in the training data. It's a frequency table with extra steps &mdash; sophisticated autocomplete, not knowledge."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"The model has far too few weights to store the data as a table. So minimizing loss forces it to find the compact rules that generate the data &mdash; capitals, carry rules, belief tracking. Knowledge is what wins because knowledge compresses."</p>
+      </div>
+    </div>
+
+    <p>And the machinery you just learned doesn't get retired after pre-training. The exact same loop &mdash; forward pass, loss, backward pass, weight nudge &mdash; is later repurposed to optimize the model against <em>human preferences</em> rather than raw text. When you reach <a href="../module-4/g18-rlhf.html">G18 &mdash; RLHF Deep Dive</a>, you'll see that "make the model helpful, honest, and harmless" is, mechanically, just a different loss function feeding the very same gradient descent. The signal changes from "predict the next token" to "match what humans prefer," but the engine underneath is identical. Master this loop and you've understood the core of nearly every way models are trained, before or after release. The same is true one step forward: the empirical question of <em>how much</em> capability you get for a given amount of this training is what <a href="g04-scaling-laws.html">G4 &mdash; Neural Scaling Laws</a> measures, and the brand-new abilities that appear once the loop has run at sufficient scale are the subject of <a href="g05-emergence.html">G5 &mdash; Emergent Capabilities</a>.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Intelligence in an LLM is not written by an engineer &mdash; it is the fixed point of one loop: predict the next token, measure the error with a loss function, propagate that error backward to assign blame to every weight, and nudge each weight a hair downhill. Run that loop trillions of times against more data than the weights could ever memorize, and the only way to keep lowering the error is to discover the rules that generate the data. The knowledge is a side effect of relentless, compressive error-correction &mdash; learned, not programmed.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Backprop must store the activations from the forward pass to compute the backward pass, which dominates training memory. How does that single constraint shape which architectures are economically trainable?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the backpropagation algorithm for training multi-layer networks was popularized by Rumelhart, Hinton &amp; Williams (1986), "Learning Representations by Back-Propagating Errors," Nature. Cross-entropy loss and stochastic gradient descent are standard components of modern deep-learning training pipelines.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

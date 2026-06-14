@@ -59,10 +59,160 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Watch a chess grandmaster think and you notice something that looks nothing like a machine spitting out the first legal move. She looks at the board and her mind forks. "If I push the pawn, he takes with the knight, and then my bishop is loose &mdash; bad." She abandons that line and tries another. "If I castle first, the king is safe, and now the pawn push works." She is not computing one move; she is growing a tree of possibilities, evaluating the leaves, and pruning the branches that lead nowhere. The move she finally plays is the survivor of a small internal tournament you never see.</p>
+
+    <p>That image is the whole of this page. Up to now, this course has shown the model reasoning in a straight line. Chain-of-thought, which you met in <a href="g09-chain-of-thought.html">G9</a>, is the model writing out its scratchwork one step after another: step 1, then step 2, then step 3, then the answer. That is real computation, and it is enough for a huge range of problems. But it has the same weakness as a chess player who commits to the first plausible move and never considers an alternative. If step 2 was a wrong turn, a linear chain has no way back. Everything after it inherits the mistake. Advanced reasoning is the set of techniques that give the model what the grandmaster has: the ability to branch, to judge, and to repair. Three distinct strategies do this work &mdash; tree-of-thought (search), reflection (metacognition), and self-correction (error repair) &mdash; and the goal of this page is to make you able to tell them apart and know when each one earns its keep.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in G9 you learned that chain-of-thought tokens <em>are</em> the computation. So what is the one structural thing a single chain cannot do, no matter how long?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It cannot explore. A chain-of-thought is a single path: one sequence of tokens, generated left to right, each step conditioned on the steps before it. As you saw in <a href="g09-chain-of-thought.html">G9 &mdash; Chain-of-Thought as Computation</a>, those intermediate tokens give the model room to do multi-step work in the visible stream. But a chain has no fork and no eraser. If the model's third step was a bad assumption, the chain plows ahead on that assumption to a confident wrong answer. Advanced reasoning is what you add to break out of the single-path constraint: the ability to try several paths, compare them, and back out of the bad ones.</p>
+      </div>
     </div>
+
+    <h2>Tree-of-thought: turning reasoning into search</h2>
+
+    <p>The first and most important technique is <strong>tree-of-thought</strong> (Yao et al., 2023). The name is almost self-explaining. Instead of generating one chain of reasoning, the model generates a branching tree of them, evaluates partial solutions as it goes, and explores the promising branches while abandoning the dead ones. It converts reasoning from a single guess into a deliberate search.</p>
+
+    <p>Walk through how a tree-of-thought system differs from a linear chain on the same problem. Suppose the task is the "Game of 24": given four numbers, combine them with +, &minus;, &times;, &divide; to make 24. With the numbers 4, 9, 10, and 13, a linear chain commits to one arithmetic path &mdash; say it starts with 13 &minus; 9 = 4 &mdash; and rides that decision to the end. If that opening was a poor one, the chain still produces an answer, just a wrong one. Tree-of-thought instead does this:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Decompose into steps with branch points</h4>
+        <p>The system breaks the problem into intermediate steps where multiple choices exist. For Game of 24, each step is "pick two numbers and an operation." At the first step there are many possible first moves: 13 &minus; 9, 10 + 4, 9 &times; 4, and so on. Each becomes a <em>branch</em> &mdash; a separate candidate line of reasoning, exactly like the grandmaster's "if I push the pawn&hellip; or if I castle&hellip;"</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Generate several thoughts per branch (explore)</h4>
+        <p>Rather than committing to one first move, the model generates several candidate next-steps in parallel. This is the <strong>explore</strong> phase. Where a chain produces one thought, the tree produces a fan of them. The grandmaster does not consider one reply; she considers the three or four that matter.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Evaluate each partial state (evaluate)</h4>
+        <p>Here is the move that makes tree-of-thought work: the model judges its own partial progress before going further. It asks, of each branch, "could this still reach 24?" A branch that has used 13 &minus; 9 = 4 and now holds {4, 10, 4} is rated "promising." A branch that has painted itself into {1, 1, 25} is rated "impossible." This self-evaluation &mdash; the model scoring its own intermediate states &mdash; is what a plain chain never does.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Backtrack from dead ends (backtrack)</h4>
+        <p>When a branch is rated impossible or stuck, the system abandons it and returns to a higher node to try a different child &mdash; it <strong>backtracks</strong>. This is the grandmaster recoiling from a losing line and reaching for a better one. A linear chain has no backtrack: once committed, it cannot unwind. The tree treats a dead end as information, not a death sentence.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Search the tree to the answer</h4>
+        <p>By repeating explore &rarr; evaluate &rarr; backtrack, the system performs a guided search &mdash; breadth-first or depth-first, keeping the best branches alive and pruning the rest. For 4, 9, 10, 13 the surviving line is (10 &minus; 4) &times; (13 &minus; 9) = 6 &times; 4 = 24. Yao et al. reported that on Game of 24, GPT-4 with chain-of-thought solved roughly 4% of puzzles, while the same model wrapped in tree-of-thought solved about 74%. Same underlying model; the structure around it did the work.</p>
+      </div>
+    </div>
+
+    <p>Notice what tree-of-thought borrows. The explore-evaluate-backtrack loop is classic search, the kind that has powered chess engines and route planners for decades. What is new is that the candidate generator and the position evaluator are both the language model itself, prompted to play those roles. The model proposes the moves and the model grades them. That is why the analogy to the grandmaster is exact rather than loose: she is the move-generator and the position-judge in one head, and so is a tree-of-thought system.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Linear chain-of-thought on the left versus a branching tree-of-thought with evaluation and backtracking on the right.">
+        <text x="150" y="28" text-anchor="middle" fill="#8892a4" font-size="15" font-weight="600">Chain-of-Thought (one line)</text>
+        <text x="510" y="28" text-anchor="middle" fill="#8892a4" font-size="15" font-weight="600">Tree-of-Thought (search)</text>
+
+        <line x1="150" y1="60" x2="150" y2="90" stroke="#5a6375" stroke-width="2"/>
+        <line x1="150" y1="120" x2="150" y2="150" stroke="#5a6375" stroke-width="2"/>
+        <line x1="150" y1="180" x2="150" y2="210" stroke="#5a6375" stroke-width="2"/>
+        <line x1="150" y1="240" x2="150" y2="270" stroke="#5a6375" stroke-width="2"/>
+        <rect x="105" y="42" width="90" height="22" rx="6" fill="#161c30" stroke="#60a5fa"/>
+        <text x="150" y="58" text-anchor="middle" fill="#e2e8f0" font-size="12">Step 1</text>
+        <rect x="105" y="98" width="90" height="22" rx="6" fill="#161c30" stroke="#f87171"/>
+        <text x="150" y="114" text-anchor="middle" fill="#e2e8f0" font-size="12">Step 2 (wrong)</text>
+        <rect x="105" y="158" width="90" height="22" rx="6" fill="#161c30" stroke="#5a6375"/>
+        <text x="150" y="174" text-anchor="middle" fill="#e2e8f0" font-size="12">Step 3</text>
+        <rect x="92" y="218" width="116" height="22" rx="6" fill="#161c30" stroke="#f87171"/>
+        <text x="150" y="234" text-anchor="middle" fill="#f87171" font-size="12">Wrong answer</text>
+        <text x="150" y="300" text-anchor="middle" fill="#8892a4" font-size="11">no fork, no eraser</text>
+
+        <rect x="475" y="46" width="70" height="24" rx="6" fill="#161c30" stroke="#00e5ff"/>
+        <text x="510" y="63" text-anchor="middle" fill="#e2e8f0" font-size="12">Start</text>
+        <line x1="510" y1="70" x2="430" y2="110" stroke="#5a6375" stroke-width="2"/>
+        <line x1="510" y1="70" x2="510" y2="110" stroke="#5a6375" stroke-width="2"/>
+        <line x1="510" y1="70" x2="600" y2="110" stroke="#34d399" stroke-width="2.5"/>
+        <rect x="395" y="112" width="70" height="24" rx="6" fill="#161c30" stroke="#f87171"/>
+        <text x="430" y="129" text-anchor="middle" fill="#f87171" font-size="11">&#10007; dead</text>
+        <rect x="475" y="112" width="70" height="24" rx="6" fill="#161c30" stroke="#fbbf24"/>
+        <text x="510" y="129" text-anchor="middle" fill="#fbbf24" font-size="11">stuck</text>
+        <rect x="565" y="112" width="74" height="24" rx="6" fill="#161c30" stroke="#34d399"/>
+        <text x="602" y="129" text-anchor="middle" fill="#34d399" font-size="11">promising</text>
+        <line x1="602" y1="136" x2="560" y2="180" stroke="#5a6375" stroke-width="2"/>
+        <line x1="602" y1="136" x2="650" y2="180" stroke="#34d399" stroke-width="2.5"/>
+        <rect x="525" y="182" width="70" height="24" rx="6" fill="#161c30" stroke="#f87171"/>
+        <text x="560" y="199" text-anchor="middle" fill="#f87171" font-size="11">&#10007; dead</text>
+        <rect x="615" y="182" width="74" height="24" rx="6" fill="#161c30" stroke="#34d399"/>
+        <text x="652" y="199" text-anchor="middle" fill="#34d399" font-size="11">24 &#10003;</text>
+        <text x="510" y="300" text-anchor="middle" fill="#8892a4" font-size="11">evaluate &amp; prune; backtrack from dead ends</text>
+      </svg>
+      <p class="diagram-caption">Left: a single chain inherits any early mistake all the way to the answer. Right: the tree generates several thoughts per step, scores each partial state, prunes the dead branches (red), and follows the promising one (green) to the solution.</p>
+    </div>
+
+    <p>So the answer to the first verification question is now sharp. <strong>Chain-of-thought is a single path; tree-of-thought is a search over many paths.</strong> CoT writes one sequence of steps and lives with it. ToT spawns multiple candidate steps, evaluates partial progress, keeps the good branches, and backtracks out of the bad ones. CoT is the player who plays the first decent move; ToT is the grandmaster who reads several lines deep before committing.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">What is the single capability that tree-of-thought has and a plain chain-of-thought fundamentally lacks?</div>
+      <button class="quiz-option" data-letter="A">It uses a larger model with more parameters.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">It can evaluate partial solutions and backtrack &mdash; abandoning a branch that is going nowhere and trying a different one.</button>
+      <button class="quiz-option" data-letter="C">It produces its answer in a single forward pass, so it is faster.</button>
+      <div class="quiz-feedback" data-correct="Right. The defining feature is search: ToT generates multiple candidate steps, scores each partial state, and backtracks from dead ends. A linear chain has one path and no way to unwind a bad early step." data-incorrect="Not quite. Tree-of-thought usually wraps the same model as the chain &mdash; and it is slower, not faster, because it explores many branches. Its real advantage is the ability to evaluate partial progress and backtrack."></button>
+    </div>
+
+    <h2>Reflection: the model grading its own work</h2>
+
+    <p>The second technique is <strong>reflection</strong> &mdash; the model reviewing its own output, articulating what went wrong, and using that critique to try again. Where tree-of-thought is search over the <em>solution space</em>, reflection is metacognition: thinking about one's own thinking. The cleanest formulation comes from Shinn et al. (2023), in a method they call Reflexion, and the idea is borrowed straight from how people learn.</p>
+
+    <p>Picture a consultant whose first client deck gets sent back with the note "your recommendation doesn't follow from your data." A junior consultant just resubmits a lightly edited version and hopes. A good consultant writes themselves a memo first: "The problem was I jumped to the recommendation without bridging from the analysis. Next time I add a 'so what' slide between the data and the ask." That self-written memo is the heart of reflection. The model, after a failed or low-quality attempt, generates a verbal self-critique in natural language &mdash; "my SQL query joined on the wrong key" or "I assumed the function was recursive when it isn't" &mdash; and that critique is fed back into the next attempt as added context. Shinn et al. call this <em>verbal reinforcement learning</em>: instead of updating the model's weights with a numeric reward (the slow, expensive kind of learning from <a href="g09-chain-of-thought.html">earlier</a> in this course's later modules), the model learns within a single session by writing lessons to itself in words.</p>
+
+    <p>The distinction between reflection and tree-of-thought is worth pinning down because they are easy to blur. Tree-of-thought evaluates <em>partial states inside one attempt</em> ("is this branch still viable?"). Reflection evaluates <em>a completed attempt</em> ("that whole answer was wrong &mdash; here's why, and here's what to change") and carries the lesson forward to the next full attempt. ToT prunes branches; reflection rewrites strategy. You can even stack them: run a tree-of-thought attempt, and if it fails, reflect on the failure and run another tree with the lesson in context.</p>
+
+    <h3>When reflection actually helps &mdash; and when it is theater</h3>
+
+    <p>This is the second verification question, and it deserves an honest answer rather than a sales pitch, because the research here is genuinely mixed. Reflection is not free money. It adds at least one extra full pass &mdash; generate, critique, regenerate &mdash; which means more latency and more tokens for every problem you apply it to. The decisive question is whether the model can <em>tell</em> that its answer was wrong. Reflection only helps when the model has a reliable signal about the quality of its output. The pattern is:</p>
+
+    <ul>
+      <li><strong>Reflection helps when there is an external or verifiable signal.</strong> If the code throws an error, the unit test fails, the math doesn't check out, or a tool returns "no results," the model has a real foothold for a useful critique. Shinn et al. saw large gains on coding and decision-making tasks precisely because those tasks <em>give feedback</em> &mdash; the program either runs or it doesn't. The error message is the ground truth the reflection latches onto.</li>
+      <li><strong>Reflection is often just latency when the model has no way to know it was wrong.</strong> On open-ended questions where the model is already confident but mistaken, asking it to "review your answer" frequently produces a confident re-endorsement of the same error, or worse, talks it out of a correct answer. Later work (for example, Huang et al., 2023, on the limits of self-correction) found that without an external signal, models often cannot reliably tell good answers from bad ones &mdash; so self-review can leave accuracy flat or even degrade it. The model that hallucinated a fact, as you will see in <a href="g33-hallucination.html">G33 &mdash; Hallucination</a>, has no internal alarm telling it the fact was invented; asking it to reflect on a confabulation can simply yield a fluent defense of the confabulation.</li>
+    </ul>
+
+    <p>So the rule of thumb is concrete: reflection is genuinely useful when you can hand the model a checkable verdict on its last attempt (a failing test, a runtime exception, a tool result, a rubric it can apply objectively). It is mostly added latency when the only judge of correctness is the same model that produced the answer and there is no independent signal to anchor the critique. Build the loop around the feedback source, not around the hope that the model will catch its own blind spots.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Reflection as Theater</div>
+        <p>"Here's my answer to a subjective essay question. Now let me review it. &hellip; Yes, on reflection, my answer is excellent and complete." No external signal, nothing learned, two passes of cost for one pass of value &mdash; sometimes worse, if the review talks a correct answer into a wrong one.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Reflection That Works</div>
+        <p>"My code failed: <code>KeyError: 'user_id'</code>. The error tells me I referenced a column that doesn't exist. Critique: I assumed the schema; I should check the actual keys. Next attempt: use <code>'uid'</code>." A concrete, verifiable signal anchors a critique that genuinely improves the next try.</p>
+      </div>
+    </div>
+
+    <h2>Self-correction: error repair without an infinite loop</h2>
+
+    <p>The third technique, <strong>self-correction</strong>, is the operational cousin of reflection. Reflection is the model writing a critique; self-correction is the running loop that takes a critique, applies a fix, checks again, and repeats &mdash; the closed cycle of detect, diagnose, repair, re-verify. It is what turns a one-shot critique into an iterative repair process, the way a developer runs code, reads the error, edits, and reruns until the tests pass.</p>
+
+    <p>This brings us to the third verification question, which is the one that bites you in production: <strong>how do you implement a self-correction loop without infinite recursion?</strong> A naive loop &mdash; "if the answer is wrong, fix it and try again" &mdash; can spin forever, ping-ponging between two flawed answers or burning unbounded tokens on a problem it will never solve. The model that cannot solve a task does not become able to by being asked to retry indefinitely. So a well-engineered self-correction loop is defined as much by its <em>stopping conditions</em> as by its repair logic. Build in at least these guards:</p>
+
+    <ol>
+      <li><strong>A hard iteration cap.</strong> Set a maximum number of correction rounds (often just two or three). This single ceiling is what mathematically guarantees termination &mdash; the loop cannot run longer than the cap, regardless of what the model does inside it.</li>
+      <li><strong>An objective success check, not the model's own say-so.</strong> The exit condition for "we're done" should be an external verifier wherever one exists: tests pass, the code compiles, the output validates against a schema, the tool returns success. Stopping when the <em>model</em> declares victory is the trap, because a confident-but-wrong model will declare victory immediately.</li>
+      <li><strong>A no-progress detector.</strong> If two consecutive attempts produce the same answer, or the same error, the loop is stuck &mdash; stop early. Burning three more rounds on an unchanging output is pure waste.</li>
+      <li><strong>A graceful give-up.</strong> When the cap is hit without success, return the best attempt so far and flag it as unverified, or escalate to a human or a stronger model. "I could not solve this within the budget" is a valid, honest terminal state. Pretending otherwise is how you ship a confident wrong answer.</li>
+    </ol>
+
+    <p>Put plainly: bound the loop with a counter, gate the loop with an external check, and detect when it is going in circles. Those three together let a self-correction loop get the genuine benefit of iterative repair &mdash; fixing the bug the test caught &mdash; without the failure mode of grinding forever on a problem it cannot solve.</p>
+
+    <p>Step back and the three techniques line up as a clean progression of where the model is allowed to act. Tree-of-thought intervenes <em>during</em> reasoning, choosing among branches. Reflection intervenes <em>after</em> an attempt, critiquing the whole. Self-correction wraps reflection in a bounded, verifier-gated <em>loop</em> so the critique actually drives repair without running away. None of them changes a single weight in the model. They are all arrangements of prompting and control flow built <em>around</em> the same fixed model &mdash; which is precisely why they are so powerful for agent design: you can get dramatically better reasoning from a model you cannot retrain, just by changing how you orchestrate its calls. The natural next question is whether the model can do some of this branching and checking <em>internally</em>, inside its own thinking, rather than through external orchestration &mdash; and that is exactly the subject of <a href="g17-extended-thinking.html">G17 &mdash; Extended Thinking</a>, where the model is given a private compute budget to deliberate before it answers.</p>
+
+    <p>One honest caveat, in keeping with this course's refusal to oversell. The headline numbers &mdash; 4% to 74% on Game of 24 &mdash; are real but task-specific. These techniques shine on problems with clear intermediate structure and checkable steps (puzzles, code, math, planning). On fuzzy, open-ended tasks where partial states are hard to score and answers are hard to verify, the gains shrink and can vanish, because the evaluation step &mdash; the thing that makes all three techniques work &mdash; is only as good as the signal it has to judge by. The capability is genuine; whether it pays off is an engineering judgment, not a guarantee.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Tree-of-thought, reflection, and self-correction are not three flavors of the same trick &mdash; they are three distinct interventions: search <em>during</em> reasoning (branch and backtrack), metacognition <em>after</em> an attempt (critique and learn in words), and a bounded repair <em>loop</em> (detect, fix, re-verify, stop). All three are orchestration built around an unchanged model, and all three rise or fall on one thing: the quality of the signal the model uses to evaluate its own work. Give it a checkable verdict and these techniques transform performance; give it only its own confidence and they often add latency without accuracy.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Tree-of-thought and reflection cost extra compute per query. When does search-style reasoning's latency/token cost outweigh just calling a larger model once &mdash; and how would you measure that crossover?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the Game of 24 results and the explore-evaluate-backtrack framing are from Yao et al. (2023), "Tree of Thoughts: Deliberate Problem Solving with Large Language Models" (NeurIPS); the verbal-self-critique loop is from Shinn et al. (2023), "Reflexion: Language Agents with Verbal Reinforcement Learning" (NeurIPS). The cautionary findings on unaided self-correction draw on Huang et al. (2023), "Large Language Models Cannot Self-Correct Reasoning Yet."</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

@@ -59,10 +59,109 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Sit a jazz pianist down at a keyboard and call out a chord progression they have never played in that exact order. They don't freeze. They don't reach for a memorized recording. Their hands find a line over those chords because, somewhere in years of practice, they learned the <em>parts</em> &mdash; how a ii&ndash;V&ndash;I resolves, what notes sit inside a dominant seventh, how to voice-lead from one chord to the next &mdash; and improvising is just recombining those parts in a sequence the world has never heard. A jukebox does the opposite. It can play ten thousand songs flawlessly and not one note more. Ask it for a tune it doesn't have, and you get silence.</p>
+
+    <p>That gap &mdash; between recombining learned pieces and playing back stored ones &mdash; is the whole subject of this page. The skeptic's hardest question is not "does it know facts" but "if it just predicts the next word, how does it solve a problem it has never seen?" The answer is <strong>compositional generalization</strong>: the ability to combine learned sub-patterns to produce correct behavior on inputs that never appeared in training. It is the jazz pianist's trick, run at the scale of language. And like everything in this course, it comes with an honest counterweight &mdash; there are progressions even a great improviser stumbles on, and we will look hard at exactly where the model's improvisation breaks down.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: in <a href="g03-in-context-learning.html">G3</a> you saw a model solve a task format from three examples in the prompt &mdash; with no weight updates. What capability made that possible?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It was <a href="g03-in-context-learning.html">in-context learning</a> &mdash; but in-context learning is itself a special case of the thing this page is about. To infer a rule from three examples and apply it to a fourth, the model has to <em>decompose</em> the examples into a reusable operation and then <em>recompose</em> that operation onto new input. Compositional generalization is the underlying machinery; in-context learning is one place you watch it run. The <a href="g02-attention.html">attention mechanism</a> from G2 is what physically routes the relevant pieces together so they can be combined.</p>
+      </div>
     </div>
+
+    <h2>Retrieval versus composition: the core distinction</h2>
+
+    <p>Start with the difference that the first verification question turns on, because everything else hangs off it. <strong>Retrieval</strong> means looking up a stored answer. The question matches something the system has seen, and it returns the associated result &mdash; like a paralegal pulling a precedent from a filing cabinet that already contains it. <strong>Composition</strong> means building an answer that was never stored, by assembling smaller learned operations in a new arrangement &mdash; like a consultant who has never worked in your exact industry but combines a pricing framework, a market-sizing technique, and a competitive-analysis method to produce a recommendation tailored to a company that didn't exist when she learned those methods.</p>
+
+    <p>The reason this distinction is the entire ballgame: retrieval has a hard ceiling at the boundary of what was stored, and composition does not. A jukebox's repertoire is exactly its catalog. A pianist's repertoire is every progression the underlying parts can be arranged into &mdash; a combinatorially larger space than anything that fit on the practice-room shelf. If language models were pure retrieval engines, their competence would stop precisely at the edge of their training data. The fact that it manifestly does not stop there &mdash; that models handle sentences, problems, and combinations no human ever wrote down &mdash; is the empirical signature that something compositional is happening inside.</p>
+
+    <p>Hold onto one caution, though, because it matters for the honest version of this argument. The line between "stored" and "composed" is blurrier than the jukebox metaphor suggests. Training corpora are so vast that a sentence which feels novel to you may have a near-twin somewhere in the data, and a model can interpolate between stored points in ways that look like composition but are closer to clever lookup. Demonstrating <em>genuine</em> composition therefore requires testing on inputs that provably could not have been memorized &mdash; which is exactly what the foundational research did.</p>
+
+    <h2>The SCAN experiment: testing composition under a microscope</h2>
+
+    <p>The cleanest demonstration of what composition is &mdash; and where it fails &mdash; comes from Lake &amp; Baroni (2018), who built a tiny artificial language called SCAN specifically to isolate the question. SCAN maps simple commands to action sequences. "jump" produces JUMP. "walk" produces WALK. "jump twice" produces JUMP JUMP. "walk left" produces a turn-then-walk sequence. The vocabulary is small and the grammar is fully known, which is the point: the researchers control exactly what the model has and hasn't seen, so there is nowhere for memorization to hide.</p>
+
+    <p>The genius of the setup is the test split. They train the model on every primitive and most combinations &mdash; but they <em>hold out</em> certain compositions entirely. The classic version: the model sees the word "jump" alone during training, and it sees "run twice," "walk twice," "look twice" &mdash; but it never once sees "jump twice." A human who knows what "jump" means and what "twice" does will produce JUMP JUMP without hesitation. The composition is obvious. So the question is sharp and fair: has the model learned "jump" and "twice" as <em>independent, recombinable parts</em>, or only as fixed phrases it can replay?</p>
+
+    <p>Lake &amp; Baroni found that the recurrent sequence-to-sequence networks of the day failed dramatically &mdash; accuracy on the held-out "jump twice"&ndash;style compositions collapsed toward zero even as the same models scored near-perfectly on combinations they had seen. The title of their paper is the verdict: "Generalization Without Systematicity." The networks generalized in the loose sense &mdash; they handled variation &mdash; but they lacked <em>systematic</em> compositionality, the human ability to treat "jump" and "twice" as a verb and an operator that snap together regardless of whether you've watched them snap together before. This was a foundational and sobering result. It said: do not assume composition just because the outputs look fluent. Test for it, adversarially, on held-out combinations.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Jukebox (Retrieval)</div>
+        <p>Asked for "jump twice," it searches its catalog for that exact phrase. It saw "run twice" and "walk twice" in training, but never "jump twice" &mdash; so there's no record to return. It either emits nothing useful or pattern-matches to the nearest stored phrase. Its competence ends at the boundary of what it was given.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Jazz Musician (Composition)</div>
+        <p>Asked for "jump twice," it pulls the learned <em>part</em> for "jump" (the action JUMP) and the learned <em>operator</em> for "twice" (repeat the preceding action), then snaps them together to produce JUMP JUMP &mdash; an output it was never shown. The parts are independent, so they recombine freely. This is the behavior that exceeds the training boundary.</p>
+      </div>
+    </div>
+
+    <p>Why does this matter beyond a toy language? Because SCAN is the controlled-lab version of what you want a model to do constantly in the wild. Every genuinely new request you type is a held-out combination &mdash; a "jump twice" the model was never explicitly trained on. The Lake &amp; Baroni result is the reason we cannot wave our hands and <em>assume</em> models compose; it forces us to ask, for any impressive output, "is this a recombined part, or a replayed phrase?"</p>
+
+    <h2>How a model answers about a country it has never seen</h2>
+
+    <p>The second verification question makes this concrete. Suppose you invent a country &mdash; call it Veldoria &mdash; and tell the model, in the prompt, that Veldoria is a small mountainous nation whose economy depends on exporting copper. Then you ask: "If global copper prices crash, what happens to Veldoria's economy?" The model has never seen Veldoria. It cannot retrieve an answer about it, because no answer exists to retrieve. Yet it will reason: a country dependent on a single export is vulnerable to that commodity's price; a crash means falling export revenue; falling revenue means a weaker currency, pressure on the trade balance, possible recession. It produces a sensible, specific answer about a place that does not exist.</p>
+
+    <p>What happened? The model composed. It holds a learned, portable understanding of "small economy," "single-commodity dependence," "price shock," and "balance of trade" &mdash; each one a part abstracted from thousands of real examples (Chile and copper, Saudi Arabia and oil, Ghana and cocoa). It binds the new facts about Veldoria into those slots using the <a href="g02-attention.html">attention mechanism</a>, and runs the recombined structure forward. This is analogical reasoning: <em>this new case is like the structural pattern of these old cases, so the same machinery applies.</em> The jukebox cannot do this at all &mdash; there is no Veldoria track to play. The pianist does it without thinking, because copper-exporting-mountain-nation is just a new progression over chords it already owns.</p>
+
+    <p>Notice that this is the direct, mechanistic answer to "how does a next-word guesser solve novel problems?" It doesn't guess in the dice-rolling sense. It generalizes by composition: it has learned operations general enough to apply to inputs it never saw, and the prediction objective rewarded exactly that, because <a href="../module-2/g05-emergence.html">composing reusable parts</a> is a far more compact way to lower prediction error across a giant, varied corpus than memorizing every sentence individually. Storage doesn't scale; composition does.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You make up a country, describe it only in the prompt, and the model reasons correctly about its economy. What does this most directly demonstrate?</div>
+      <button class="quiz-option" data-letter="A">The country must have appeared somewhere in the model's training data after all.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model composed a new answer by binding the prompt's facts into general, reusable economic patterns &mdash; it could not have retrieved an answer that doesn't exist.</button>
+      <button class="quiz-option" data-letter="C">The model is matching the question to the single most similar sentence in its training set and copying that sentence.</button>
+      <div class="quiz-feedback" data-correct="Right. Because the country is invented, there is no stored answer to retrieve. A correct, specific response can only come from composing learned operations (single-commodity dependence, price shock, trade balance) onto the new facts &mdash; analogical reasoning, not lookup." data-incorrect="Reconsider what 'retrieval' requires: a stored answer to look up. The country is invented, so no such answer exists in training. The only way to produce a sensible response is to compose general patterns onto the new facts."></div>
+    </div>
+
+    <h2>Where composition breaks down: the Faith and Fate result</h2>
+
+    <p>Now the honest part, and it is essential &mdash; the third verification question, and the reason this page does not oversell. Composition in transformers is real but <em>partial</em>. The sharpest evidence for its limits comes from Dziri et al. (2023), "Faith and Fate: Limits of Transformers on Compositionality," which set out specifically to find where the improvisation falls apart.</p>
+
+    <p>Their method was to take problems that are unambiguously compositional &mdash; multi-digit multiplication, a logic puzzle (Einstein's puzzle), and a dynamic-programming task &mdash; and represent each as a <strong>computation graph</strong>: a tree of small, individually trivial operations that must be chained in the right order to reach the answer. Multiplying two three-digit numbers, for instance, is a fixed sequence of single-digit multiplies and carries. Each step is easy. The difficulty is entirely in the <em>depth and width</em> of the chain. This let them measure something precise: not "can the model multiply" but "how does accuracy change as the required composition gets deeper?"</p>
+
+    <p>The finding was stark and consistent. Models did well on shallow problems &mdash; small numbers, few steps &mdash; and then accuracy fell off a cliff as compositional depth increased. Two-digit by two-digit multiplication: often fine. Push toward four-by-four or five-by-five, where the dependency chain is long, and performance degraded sharply, even for very capable models. Critically, the failures were not random. The authors found that the models were leaning on <em>memorized subpatterns and partial pattern-matching</em> rather than executing the full multi-step procedure faithfully. Where a chain was shallow enough that a shortcut existed, the model took the shortcut. Where genuine deep composition was unavoidable &mdash; many dependent steps with no shortcut &mdash; it broke.</p>
+
+    <p>The phrase to hold onto is the paper's own framing. The model often has the right <em>faith</em> &mdash; it can produce the early steps and looks like it's reasoning &mdash; but its <em>fate</em> on deep problems is to fail, because it is approximating the computation with shallow pattern-matching rather than running the algorithm to completion. This is the cricket equivalent of a batsman with beautiful technique against the first few balls of a spell who falls apart when the bowler sustains real pressure over a long over. Looks like mastery early; reveals its limit under depth.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Shallow composition: the model usually succeeds</h4>
+        <p>A two-step problem &mdash; say, a small multiplication with one carry &mdash; sits within the model's reliable range. The dependency chain is short enough that learned subpatterns cover it, so the output is correct. This is the "looks like full reasoning" zone, and it is where casual users form an inflated impression.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Deep composition: accuracy collapses</h4>
+        <p>Stack many dependent steps &mdash; a five-by-five multiplication, a long logic chain &mdash; and the probability of getting <em>every</em> step right, in order, with correct intermediate state, drops fast. Dziri et al. showed this collapse is steep and predictable from the depth of the computation graph, not from how "hard" the problem feels to a human.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>The diagnosis: shortcuts, not full execution</h4>
+        <p>When the researchers inspected failures, the models weren't running the algorithm and slipping on one step. They were pattern-matching to partial subproblems &mdash; using memorized fragments to approximate the answer. Composition was present but bounded: it works until the required depth exceeds what shallow fragments can fake.</p>
+      </div>
+    </div>
+
+    <p>So the honest statement of where composition breaks down is this: transformers compose reliably at shallow depth and degrade as the dependency chain lengthens, because the architecture (a fixed number of forward-pass layers, no native loop) approximates multi-step computation with learned pattern-matching rather than guaranteed step-by-step execution. They are systematic enough to handle "jump twice" and reason about invented countries, and <em>not</em> systematic enough to multiply large numbers flawlessly by composition alone. Both halves are true. A course that only told you the first half would be selling you the jazz solo and hiding the bum notes.</p>
+
+    <h2>Why this strengthens, rather than weakens, the intelligence claim</h2>
+
+    <p>It would be easy to read the Dziri result as a gotcha &mdash; "see, it can't really compose, it's faking." That reading is too cheap, and it cuts the wrong way. Humans have almost exactly this profile. You can compose effortlessly in language and analogy, and you cannot multiply two five-digit numbers in your head &mdash; you reach for a procedure on paper, or a calculator. The presence of a compositional-depth limit is not evidence that there is no composition. It is evidence that the composition is <em>bounded by working capacity</em>, which is the same shape of limit human cognition has.</p>
+
+    <p>This is also precisely why the field built the next layer of techniques. If the architecture can't hold a deep computation in one forward pass, give it a place to externalize the intermediate steps &mdash; that is <a href="g09-chain-of-thought.html">chain-of-thought</a>, which turns an internal deep composition into a sequence of shallow visible ones the model <em>can</em> reliably execute. Push further with search, reflection, and self-correction, and you get the strategies in <a href="g16-advanced-reasoning.html">G16 &mdash; Advanced Reasoning</a>. And the same generative-compositional machinery that produces correct novel answers is, when its parts are bound to the wrong facts, exactly what produces confident wrong ones &mdash; the failure mode you'll examine next in <a href="g33-hallucination.html">G33 &mdash; Hallucination</a>. Composition is the engine; chain-of-thought, tools, and reasoning loops are the scaffolding that extends its reach; hallucination is what happens when the engine recombines parts into a fluent answer that isn't true.</p>
+
+    <p>That last point opens onto the genuinely unresolved question, and it is worth stating plainly because researchers do not agree on it. When chain-of-thought or an external tool rescues a deep multiplication the bare model fails, what have we shown? One reading: the model has the compositional ability and merely needed a scratchpad to express it &mdash; the same way a person who "can't" do long division in their head can absolutely do it on paper. A skeptical reading: the model lacks the ability and the scaffolding is doing the real work, the way a calculator does arithmetic its operator cannot. Telling these apart is hard, and the evidence is still being argued over.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Compositional generalization is the mechanistic answer to "how does a next-word predictor solve novel problems": it learns reusable parts &mdash; operations, relations, operators &mdash; and recombines them onto inputs it never saw, the way a jazz musician improvises over chords rather than replaying stored songs. This is genuinely more than retrieval, and it is genuinely bounded: Dziri et al. (2023) showed transformers compose well at shallow depth and degrade sharply as the dependency chain lengthens, because they approximate deep computation with pattern-matching. Both facts are load-bearing &mdash; the composition is real, and so is its ceiling.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Dziri et al. found transformers fail on deep compositional tasks. If chain-of-thought and tools paper over some failures, is that genuine ability or external scaffolding &mdash; and how would you design a test to tell them apart?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the SCAN benchmark and the "jump"/"twice" held-out compositions are from Lake &amp; Baroni (2018), "Generalization Without Systematicity," ICML. The depth-collapse and computation-graph analysis are from Dziri et al. (2023), "Faith and Fate: Limits of Transformers on Compositionality," NeurIPS. The "Veldoria" country is an illustrative example, not from either paper.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

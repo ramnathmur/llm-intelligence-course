@@ -60,10 +60,132 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Old maps had a habit of running out of certainty. Cartographers would draw the coastline they had sailed, the rivers they had rowed, the mountains they had crossed &mdash; and then, at the edge of what anyone had actually seen, they wrote <em>here be dragons</em>. Not because there were dragons. Because there was nothing yet to draw, and an honest mapmaker would rather mark the gap than fake the interior. The territory was real. The map simply stopped where the knowledge stopped.</p>
+
+    <p>You have now sailed most of this coastline. You started thirty-one pages ago with a skeptic's one-liner &mdash; "it's just a supercharged next-word guesser" &mdash; and you have crossed tokenization, the training objective, attention, in-context learning, chain-of-thought, alignment, agency, interpretability, and the deep philosophical questions about meaning and mind. This last page is the edge of the map. It does two things. First, it draws the parts that are now solid coastline &mdash; the things the field genuinely knows. Then it marks, honestly, the four big patches where we still write <em>here be dragons</em>: whether scaling keeps paying off, whether the models build real world models, whether alignment keeps pace with capability, and where the transformer architecture finally hits its wall. And at the very end, it gives you the thing this whole course was built to deliver: the 60-second answer.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: before the big questions &mdash; what does it actually mean to say a model has a &quot;world model,&quot; and why would that settle the guesser debate?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>A world model is an internal representation of how the situation being described actually works &mdash; not just which words tend to co-occur, but the underlying structure those words point at. As you saw in <a href="../module-6/g34-world-models.html">G34 &mdash; Internal World Models</a>, researchers have trained models on the moves of a board game and then found a representation of the board itself inside the network, even though the model was only ever shown move notation. If LLMs build that kind of structure, the "guesser" framing collapses, because a guesser tracks surface patterns while a world-modeler tracks the thing the patterns are about. That is exactly why "do they have genuine world models?" is one of the four live frontier questions &mdash; the evidence points one way, but it isn't yet airtight.</p>
+      </div>
     </div>
+
+    <h2>The solid coastline: what the field actually knows</h2>
+
+    <p>Before the open questions, plant a flag on the firm ground, because uncertainty is only honest if you're equally honest about what is settled. A surprising amount is.</p>
+
+    <p>We know the training objective is simple and what it demands is not &mdash; predicting the next token over all of human writing forces a model to encode grammar, facts, arithmetic procedures, and even a working theory of mind, as you established back in <a href="../module-1/g12-training-objective.html">G12 &mdash; The Training Objective</a>. We know capability grows predictably with scale along smooth, measurable curves &mdash; the scaling laws of <a href="../module-2/g04-scaling-laws.html">G4</a> are among the most reliable empirical findings in modern machine learning. We know that some abilities appear that smaller models simply do not have (<a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>), even if the field now argues about how sharp that appearance really is. We know the models do real computation in their forward pass and in their chains of thought, not mere retrieval (<a href="../module-3/g09-chain-of-thought.html">G9</a>). And from interpretability we know there is genuine internal structure to find &mdash; features, circuits, and representations that can be located and even edited (<a href="../module-6/g26-mechanistic-interpretability.html">G26 &mdash; Mechanistic Interpretability</a>).</p>
+
+    <p>That is not a small list. It is enough to retire the strong form of the skeptic's claim outright. Whatever an LLM is, it is demonstrably <em>not</em> a lookup table dressed up as a chatbot. The debate worth having is no longer "is there any intelligence here?" &mdash; that ship has sailed &mdash; but "what kind of intelligence, how far does it go, and what happens next?" Those are the four dragons.</p>
+
+    <h2>Dragon one: will scaling keep producing new capabilities?</h2>
+
+    <p>For most of the last decade, the recipe worked with almost embarrassing reliability: add more parameters, more data, and more compute, and the model got better &mdash; not just at the things you measured, but at things nobody had specifically trained for. The question now splitting the field is whether that engine keeps running, or whether we are approaching the point where each additional ton of compute buys less and less.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Will scaling continue to produce new capabilities? (Open question &mdash; both cases laid out)</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p><strong>The case that it will:</strong> Every confident prediction that scaling had plateaued has so far been wrong. The scaling laws have held across many orders of magnitude, and there is no theoretical reason discovered yet that says they must stop. Frontier labs are still finding headroom by scaling not just pre-training but inference-time compute &mdash; letting a model think longer, as you saw in <a href="../module-3/g17-extended-thinking.html">G17 &mdash; Extended Thinking</a> &mdash; which opens a second scaling axis just as the first matures.</p>
+        <p><strong>The case that it won't:</strong> High-quality human text is a finite resource, and the largest models are already trained on a sizeable fraction of what exists (a constraint you met in <a href="../module-2/g14-pretraining-data.html">G14 &mdash; Pre-Training Data</a>). Scaling laws predict that loss keeps falling, but loss is not the same as capability &mdash; a model can get measurably better at prediction while the new abilities you actually care about arrive more slowly. And compute costs grow faster than the gains they buy, so even if the curve never flattens, economics might flatten it for us.</p>
+        <p><strong>Honest verdict:</strong> The evidence still favors "more is coming," but the field genuinely does not know whether the next decade looks like the last one or like a long, expensive plateau. Anyone who tells you they're certain is selling something.</p>
+      </div>
+    </div>
+
+    <h2>Dragon two: do LLMs build genuine world models?</h2>
+
+    <p>This is the dragon closest to the heart of this whole course. A guesser tracks correlations between symbols. A world-modeler builds an internal map of the thing the symbols describe and reasons over that map. The difference is the difference between a tourist who has memorized a phrasebook and one who actually speaks the language.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Do LLMs develop genuine internal world models, or sophisticated statistics? (Open question)</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p><strong>The case that they do:</strong> The cleanest evidence comes from controlled settings where the "world" is small enough to inspect. Train a model only on the move-sequences of a board game and you can recover the board state inside its activations; intervene on that internal state and the model's predictions change accordingly. That is a representation of the world, not of the word stream &mdash; the full argument lives in <a href="../module-6/g34-world-models.html">G34 &mdash; Internal World Models</a>. Compositional reasoning on novel inputs (<a href="../module-3/g06-compositional-generalization.html">G6</a>) points the same way.</p>
+        <p><strong>The case for caution:</strong> Most of the strong evidence is from toy domains. We have far less direct proof that a frontier model carries a coherent, consistent model of the messy real world rather than a patchwork of locally-good approximations that fray at the edges &mdash; which is one way to read the failure modes behind <a href="../module-3/g33-hallucination.html">G33 &mdash; Hallucination</a>. Researchers debate how complete and how robust these internal models are, and that debate is not close to settled.</p>
+        <p><strong>Honest verdict:</strong> The evidence strongly suggests something more structured than statistics is happening, but "genuine world model" is a high bar, and how fully today's models clear it remains open.</p>
+      </div>
+    </div>
+
+    <h2>Dragon three: will alignment scale with capability?</h2>
+
+    <p>The first two dragons are about how smart the models get. This one is about whether we can keep them pointed in the right direction as they do. It is the central worry in both this page's anchor texts &mdash; Anthropic's <em>Core Views on AI Safety</em> (Anthropic, 2025) and the multi-author <em>Science</em> paper on managing extreme AI risks (Bengio et al., 2024).</p>
+
+    <p>The structural problem is uncomfortable. The techniques that keep current models helpful and harmless &mdash; reinforcement learning from human feedback (<a href="../module-4/g18-rlhf.html">G18</a>) and its successors (<a href="../module-4/g19-beyond-rlhf.html">G19</a>) &mdash; lean on humans being able to evaluate the model's outputs. But part of the promise of scaling is models that can do things humans cannot easily check. When the student outpaces the teacher's ability to grade the homework, the feedback signal that keeps the model aligned starts to degrade. That is the heart of <a href="../module-4/g20-alignment.html">G20 &mdash; The Alignment Problem</a>, and it is why a model that is more capable is not automatically a model that is safer.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Will alignment techniques scale with capability? (Open question)</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p><strong>Reasons for optimism:</strong> Alignment research is improving fast, and some of the most promising directions use AI to help align AI &mdash; models that critique other models, scalable-oversight schemes, and interpretability tools that let us read internal state rather than only judging outputs (<a href="../module-6/g26-mechanistic-interpretability.html">G26</a>). If oversight can be made to scale alongside capability, the gap may stay manageable.</p>
+        <p><strong>Reasons for worry:</strong> Bengio et al. (2024) argue that capability is currently outrunning our ability to control and understand it, and that the gap could widen rather than close. Adversarial robustness remains unsolved &mdash; models can still be jailbroken and manipulated (<a href="../module-4/g21-adversarial.html">G21 &mdash; Adversarial Robustness</a>) &mdash; and an aligned-on-the-tests model is not the same as an aligned-in-the-wild one. As autonomy increases (<a href="../module-5/g25-autonomy-spectrum.html">G25 &mdash; The Autonomy Spectrum</a>), the cost of getting this wrong increases with it.</p>
+        <p><strong>Honest verdict:</strong> This is the open question with the highest stakes. It is also the one where confident reassurance and confident doom are both unjustified by the current evidence. Anthropic's stated position is essentially &quot;we don't know if this is hard or catastrophic, so we should act as if it might be&quot; &mdash; which is the rational posture under genuine uncertainty.</p>
+      </div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why is &quot;will alignment scale with capability?&quot; a structurally harder problem than &quot;will scaling keep working?&quot;</div>
+      <button class="quiz-option" data-letter="A">Because alignment requires more compute than pre-training does.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because our main alignment techniques depend on humans being able to evaluate outputs &mdash; and the whole point of more capable models is doing things humans can't easily check, so the feedback signal degrades exactly as the stakes rise.</button>
+      <button class="quiz-option" data-letter="C">Because alignment is a solved problem for small models, so it must be solved for large ones too.</button>
+      <div class="quiz-feedback" data-correct="Right. Scaling is a question about a curve that has held so far. Alignment is a moving target: the better the model gets, the harder it becomes for humans to supply the very feedback that keeps it aligned. The difficulty grows with the capability, which is what makes it structurally nastier." data-incorrect="Not quite. The compute cost isn't the core issue. The structural problem is that alignment leans on human evaluation, and more capable models do things humans can't easily evaluate &mdash; so the oversight signal weakens precisely when you need it most."></div>
+    </div>
+
+    <h2>Dragon four: where does the transformer architecture hit its wall?</h2>
+
+    <p>Every architecture has limits baked into its shape. The transformer &mdash; whose attention mechanism you dissected in <a href="../module-3/g02-attention.html">G2 &mdash; Transformer Attention</a> &mdash; has been astonishingly general, but it is not obviously the final word.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>What are the fundamental limits of the transformer architecture? (Open question)</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p><strong>Known pressure points:</strong> Standard attention costs grow quadratically with sequence length, which makes very long contexts expensive &mdash; an engineering problem researchers are actively chipping at, but a real one. There are also theoretical results suggesting a single forward pass can only implement a bounded class of computations, which is part of why letting a model reason step by step (<a href="../module-3/g09-chain-of-thought.html">G9</a>) and think longer at inference time (<a href="../module-3/g17-extended-thinking.html">G17</a>) extends what the same architecture can do. And there are stubborn failure modes &mdash; the limits of compositional generalization probed in <a href="../module-3/g06-compositional-generalization.html">G6</a> &mdash; that may reflect the architecture, the training, or both.</p>
+        <p><strong>The honest uncertainty:</strong> We do not know whether these are speed bumps or walls. Past predicted ceilings &mdash; &quot;transformers can't do real reasoning,&quot; &quot;they can't do math&quot; &mdash; have repeatedly fallen to a combination of scale, better training, and inference-time tricks rather than a new architecture. It is entirely possible the transformer carries us much further; it is also possible the next leap requires something we haven't invented yet. Both remain live.</p>
+      </div>
+    </div>
+
+    <h2>Holding the uncertainty without flinching</h2>
+
+    <p>Notice what links all four dragons. In each, the strong-skeptic position ("it'll plateau, it's just statistics, it can't be controlled, the architecture is a dead end") and the strong-hype position ("scaling is unlimited, it already has a complete world model, alignment is basically solved, transformers are the final answer") are <em>both</em> overconfident relative to what the evidence actually supports. The capstone skill this course has been building toward is the ability to sit in the honest middle: to say "here is what we know, here is what is debated, here is what nobody knows yet" without collapsing into either dismissal or breathless certainty. That is not fence-sitting. It is the only intellectually defensible position when the map genuinely runs out.</p>
+
+    <p>And it matters practically, not just philosophically. If you build agents, each dragon is a design assumption you are implicitly making. Bet that scaling continues and you'll architect for capabilities that may not arrive on schedule. Assume a complete world model and you'll trust the system in situations where its internal map frays. Assume alignment scales for free and you'll under-invest in oversight exactly where the stakes are highest. Reading the frontier honestly is how you avoid building on a coastline that turns out to be a cloud.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Two Ways To Get The Frontier Wrong</div>
+        <p>Dismissal: &quot;It's all hype, just fancy autocomplete, the wheels will come off any day now.&quot; This ignores the solid coastline &mdash; the measured capabilities, the internal structure, the predictable scaling that the evidence has already established beyond serious doubt.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Defensible Posture</div>
+        <p>Calibration: &quot;The core capability is real and measurable. Four big questions &mdash; continued scaling, genuine world models, alignment-with-capability, and architectural limits &mdash; remain genuinely open, and I hold each with the confidence the evidence warrants, no more.&quot;</p>
+      </div>
+    </div>
+
+    <h2>The 60-second answer</h2>
+
+    <p>This is what the entire course was built to let you say. Someone leans over at a dinner party and delivers the line: "Come on &mdash; LLMs are just supercharged next-word guessers." Here is the answer, calibrated and defensible, in under a minute.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>The 60-second answer to &quot;are LLMs just supercharged next-word guessers?&quot;</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>"Yes &mdash; and no. They <em>are</em> trained on next-word prediction; that part is literally true. But here's the catch: to predict the next word well across all of human writing, a model is forced to learn grammar, facts, arithmetic, cause and effect, and even a model of what other people are thinking &mdash; because actually understanding those things is the cheapest way to predict accurately. The objective is simple; what it builds is not.</p>
+        <p>We can measure the result. These systems do real computation, not just lookup &mdash; they solve problems and resolve logic they could never have memorized. We can even open them up and find internal structure: features, circuits, and in controlled cases, genuine models of the situation being described, not just word statistics.</p>
+        <p>So the strong skeptic is wrong &mdash; this isn't a fancy autocomplete. But the hype is overblown too. There are four big open questions: whether scaling keeps paying off, whether the world models are genuine and robust, whether we can keep these systems aligned as they get more capable, and where the architecture finally hits a wall. The honest answer is that there's real, measurable intelligence here &mdash; a strange, non-human kind &mdash; and we're still mapping its edges. 'Just a guesser' isn't a description. It's a way of refusing to look."</p>
+      </div>
+    </div>
+
+    <p>That is the answer. Notice it does three things at once: it concedes the true part of the skeptic's claim, it deploys the strongest evidence against the false part, and it stays honest about the dragons. It neither dismisses nor hypes. If you can give that answer &mdash; and now you can &mdash; you have done what this course set out to do. You can hold the whole picture: the firm coastline and the unmapped interior, the measured intelligence and the genuine unknowns, without pretending either away.</p>
+
+    <p>The map is not finished. It never will be &mdash; the territory keeps growing faster than anyone can chart it. But you are no longer standing at the harbor reading someone else's one-liner. You have sailed the coastline yourself, and you know exactly where the known ends and the dragons begin. That is the difference between repeating an opinion and holding a view. It is the most any honest mapmaker can claim at the edge of explored territory.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The strong skeptic's claim &mdash; "just a next-word guesser" &mdash; is already settled, and it loses: the field knows, with evidence, that LLMs perform real computation, build internal structure, and learn far more than surface statistics to do next-token prediction well. The genuine frontier is four open questions &mdash; continued scaling, genuine world models, alignment scaling with capability, and transformer limits &mdash; and the capstone skill is holding each with calibrated confidence: neither the dismissal that ignores the coastline nor the hype that pretends the dragons aren't there.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Of scaling, world models, alignment-scaling, and transformer limits &mdash; which one, if resolved within two years, most changes how you build agents, and what early signal would flag that it is being resolved?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: this page's primary sources are Anthropic (2025), <em>Core Views on AI Safety</em>, which frames safety under deep uncertainty, and Bengio et al. (2024), &quot;Managing Extreme AI Risks Amid Rapid Progress,&quot; <em>Science</em>, which argues capability is outpacing oversight. The board-game world-model evidence referenced here is treated in full on <a href="../module-6/g34-world-models.html">G34 &mdash; Internal World Models</a>; the synthesis across this page draws on every prior gap in the course.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

@@ -59,10 +59,111 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Two students walk out of the same exam. One scored 95%, the other 85%. If all you have is the scoreboard, the 95% student looks better &mdash; obviously. But suppose the 95% student got hold of the answer key the night before and memorized it, while the 85% student actually worked the problems and got most of them right by understanding. Now flip the situation: a new exam, on a topic neither has seen, with no leaked key. Who do you bet on? The score told you almost nothing about that. It told you who matched the answer key on <em>this</em> test, which is a very different thing from who can solve <em>the next</em> problem.</p>
+
+    <p>That gap &mdash; between the number on the scoreboard and the capability the number is supposed to represent &mdash; is the entire subject of this page. When you read "this model scores 90% on MMLU," you are reading the 95% student's transcript without knowing whether they understood or memorized. Benchmarking is how the field tries to measure machine intelligence. It is indispensable, and it is constantly being fooled. By the end of this page you should be able to look at any AI capability claim and ask the one question that separates signal from theater: <em>show me the methodology, not just the score.</em></p>
+
+    <h2>Why we need benchmarks at all</h2>
+
+    <p>Start with why this even matters. Intelligence is not a single dial you can read off a gauge. A model can be brilliant at writing code and hopeless at arithmetic, fluent in five languages and unable to count the words in a sentence. "How smart is this model?" is not one question; it is hundreds. Benchmarks are the field's attempt to turn that fog into numbers you can compare across models and across time. Without them, every claim about progress would be an anecdote &mdash; "it feels smarter" &mdash; and you cannot run a science, or a procurement decision, on vibes.</p>
+
+    <p>A benchmark is just a fixed test: a frozen set of questions with known correct answers, scored the same way for every model. The most influential one in this course's era is <strong>MMLU</strong> &mdash; Massive Multitask Language Understanding (Hendrycks et al., 2021). MMLU is a battery of roughly 16,000 multiple-choice questions spanning 57 subjects, from elementary mathematics to professional law to clinical medicine to moral philosophy. The design goal was deliberate: a single test broad enough that no narrow trick could carry you, so a high score would have to reflect general knowledge rather than one memorized skill. Other staples fill in the gaps MMLU leaves: <strong>HumanEval</strong> for code generation (write a function, run it against hidden unit tests), <strong>GSM8K</strong> for grade-school math word problems, and <strong>ARC</strong> for grade-school science reasoning. Each one isolates a different facet of capability.</p>
+
+    <p>Here is the part that's easy to lose sight of: the score is never the thing you actually care about. Nobody runs a business on "we need a model that scores 90% on MMLU." What you care about is the underlying capability &mdash; can this model reason across domains it wasn't drilled on? The benchmark score is a <em>proxy</em> for that capability, a stand-in measurement. And the moment you start optimizing a proxy as if it were the real goal, you've stepped onto the rake that this whole page is about.</p>
+
+    <h2>Benchmark contamination: when the answer key leaks into the textbook</h2>
+
+    <p>Recall how these models are built. As you saw in <a href="../module-2/g14-pretraining-data.html">G14 &mdash; Pre-Training Data</a>, a frontier model is trained on a staggering sweep of the internet &mdash; web pages, forums, code repositories, digitized books, academic papers. That training corpus is so vast that nobody can fully audit what's inside it. And here's the problem: benchmarks are <em>published</em>. MMLU's questions live on the open web, in GitHub repositories, in papers, in blog posts that quote them, in Stack Overflow threads where people discuss the tricky ones. Which means that when the next model scrapes the internet for training data, there is a real chance it scoops up the benchmark questions &mdash; and their answers &mdash; right alongside everything else.</p>
+
+    <p>This is <strong>benchmark contamination</strong>: the test questions, or close paraphrases of them, end up inside the training data the model learned from. When that happens, the benchmark stops measuring reasoning and starts measuring memory. The model isn't solving the question at test time; it's recalling an answer it already saw. The score goes up, but the capability it's supposed to represent does not. It is precisely the 95% student who memorized the answer key &mdash; except the leak happened silently, at the scale of trillions of tokens, with no one deliberately cheating. The contamination is structural, a side effect of training on the same internet where the tests are posted.</p>
+
+    <p>How do you detect it? Researchers have a few tells. One is the <em>memorization gap</em>: give the model the benchmark questions it might have seen, then give it freshly written questions of identical difficulty that postdate its training cutoff. If it aces the old ones and stumbles on the new ones, you're looking at contamination, not comprehension. Another tell is <em>n-gram overlap</em> &mdash; literally searching the training corpus for verbatim strings from the test set. A third, sharper probe: rephrase a question so the answer is unchanged but the surface wording is new. A model that understands is unfazed; a model that memorized the exact phrasing can fall apart. None of these is perfect, which is exactly why a single headline score deserves your skepticism.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>If a model scores 90% on a public benchmark, why can&rsquo;t you conclude it&rsquo;s 90%-good at the underlying skill?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Because the score conflates two very different things: genuine capability and contamination. A public benchmark may have leaked into the model's training data, so part of that 90% could be recall of answers it already saw rather than fresh reasoning. You can't separate "understood" from "memorized" from the headline number alone &mdash; you need the methodology: was the test set checked against the training corpus? Were held-out, post-cutoff variants used? Was the question rephrased to defeat surface memorization? The number is a claim; the methodology is the evidence.</p>
+      </div>
     </div>
+
+    <h2>Goodhart&rsquo;s Law: when a measure becomes a target</h2>
+
+    <p>Contamination is the accidental failure. Goodhart's Law is the systematic one. The economist Charles Goodhart's observation, in its now-famous paraphrase, is this: <strong>"When a measure becomes a target, it ceases to be a good measure."</strong> The instant everyone agrees that a particular number defines success, people start optimizing the number directly &mdash; and the number drifts away from the real thing it was supposed to track.</p>
+
+    <p>You've watched this happen everywhere outside AI. A school is judged by its standardized test scores, so teachers start "teaching to the test" &mdash; drilling the specific question formats instead of the subject &mdash; and scores climb while actual learning flattens. A call center is measured by average call duration, so agents hang up on hard customers to keep their numbers down. A consultant is rated on slides produced, so you get fifty slides where five would do. In every case the measure was a reasonable proxy until it became the target. Then it got gamed.</p>
+
+    <p>LLM benchmarks live under exactly this pressure, and it is intense. Benchmark scores drive headlines, funding, leaderboard rankings, and customer decisions. So labs face enormous incentive to maximize them &mdash; and there are many ways to push a score up that have nothing to do with making the model genuinely smarter. You can fine-tune specifically on the benchmark's format until the model is a specialist in that exact question style. You can let contaminated data slip in. You can hill-climb: tweak and re-test against the public set over and over until you've quietly overfit to that particular collection of questions. Each move lifts the number. None of them necessarily lifts the capability the number was invented to track. The measure has become the target, and Goodhart's Law collects its toll.</p>
+
+    <p>This is the deeper reason benchmarks decay over time. A brand-new benchmark is a clean measure &mdash; nobody has optimized against it yet, so a high score is informative. But the moment it becomes the metric everyone reports, the whole field starts climbing it, contamination creeps in, and within a couple of years it's "saturated": the top models all score in the high 90s and the test no longer discriminates between them. MMLU itself followed this arc. It was a genuinely hard, informative benchmark in 2021; by a few years later the strongest models had largely topped it out, and the field had to build harder successors (like MMLU-Pro and graduate-level "Google-proof" tests) just to keep measuring anything. The benchmark didn't get easier. We optimized it into uselessness.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A lab fine-tunes its model heavily on MMLU-style multiple-choice questions, its MMLU score jumps from 82% to 91%, and they announce a "major reasoning breakthrough." What's the strongest reason for skepticism?</div>
+      <button class="quiz-option" data-letter="A">Multiple-choice questions are too easy, so no score on MMLU means anything.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">They optimized the measure directly &mdash; Goodhart&rsquo;s Law &mdash; so the gain may reflect specialization in MMLU&rsquo;s format rather than broader reasoning, which only a held-out, differently-formatted test could confirm.</button>
+      <button class="quiz-option" data-letter="C">82% was already a perfect score, so the improvement is impossible.</button>
+      <div class="quiz-feedback" data-correct="Right. When a benchmark becomes the explicit training target, the score decouples from the underlying capability. The jump could be real reasoning, or it could be format-specialization and overfitting to MMLU. The only way to tell is to test on a fresh, held-out benchmark with a different format &mdash; the methodology, not the headline." data-incorrect="Look again at what they optimized. Multiple-choice can be a fine format, and 82% is far from a ceiling. The red flag is that they trained directly on the benchmark's style, which is the textbook setup for Goodhart's Law: the measure became the target, so the score may no longer track the real skill."></div>
+    </div>
+
+    <h2>Designing an evaluation that resists gaming</h2>
+
+    <p>So if public benchmarks contaminate and any target gets gamed, what does a trustworthy evaluation look like? This is not an academic question for you. The curriculum frames it precisely: you evaluate model outputs daily, and the same critical thinking applies to your own agents. When you build an agent and need to know whether it actually works, you are designing an eval &mdash; whether you call it that or not. Here is the comparison that should anchor your instinct.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Gameable Eval (the 95% / memorized-key trap)</div>
+        <p>Score your agent on a fixed, public set of test cases you've looked at many times. You tweak the prompt, re-run the same cases, watch the number climb, ship when it hits 95%. But you've been hill-climbing against questions you can see &mdash; you optimized to the answer key. The 95% measures fit to <em>these</em> cases, not capability on the next, unseen request. First real-world input outside your test set, and it breaks.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Gaming-Resistant Eval (the 85% / understood trap-free)</div>
+        <p>Keep a <em>private, held-out</em> test set the model never trains on and you rarely inspect. Score on <em>fresh</em> cases written after the model was built, so they can't have leaked. Test the real task end-to-end, not a proxy format. Add adversarial and edge cases designed to break it, not flatter it. An 85% here, earned on inputs the system has never seen, predicts real performance far better than a contaminated 95%.</p>
+      </div>
+    </div>
+
+    <p>Pull the principles out of that comparison, because they generalize to any evaluation you'll ever run:</p>
+
+    <ul>
+      <li><strong>Hold out a private test set.</strong> The single most powerful defense against both contamination and Goodhart is data the model has never seen and you do not optimize against. If you never expose it, it can't leak and you can't overfit to it.</li>
+      <li><strong>Use fresh, post-cutoff data.</strong> Questions written after the model's training cutoff are, by construction, uncontaminated. This is why labs increasingly test on newly created problems and live, time-stamped data &mdash; freshness is the cheapest contamination defense there is.</li>
+      <li><strong>Measure the real task, not a convenient proxy.</strong> If your agent's job is to resolve customer tickets, score it on resolved tickets, not on multiple-choice trivia about customer service. The closer the eval is to the actual job, the harder it is to game without doing the job.</li>
+      <li><strong>Build adversarially.</strong> Deliberately include the edge cases, the ambiguous inputs, the trick questions. An eval designed to <em>break</em> the system is worth ten designed to confirm it works.</li>
+      <li><strong>Rotate and refresh.</strong> Treat any eval as perishable. Once a test set has driven enough decisions, assume it's been implicitly optimized against, retire part of it, and add new cases. A durable evaluation is a process, not a file.</li>
+    </ul>
+
+    <p>Notice that the strongest evals all share one DNA: they are hard to see and therefore hard to fit to. The whole game of robust evaluation is keeping the answer key out of the student's hands.</p>
+
+    <h2>What benchmarks measure &mdash; and what they quietly miss</h2>
+
+    <p>Even a perfectly clean, uncontaminated benchmark has a deeper limitation, and it's worth naming so you don't over-trust the good ones. Multiple-choice tests measure recognition, not generation: picking the right answer from four options is easier than producing it from a blank page, and it rewards a model that can eliminate wrong options without truly knowing the right one. Static benchmarks also reward narrow, well-defined tasks &mdash; the things that are easy to score automatically &mdash; while the capabilities that matter most in real deployment are often the hardest to put on a scoreboard: sustained multi-step reasoning, knowing when to say "I don't know," handling genuine ambiguity, and resisting confident-but-wrong answers. That last one connects directly to <a href="../module-3/g33-hallucination.html">G33 &mdash; Hallucination</a>: a model can score brilliantly on a knowledge benchmark and still fabricate citations the moment it's off the test's beaten path, because the benchmark never asked it to navigate the territory where it doesn't know.</p>
+
+    <p>There's also a subtle interaction with the phenomena from earlier in this course. As you saw in <a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>, some abilities appear to switch on sharply as models scale &mdash; and how sharply they appear depends partly on the metric you choose. A pass/fail metric can make a smoothly improving skill look like it "emerged" overnight, while a partial-credit metric on the same skill shows gradual progress. This is a benchmarking story as much as a capabilities story: the measurement instrument shapes the conclusion. The honest researcher holds both in mind &mdash; the capability is real, and the way we measure it can exaggerate or flatten how it looks.</p>
+
+    <p>This is also why no single benchmark, however good, can stand in for "intelligence." MMLU measures broad knowledge recall under multiple choice. It says nothing about whether the model can hold a coherent plan across twenty steps, or whether its internal representations are doing real work &mdash; the kind of evidence you get from cracking the model open rather than testing it from the outside, which is the project of <a href="g27-superposition.html">G27 &mdash; Superposition and Polysemanticity</a> and the rest of this module. Behavioral benchmarks and internal interpretability are two different lenses on the same question, and the field needs both: one tells you <em>what</em> the model can do, the other starts to tell you <em>how</em>. A score is a measurement of behavior, not a verdict on understanding.</p>
+
+    <h2>How to read a capability claim like a pro</h2>
+
+    <p>Put it all together and you have a practical filter for every "our model scores X on Y" announcement you'll ever see. Don't ask "how high is the number?" Ask the questions that interrogate the number:</p>
+
+    <ol>
+      <li><strong>Was the test set contaminated?</strong> Did they check the benchmark against the training data, or test on held-out, post-cutoff variants? If the methodology section is silent on contamination, treat the score as an upper bound, not a measurement.</li>
+      <li><strong>Was the benchmark the training target?</strong> If the model was tuned on the benchmark's format, Goodhart's Law says the score may not generalize. Ask for results on a benchmark the lab did <em>not</em> optimize for.</li>
+      <li><strong>Does the benchmark match what I need?</strong> A 90% on academic multiple-choice tells you little about how the model handles your messy, real-world, multi-turn task. Match the test to the job.</li>
+      <li><strong>Is the benchmark saturated?</strong> If every leading model scores in the high 90s, the test has stopped discriminating &mdash; small score differences are noise, not signal.</li>
+    </ol>
+
+    <p>This is the same discipline you'd apply to any consultant's deck of impressive-looking metrics: the number is a claim, and a claim is only as good as the methodology behind it. The reason this page sits in a course arguing that LLMs exhibit genuine intelligence is that the argument has to be made <em>honestly</em>. Overclaiming from a gamed benchmark is just as much a failure of reasoning as the skeptic's "it's just autocomplete." The case for real capability is strongest when it rests on clean, uncontaminated, well-designed evaluation &mdash; which is exactly why understanding how benchmarks fool us makes the genuine evidence more persuasive, not less.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A benchmark score is a <em>proxy</em> for capability, never the capability itself &mdash; and two forces constantly pry the proxy loose from the real thing. Contamination leaks the answer key into the training data, turning reasoning tests into memory tests. Goodhart's Law guarantees that once a score becomes the target, the field optimizes the number instead of the underlying skill. So the right question is never "how high is the score?" but "show me the methodology": was the test set held out, fresh, and unoptimized? The student who scores 85% on a clean exam knows more than the one who scored 95% on a leaked one.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If every public benchmark eventually leaks into training data, what does a durable evaluation look like &mdash; how would you build a private eval that stays uncontaminated across a year of model upgrades?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: MMLU is introduced in Hendrycks et al. (2021), "Measuring Massive Multitask Language Understanding," ICLR. Goodhart's Law in its targeting form is commonly attributed to Charles Goodhart (1975), popularized in the phrasing by Marilyn Strathern (1997). HumanEval originates with Chen et al. (2021), "Evaluating Large Language Models Trained on Code"; GSM8K with Cobbe et al. (2021).</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

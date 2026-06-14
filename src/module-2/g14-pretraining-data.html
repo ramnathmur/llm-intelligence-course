@@ -59,10 +59,121 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Two medical students sit the same licensing exam on the same day. They had the same brain, the same study hours, the same professors. One becomes a sharp diagnostician; the other freezes the moment a patient presents anything off-textbook. The difference isn't talent or effort. It's the cases they saw. The first rotated through a busy county hospital &mdash; trauma, tropical disease, rare cancers, the patient who lies about their symptoms. The second studied a tidy stack of textbook presentations and nothing else. Same curriculum length, radically different doctors. What you study <em>is</em> what you become.</p>
+
+    <p>That is the entire argument of this page, applied to language models. By now you've seen that the training objective is demanding (<a href="../module-1/g12-training-objective.html">G12</a>), that backpropagation is the mechanism that turns prediction error into better weights (<a href="g13-backpropagation.html">G13</a>), and that scaling laws describe how performance improves as you grow the model and the data (<a href="g04-scaling-laws.html">G4</a>). But all of that machinery is content-blind. Gradient descent will faithfully minimize prediction error on whatever text you feed it. Feed it only restaurant reviews and it will become superhumanly good at predicting whether the next word is "ambiance" or "overpriced" &mdash; and it will never learn a shred of physics, because no physics ever crossed its desk. The architecture is the student's brain. The pre-training corpus is the curriculum. And the curriculum decides what kind of mind comes out the other end.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Callback: from the scaling laws, why can't you freeze the dataset and keep adding parameters forever to get a smarter model?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Because, as you saw in <a href="g04-scaling-laws.html">G4 &mdash; Neural Scaling Laws</a>, model size and data size have to grow <em>together</em>. A bigger model has more capacity to absorb patterns, but if you hold the dataset fixed and keep inflating parameters, the model runs out of new things to learn and starts memorizing the same finite text more aggressively &mdash; you pay enormous compute for diminishing, and eventually negative, returns. The scaling laws say the three quantities &mdash; parameters, data, and compute &mdash; are locked in a relationship. You can't max one and starve the others. This page is what happens when you take that lesson seriously and ask: if data has to grow in lockstep with the model, then <em>which</em> data, and how much, becomes a first-class engineering decision &mdash; not an afterthought.</p>
+      </div>
     </div>
+
+    <h2>Data is the curriculum, not the fuel</h2>
+
+    <p>The common metaphor is that data is "fuel" for the model &mdash; more fuel, more power. It's the wrong metaphor, and it leads people to the wrong conclusion. Fuel is interchangeable; a liter of gasoline is a liter of gasoline. Data is not interchangeable at all. A trillion tokens of legal contracts and a trillion tokens of children's picture books produce two completely different models, even at identical size and compute. The better word is <strong>curriculum</strong>: an ordered, curated body of material chosen because of what it teaches.</p>
+
+    <p>Here is the mechanism, and it follows directly from next-token prediction. The model only ever learns to represent things that show up in the patterns it's asked to predict. To predict the next token in a Python function, it's pressured to internalize programming logic. To predict the next line of a legal brief, it's pressured to learn how statutes get cited. To predict the resolution of a chemistry problem, it has to encode chemistry. Every domain present in the data becomes a domain the model can reason about; every domain absent from the data is simply a hole. The model cannot reason its way to physics from restaurant reviews any more than the textbook-only medical student can intuit a tropical disease they never read about. There is no prediction pressure pointing toward a structure that the data never contains.</p>
+
+    <p>This is why the claim "intelligence comes from the architecture" is only half right. The transformer is a magnificently general learning machine &mdash; but generality is potential, not content. A medical student's brain is also a general learning machine. Drop that same brain into a curriculum of only restaurant reviews and you get a graduate who can wax eloquent about plating and knows nothing about the human body. Capability is the intersection of a capable architecture <em>and</em> a curriculum rich enough to demand the capabilities you want.</p>
+
+    <h2>Narrow corpus vs. broad corpus: what each mind can do</h2>
+
+    <p>Make this concrete. Picture two models, identical in every way except their reading list. Model A trained only on millions of restaurant reviews. Model B trained on a broad, diverse corpus &mdash; web pages, books, scientific papers, code repositories, dialogue, encyclopedias. Watch what each can and cannot do.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Model A &mdash; trained only on restaurant reviews</div>
+        <p>Fluent and confident about food, service, ambiance, and value. Writes a convincing review of a place that doesn't exist. But ask it "why does ice float on water?" and it has no representation to draw on &mdash; floating, density, and hydrogen bonding never appeared in any prediction it was asked to make. It can't resolve "the trophy didn't fit because it was too big," because reasoning about physical objects and containers was never in its curriculum. It hasn't learned arithmetic, causality outside dining, or how a legal argument is structured. It is a brilliant specialist with a vast invisible blind spot it doesn't know it has.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Model B &mdash; trained on a broad, diverse corpus</div>
+        <p>Reviews restaurants competently too &mdash; restaurant reviews were a small slice of its diet. But it also explains buoyancy, does multi-digit arithmetic, resolves Winograd pronouns by reasoning about the situation, writes and debugs code, and structures an argument the way a brief does. Crucially, it can <em>transfer</em>: a metaphor it learned from poetry sharpens how it explains a scientific concept; causal reasoning from history helps it reason about a business case. The diversity didn't just add separate skills side by side &mdash; it let skills reinforce each other.</p>
+      </div>
+    </div>
+
+    <p>The lesson in that contrast answers the first verification question directly: why would a model trained on 10x more data from a <em>single</em> domain perform worse than one trained on diverse data? Because once a model has seen enough restaurant reviews to nail the patterns of restaurant reviews, the ten-millionth review teaches it almost nothing new. The marginal token is redundant. You're spending compute to re-learn what's already in the weights. Diversity, by contrast, keeps presenting genuinely novel structure &mdash; a new domain, a new style of reasoning, a new way ideas connect &mdash; so every batch of tokens still has something to teach. More importantly, real reasoning is general. The capacity to track cause and effect, to hold a chain of inference, to model another person's beliefs &mdash; these are forged across many domains at once. A narrow corpus, no matter how large, can't forge them, because the pressure to build general machinery only arises when the model has to handle genuinely different kinds of problems. Ten times more of the same is not ten times more learning. It's mostly repetition.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A team has compute to train on 1 trillion tokens. They can use 1T tokens of high-quality medical journals, or 1T tokens spanning code, books, web text, science, and dialogue (medical content included). They want a strong general reasoner. Which is the better choice, and why?</div>
+      <button class="quiz-option" data-letter="A">The medical journals &mdash; more tokens on a single high-quality domain always produces deeper understanding.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The diverse corpus &mdash; general reasoning machinery is forged across many domains, and diverse tokens keep teaching novel structure instead of re-teaching the same patterns.</button>
+      <button class="quiz-option" data-letter="C">It makes no difference &mdash; the architecture determines capability, and 1T tokens is 1T tokens either way.</button>
+      <div class="quiz-feedback" data-correct="Right. Once the model has absorbed the patterns of one domain, more of that domain is largely redundant. Diversity keeps every batch informative and is the only way to build the cross-domain reasoning machinery a general model needs &mdash; data is interchangeable like a curriculum, not like fuel." data-incorrect="Reconsider the curriculum metaphor. More tokens from one domain hits diminishing returns fast &mdash; the model re-learns patterns it already has. General reasoning is built by handling many different kinds of problems, so the diverse corpus wins."></div>
+    </div>
+
+    <h2>Quality, not just diversity</h2>
+
+    <p>Diversity is necessary but not sufficient. The other axis is quality, and it matters as much as breadth. A medical student who studies a thick stack of <em>wrong</em> case notes &mdash; misdiagnoses presented as correct, outdated treatments, plausible-sounding nonsense &mdash; learns to be confidently wrong. The model is no different. Next-token prediction optimizes the model to imitate its data. If the data is full of errors, spam, contradiction, and low-effort filler, the model learns to reproduce errors, spam, contradiction, and filler with great fluency.</p>
+
+    <p>This is why the raw internet, scraped as-is, makes a poor curriculum. A large fraction of the open web is duplicated boilerplate, machine-generated junk, keyword-stuffed marketing, and outright garbage. So practitioners spend enormous effort on <strong>data curation</strong> before training: deduplicating near-identical documents (the same article copied across a thousand sites teaches nothing extra and skews the model toward whatever got copied most), filtering out low-quality and toxic content, balancing the mix so no single source drowns out the rest, and often up-weighting unusually high-signal sources like well-edited books, reference works, and clean code. Curation is curriculum design. It is the part of model-building that looks least like math and most like the deliberate, opinionated work of deciding what's worth a student's time.</p>
+
+    <h2>Data contamination: the test that's secretly an open-book exam</h2>
+
+    <p>Now the subtle, important one &mdash; the second verification question. When we want to know how smart a model is, we give it a test it hasn't seen: a benchmark of held-out problems. The whole logic of that test is that the problems are <em>new</em> to the model, so getting them right demonstrates genuine capability rather than recall. <strong>Data contamination</strong> is when the answers to that test leaked into the pre-training data. The benchmark questions &mdash; and sometimes their answer keys &mdash; were sitting somewhere on the web, got scraped into the training corpus, and the model effectively studied the exam in advance.</p>
+
+    <p>Picture a student who scores 98% on the bar exam. Impressive &mdash; unless you learn that this exact exam, with its answer key, was in the textbook they memorized. The 98% now tells you nothing about whether they can reason like a lawyer. It only tells you they have a good memory. Contamination does precisely this to model evaluation. A contaminated benchmark score conflates two completely different things: <em>did the model understand the problem</em>, or <em>did it see this problem before?</em> If a benchmark has leaked, a high score may reflect memorization, not intelligence &mdash; and since the entire purpose of this course is to separate genuine intelligence from clever lookup, contamination is exactly the kind of artifact that can make a "guesser" look like a thinker for the wrong reason.</p>
+
+    <p>This matters for honesty in both directions. It means some headline benchmark numbers are inflated and should be treated with suspicion. It also means that the strongest evidence for real reasoning comes from problems the model demonstrably could not have seen &mdash; freshly written questions, held-out test sets verified to be absent from training, or tasks (like novel arithmetic on numbers that don't appear in the corpus) where memorization is mathematically ruled out. The discipline of detecting and preventing contamination &mdash; checking for overlap between test sets and training data &mdash; is its own field of work, and it's a thread you'll pick up again in <a href="../module-6/g28-benchmarking.html">G28 &mdash; Benchmarking Intelligence</a>, where measuring capability honestly is the whole subject.</p>
+
+    <h2>Chinchilla: most models were starving for data, not parameters</h2>
+
+    <p>Everything so far establishes that <em>what</em> you train on matters. The Chinchilla result settles <em>how much</em>. For years the industry's instinct was that the path to a smarter model was a bigger model &mdash; more parameters, more layers, more width. Companies raced to announce models with ever-larger parameter counts. Hoffmann and colleagues at DeepMind asked a sharper question (Hoffmann et al., 2022): given a fixed compute budget, what's the <em>optimal</em> split between model size and the number of training tokens? You can't have infinite of both. Compute is the constraint. So how should you spend it?</p>
+
+    <p>They trained over 400 models across a wide range of sizes and data amounts, then mapped the relationship. The finding was a quiet bombshell: the prevailing giant models were badly <strong>under-trained on data</strong>. They had far too many parameters for the modest number of tokens they'd been shown. The famous example was Gopher, a 280-billion-parameter model. Chinchilla, with only 70 billion parameters &mdash; one quarter the size &mdash; but trained on roughly four times as many tokens, <em>outperformed</em> it across a broad set of benchmarks, using the same compute budget. A smaller model that read more beat a larger model that read less.</p>
+
+    <p>The crisp takeaway, often summarized as the "Chinchilla rule," is that for compute-optimal training, parameters and training tokens should grow in roughly equal proportion &mdash; very approximately, around 20 tokens of training data for every parameter. Double the model, you should roughly double the data too. This directly answers the third verification question. Before Chinchilla, the mental model was "intelligence scales with parameters; pour compute into size." After Chinchilla, the data-compute tradeoff is reframed: data is not the cheap, infinite afterthought to the precious parameters &mdash; it's an equal partner, and for a given compute budget, many models would get smarter by shrinking the network and reading far more. Data moved from the back seat to the front.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 640 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram comparing a large under-trained model against a smaller Chinchilla-style model trained on more data within the same compute budget.">
+        <text x="320" y="28" text-anchor="middle" fill="#e2e8f0" font-size="16" font-weight="700">Same compute budget, two ways to spend it</text>
+
+        <!-- Model 1: big, under-trained -->
+        <rect x="40" y="70" width="240" height="170" rx="10" fill="#161c30" stroke="#f87171" stroke-width="1.5"/>
+        <text x="160" y="98" text-anchor="middle" fill="#f87171" font-size="14" font-weight="700">Big model, less data</text>
+        <rect x="80" y="118" width="160" height="46" rx="6" fill="#1e2640" stroke="#f87171" stroke-width="1"/>
+        <text x="160" y="146" text-anchor="middle" fill="#e2e8f0" font-size="13">280B parameters</text>
+        <rect x="110" y="180" width="100" height="22" rx="5" fill="#1e2640" stroke="#8892a4" stroke-width="1"/>
+        <text x="160" y="195" text-anchor="middle" fill="#8892a4" font-size="11">300B tokens</text>
+        <text x="160" y="226" text-anchor="middle" fill="#f87171" font-size="12" font-weight="700">Under-trained &mdash; weaker</text>
+
+        <!-- Model 2: smaller, more data -->
+        <rect x="360" y="70" width="240" height="170" rx="10" fill="#161c30" stroke="#34d399" stroke-width="1.5"/>
+        <text x="480" y="98" text-anchor="middle" fill="#34d399" font-size="14" font-weight="700">Smaller model, more data</text>
+        <rect x="410" y="118" width="140" height="36" rx="6" fill="#1e2640" stroke="#34d399" stroke-width="1"/>
+        <text x="480" y="141" text-anchor="middle" fill="#e2e8f0" font-size="13">70B parameters</text>
+        <rect x="395" y="172" width="170" height="30" rx="5" fill="#1e2640" stroke="#00e5ff" stroke-width="1"/>
+        <text x="480" y="191" text-anchor="middle" fill="#00e5ff" font-size="11">1.4T tokens (~4x more)</text>
+        <text x="480" y="226" text-anchor="middle" fill="#34d399" font-size="12" font-weight="700">Compute-optimal &mdash; stronger</text>
+
+        <!-- arrow / verdict -->
+        <text x="320" y="148" text-anchor="middle" fill="#fbbf24" font-size="22" font-weight="700">&#8250;</text>
+        <text x="320" y="278" text-anchor="middle" fill="#8892a4" font-size="12">Same compute. The smaller, better-read model wins.</text>
+      </svg>
+      <p class="diagram-caption">Chinchilla (70B, ~1.4T tokens) outperformed Gopher (280B, ~300B tokens) on the same compute budget &mdash; the larger model had been starved of data. Figures approximate, after Hoffmann et al. (2022).</p>
+    </div>
+
+    <h2>The data wall and the synthetic-data question</h2>
+
+    <p>Chinchilla's reframing creates a problem that the field is now living inside. If smarter models need proportionally more high-quality tokens, and frontier models already train on roughly the entire usable stock of high-quality human text &mdash; the cleaned web, books, code, papers &mdash; then we are approaching a ceiling. High-quality human writing is finite. You can't conjure another internet's worth of carefully edited prose on demand. Researchers call this the "data wall," and estimates suggest the most useful public text could be largely exhausted within a few years of current scaling. The curriculum, for the first time, might run short.</p>
+
+    <p>One proposed escape is <strong>synthetic data</strong> &mdash; text generated by models themselves to train the next generation. It's genuinely promising in places: a strong model can produce clean worked examples, generate problems with verifiable answers (math and code, where correctness can be checked), and create variety in formats that are scarce in human text. But it carries a real hazard, and here the honest answer is that researchers are still debating it. If a model trained on its own output learns chiefly from its own tendencies, it can amplify the biases, blind spots, and errors already baked into it &mdash; a feedback loop that some studies describe as a slow degradation, sometimes called "model collapse," where successive generations drift toward bland, narrowed, self-reinforcing patterns. The evidence so far suggests synthetic data <em>helps</em> when it's anchored to a ground-truth check (a verifier, a compiler, a real-world signal) and <em>hurts</em> when it's just a model rehearsing its own voice with no external correction. Whether high-quality synthetic data can substitute for genuinely new human knowledge &mdash; or only repackage what's already known &mdash; is one of the live open questions in the field, not a settled one.</p>
+
+    <p>Notice how this connects back to the through-line of this module. Scaling laws (<a href="g04-scaling-laws.html">G4</a>) told us performance grows predictably with model, data, and compute together. Chinchilla told us data was the under-fed partner. And the data wall tells us the cheapest input is the one closest to running out. The capabilities that appear when these ingredients scale &mdash; including ones that seem to switch on suddenly &mdash; are the subject of the next page, <a href="g05-emergence.html">G5 &mdash; Emergent Capabilities</a>. But hold onto the core point here: those emergent abilities don't come from architecture alone. They come from a capable architecture meeting a curriculum broad enough, clean enough, and large enough to demand them.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Data is the curriculum, not the fuel. An identical transformer becomes a different mind depending on what it reads &mdash; diversity builds the general reasoning machinery that no single domain can forge, quality determines whether it learns to be right or confidently wrong, contamination can make memorization masquerade as intelligence, and Chinchilla proved that for a fixed compute budget, many models were starving for data, not parameters. What the model studies is what the model becomes.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Chinchilla showed many models were under-trained on data, not parameters. If high-quality human text is finite, what happens to scaling when we exhaust it &mdash; and does synthetic data genuinely help or just amplify existing biases?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the compute-optimal scaling result and the Chinchilla vs. Gopher comparison are from Hoffmann et al. (2022), "Training Compute-Optimal Large Language Models" (arXiv:2203.15556). Discussion of the "data wall" and synthetic-data risks (including "model collapse") reflects an active and unsettled research conversation; treat specific timelines as estimates rather than established fact.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

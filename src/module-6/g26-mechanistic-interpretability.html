@@ -59,10 +59,162 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Hand an electrical engineer a circuit board they have never seen before. They will not just plug it in and note what it does. They will trace the copper, follow each wire from pin to pin, test components in isolation, and cut a trace to see what stops working. By the end they can tell you not only <em>what</em> the board does but <em>why</em> &mdash; this resistor limits current to that LED, this chip is the clock, this loop is the feedback that keeps the voltage stable. They have a causal map, not a behavior report.</p>
+
+    <p>That is the ambition of mechanistic interpretability, and it is the cleanest answer this course has to the question that nags every honest skeptic: "Fine, the model acts intelligent &mdash; but how do you know what it's actually doing in there? Isn't it just a black box?" For most of deep learning's history, the honest reply was a shrug. We could measure behavior on the outside and we could see the weights on the inside, but the gap between billions of numbers and the thing the model was clearly doing felt unbridgeable. Mechanistic interpretability is the research program that decided the gap was bridgeable after all &mdash; that you can take a trained transformer apart, trace the computation, and name the parts.</p>
+
+    <h2>What "mechanistic" actually means</h2>
+
+    <p>The word is doing real work. There are softer kinds of interpretability &mdash; you can highlight which input words the model paid <a href="../module-3/g02-attention.html">attention</a> to, or note that a certain layer's outputs correlate with sentiment. Those tell you something, but they are correlational. They say "when the model does X, this part lights up." They do not say "this part <em>causes</em> X, and if you removed it, X would stop."</p>
+
+    <p>Mechanistic interpretability insists on the causal version. The goal is to reverse-engineer a specific, human-understandable algorithm out of the weights &mdash; a <strong>circuit</strong>: a small subgraph of attention heads and neurons that, working together, implement an identifiable computation. The standard of proof is the engineer's standard. You do not just observe the circuit firing; you intervene. You ablate it (zero it out) and confirm the capability breaks. You patch its activations from one input into another and confirm the behavior transfers. You build a hypothesis about the algorithm, then run experiments that would falsify it. When a circuit survives that, you have not described a correlation. You have found a mechanism.</p>
+
+    <p>To appreciate why this is hard, recall what a transformer is made of. As you saw in <a href="../module-1/g01-weights.html">G1 &mdash; What Weights Actually Encode</a>, the knowledge lives in the weights, not as labeled entries but as compressed structure. And as <a href="../module-3/g02-attention.html">G2 &mdash; Transformer Attention</a> showed, the model moves information around with attention heads &mdash; many of them per layer, dozens of layers deep. A frontier model has tens of thousands of these heads and hundreds of billions of weights, all computing in parallel, all entangled. Finding one clean circuit in that haystack is the engineering problem. Astonishingly, researchers have found several.</p>
+
+    <h2>The induction head: the first circuit we truly understood</h2>
+
+    <p>The breakthrough that put this field on the map came from Anthropic's interpretability team, and the circuit they reverse-engineered is called the <strong>induction head</strong> (Olsson et al., 2022). It is the best entry point because it is simple enough to fully understand and important enough to explain a capability you have already met in this course.</p>
+
+    <p>Here is the computation an induction head performs, stated plainly. It is a <em>copy-the-pattern</em> mechanism. Suppose somewhere earlier in the text the model saw the two-token sequence <code>[A][B]</code> &mdash; say, the words <code>Dr</code> then <code>Kane</code>. Later in the same context, the model encounters <code>A</code> again &mdash; another <code>Dr</code>. The induction head's job is to look back, find the earlier place where <code>A</code> appeared, see what came right after it (<code>B</code> = <code>Kane</code>), and raise the probability that <code>B</code> comes next this time too. In one sentence: <em>"I've seen this pattern before; last time A was followed by B, so predict B."</em></p>
+
+    <p>That sounds almost too modest to matter. It is not. This little look-back-and-copy operation is the mechanistic basis of a capability we devoted a whole page to: <a href="../module-3/g03-in-context-learning.html">G3 &mdash; In-Context Learning</a>, the model's ability to pick up a pattern from a few examples in the prompt and continue it, with no training involved. When you give a model three examples of "English: hello / French: bonjour" and it produces the fourth translation, induction heads are a big part of how it knows to keep the format going. The pattern in the prompt becomes the model's instruction, copied forward.</p>
+
+    <h3>How the circuit is wired: two heads in a chain</h3>
+
+    <p>The elegant part &mdash; the part that made this a landmark result rather than a curiosity &mdash; is that an induction head is not one head doing magic. It is two attention heads in different layers working as a relay. Understanding the handoff is understanding the circuit. Trace it through the walkthrough below.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The setup: a repeated pattern in the context</h4>
+        <p>The model is reading a stream of tokens and has already encountered <code>[A][B]</code> once &mdash; for example, <code>...Dr Kane wrote...</code>. Now, many tokens later, the current token is <code>A</code> again: <code>...as Dr ?</code>. The model needs to predict what follows this second <code>A</code>. A pure statistics machine would just guess a common word. The induction circuit does something smarter.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Head 1 &mdash; the &ldquo;previous-token head&rdquo;</h4>
+        <p>In an early layer, a specialized head does one humble thing: at every position, it copies information about the <em>token that came just before</em> into the current position. So at the token <code>Kane</code> (the first <code>B</code>), this head writes a note that effectively says "I was preceded by <code>Dr</code>." That note gets stored in <code>Kane</code>'s representation as it flows up through the network. This is the prep work &mdash; it stamps each position with its predecessor.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Head 2 &mdash; the induction head proper</h4>
+        <p>In a later layer, the actual induction head sits at the current <code>A</code> (the second <code>Dr</code>) and asks a precise question: "Find me an earlier position whose stored note says <em>'I was preceded by <code>Dr</code>'</em>." Thanks to Head 1, exactly one position answers loudly: the <code>Kane</code> from before. The induction head attends straight to it.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>The copy: predict what followed last time</h4>
+        <p>Having locked onto <code>Kane</code>, the induction head copies that token's identity forward as a prediction. The model's output now puts high probability on <code>Kane</code> as the next token. The circuit has, in effect, reasoned: "Last time <code>Dr</code> appeared, <code>Kane</code> followed &mdash; so predict <code>Kane</code> again." Two heads, one relay, a genuine copy-the-pattern algorithm.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>The proof: it generalizes to tokens it never saw</h4>
+        <p>The decisive test is feeding the model random, meaningless token sequences &mdash; gibberish it could not possibly have memorized &mdash; with a repeated pattern buried inside. The induction head still finds the repeat and copies the continuation. That rules out lookup. The circuit implements an abstract operation ("copy whatever followed A last time"), not a stored answer. This is the same logic you met in <a href="../module-1/g12-training-objective.html">G12</a>: success on inputs that could not have been memorized is the signature of a real mechanism.</p>
+      </div>
     </div>
+
+    <p>Let me sketch the relay visually, because the two-head handoff is the whole insight and it is much clearer as a picture than as prose.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 760 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Diagram of an induction head: a previous-token head in an early layer stamps each position with its predecessor, then an induction head in a later layer matches the current token to an earlier occurrence and copies what followed it.">
+        <!-- token row -->
+        <text x="30" y="36" fill="#8892a4" font-family="monospace" font-size="13">context tokens &rarr;</text>
+        <g font-family="monospace" font-size="15">
+          <rect x="40" y="50" width="70" height="38" rx="6" fill="#161c30" stroke="#1e2640"/>
+          <text x="75" y="74" fill="#e2e8f0" text-anchor="middle">Dr</text>
+          <rect x="120" y="50" width="80" height="38" rx="6" fill="#161c30" stroke="#c084fc"/>
+          <text x="160" y="74" fill="#c084fc" text-anchor="middle">Kane</text>
+          <rect x="210" y="50" width="70" height="38" rx="6" fill="#161c30" stroke="#1e2640"/>
+          <text x="245" y="74" fill="#8892a4" text-anchor="middle">wrote</text>
+          <rect x="290" y="50" width="60" height="38" rx="6" fill="#161c30" stroke="#1e2640"/>
+          <text x="320" y="74" fill="#8892a4" text-anchor="middle">...</text>
+          <rect x="360" y="50" width="70" height="38" rx="6" fill="#161c30" stroke="#1e2640"/>
+          <text x="395" y="74" fill="#8892a4" text-anchor="middle">as</text>
+          <rect x="440" y="50" width="70" height="38" rx="6" fill="#0f1221" stroke="#00e5ff" stroke-width="2"/>
+          <text x="475" y="74" fill="#00e5ff" text-anchor="middle">Dr</text>
+          <rect x="540" y="50" width="90" height="38" rx="6" fill="#0f1221" stroke="#34d399" stroke-width="2" stroke-dasharray="4 3"/>
+          <text x="585" y="74" fill="#34d399" text-anchor="middle">Kane?</text>
+        </g>
+
+        <!-- Head 1: previous-token -->
+        <path d="M 75 92 C 100 130, 135 130, 158 92" fill="none" stroke="#fbbf24" stroke-width="2"/>
+        <polygon points="158,92 150,100 163,103" fill="#fbbf24"/>
+        <text x="40" y="160" fill="#fbbf24" font-family="sans-serif" font-size="12">Head 1 (early layer): &ldquo;Kane was preceded by Dr&rdquo;</text>
+
+        <!-- Head 2: induction match -->
+        <path d="M 475 96 C 380 240, 230 240, 160 96" fill="none" stroke="#00e5ff" stroke-width="2"/>
+        <polygon points="160,96 168,104 154,108" fill="#00e5ff"/>
+        <text x="250" y="270" fill="#00e5ff" font-family="sans-serif" font-size="12" text-anchor="middle">Head 2 (later layer): current &ldquo;Dr&rdquo; matches the earlier position whose predecessor was &ldquo;Dr&rdquo;</text>
+
+        <!-- copy arrow -->
+        <path d="M 165 110 C 360 180, 520 150, 560 90" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="5 4"/>
+        <polygon points="560,90 551,94 556,103" fill="#34d399"/>
+        <text x="640" y="160" fill="#34d399" font-family="sans-serif" font-size="12" text-anchor="middle">copy &ldquo;Kane&rdquo;</text>
+        <text x="640" y="176" fill="#34d399" font-family="sans-serif" font-size="12" text-anchor="middle">forward as</text>
+        <text x="640" y="192" fill="#34d399" font-family="sans-serif" font-size="12" text-anchor="middle">prediction</text>
+      </svg>
+      <p class="diagram-caption">The induction circuit as a two-head relay. An early "previous-token head" (amber) stamps each position with what preceded it. A later "induction head" (cyan) at the repeated <code>Dr</code> matches the earlier position whose predecessor was also <code>Dr</code>, then copies its follower <code>Kane</code> forward as the next-token prediction (green).</p>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">An induction head still works on a string of random, meaningless tokens as long as a pattern repeats inside it. Why is this the crucial piece of evidence?</div>
+      <button class="quiz-option" data-letter="A">Because random tokens are easier to predict than real language.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because the model can't have memorized gibberish &mdash; so the only way it copies the continuation is by running an abstract "find the earlier A, copy what followed it" algorithm.</button>
+      <button class="quiz-option" data-letter="C">Because it proves the model has a separate lookup table for random strings.</button>
+      <div class="quiz-feedback" data-correct="Right. Generalizing to never-before-seen sequences rules out memorization. The circuit must be implementing a genuine, content-independent operation &mdash; the hallmark of a real mechanism rather than a stored answer." data-incorrect="Think about what gibberish rules out. If the model has never seen these tokens, it can't be retrieving a memorized continuation &mdash; so a circuit that still copies the pattern must be computing it abstractly."></div>
+    </div>
+
+    <h2>The discovery that made the circuit famous</h2>
+
+    <p>Finding the induction head would have been a tidy result on its own. What turned it into a milestone was a second, bigger claim that Olsson et al. (2022) backed with evidence: induction heads are not a marginal trick. They appear to be a <em>major driver of in-context learning across the board</em>. The paper assembled several lines of argument for this, and the most striking is about timing.</p>
+
+    <p>Watch a transformer during training and you can measure how good it is at in-context learning over time. The curve does not rise smoothly. There is a sudden bump &mdash; a small window of training where in-context-learning ability jumps. When the researchers looked at what was happening inside the model at exactly that moment, they found the induction heads <em>forming</em>. The two events line up in time so precisely that it is hard to call it coincidence: the model gets dramatically better at learning from context right when it grows the circuit that copies patterns from context. The authors call this a "phase change," and the co-occurrence is some of the strongest causal evidence in the field that a specific internal mechanism is responsible for a specific external capability.</p>
+
+    <p>They went further and argued these heads also do a "fuzzier," more abstract kind of matching &mdash; not just copying literal token pairs but completing patterns by analogy and even, in larger models, doing soft translation-like behaviors. The full strength of the claim is still being refined by later work, and that is healthy: the field treats its own results as hypotheses to keep testing, not gospel. But the core finding &mdash; induction heads exist, they implement a clean algorithm, and their emergence coincides with a leap in in-context learning &mdash; has held up and become foundational.</p>
+
+    <h2>Mechanistic interpretability vs. probing classifiers</h2>
+
+    <p>To see what makes the mechanistic approach distinctive, hold it next to the most common alternative: the <strong>probing classifier</strong>. The contrast is the heart of the second verification question, and it is worth getting exactly right.</p>
+
+    <p>A probe works like this. You freeze the model and run some inputs through it. At a chosen layer, you grab the internal activations &mdash; the vector of numbers the model computed at that point. Then you train a small, separate classifier (the probe) to predict some property from those activations: "Does this hidden state encode whether the sentence is past or present tense?" If the little probe succeeds, you conclude the information is present in the representation. Probes are fast, cheap, and genuinely useful. The Othello world-model evidence you will meet in <a href="g34-world-models.html">G34 &mdash; Internal World Models</a> leans heavily on them.</p>
+
+    <p>But notice what a probe does and does not tell you. It tells you the information is <em>readable</em> from a given layer. It does not tell you whether the model <em>uses</em> that information, or <em>how</em> the model computed it. Worse, a probe can be misleading in a specific way: if you let the probe be powerful enough, it might learn to extract a pattern that the model itself never relies on &mdash; the probe finds the structure rather than reveals a structure the model actually employs. That is the difference between a probe finding a representation and a probe creating the appearance of one. A correlational tool can detect a signal that is real but causally inert.</p>
+
+    <p>Mechanistic interpretability sets a stricter bar. It is not satisfied with "the information is there." It wants the causal chain: <em>this</em> head reads <em>this</em> information, passes it to <em>that</em> head, which produces <em>that</em> output &mdash; and we proved it by intervention. The table below makes the division of labor concrete.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Probing Classifier</div>
+        <p>Trains a separate model to read a property out of frozen activations. Answers "<em>is this information present and readable?</em>" Correlational. Fast and broad, but silent on whether the model uses the information or how it was computed &mdash; and a strong probe can detect structure the model itself ignores.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Mechanistic Interpretability</div>
+        <p>Reverse-engineers the actual algorithm in the weights and verifies it by intervention &mdash; ablating, patching, falsifying. Answers "<em>what computation runs, through which components, and does removing it break the behavior?</em>" Causal. Slower and narrower, but it yields a mechanism, not a correlation.</p>
+      </div>
+    </div>
+
+    <p>They are complements, not rivals. Probing is reconnaissance &mdash; cheap, wide-angle, good for "is there anything here?" Mechanistic work is the deep dig that turns a hot spot into a wiring diagram. Good interpretability research uses probes to find candidates and mechanistic methods to prove them.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>A subtle one: a probe reads "the board state is X" off a model. Has it proven the model uses an internal board?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Not by itself. The probe has shown the board state is <em>recoverable</em> from the activations &mdash; the information is present and linearly readable. But presence is not use. To show the model actually relies on that internal board, you need the mechanistic move: intervene on the representation (edit the encoded board state) and check that the model's downstream predictions change accordingly. If editing the internal board changes the moves the model considers legal, the representation is causal, not decorative. This intervention test is exactly how the strongest world-model evidence is established in <a href="g34-world-models.html">G34</a> &mdash; and it is why probing alone, however suggestive, is treated as evidence rather than proof.</p>
+      </div>
+    </div>
+
+    <h2>Why this dismantles the "black box" objection</h2>
+
+    <p>Step back to the claim this page lets you make. The skeptic's strongest remaining card, once they concede the model behaves intelligently, is opacity: "You can't see inside, so you can't really claim it understands &mdash; it's a black box." Mechanistic interpretability does not let you off with a hand-wave. It lets you point at a specific, named, experimentally verified circuit and say: here is a mechanism inside the weights; here is the algorithm it runs; here is the experiment proving it; and here is the external capability it produces. That is not the language of a black box. That is the language of an engineer who has traced the board.</p>
+
+    <p>Two honest caveats keep this claim defensible rather than triumphant. First, we have only fully reverse-engineered a handful of circuits, and mostly in small or mid-sized models &mdash; induction heads, an indirect-object-identification circuit, a few others. The behaviors we understand are narrow. The vast majority of what a frontier model does is still unmapped. Second, the models actively resist easy reading because of <strong>superposition</strong> &mdash; the way a single neuron is forced to encode several unrelated concepts at once, which is the subject of <a href="g27-superposition.html">G27 &mdash; Superposition and Polysemanticity</a>. Superposition is one of the main reasons circuits are hard to find: the wires are not cleanly separated, so tracing them takes real ingenuity. So the right summary is not "we now understand LLMs." It is the more measured, and more interesting, "the inside of an LLM is not, in principle, unknowable &mdash; we have proof-of-concept that it can be read, and a research program racing to read more."</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The "black box" objection is an empirical claim, and mechanistic interpretability is steadily falsifying it. We can now name specific circuits inside transformer weights &mdash; the induction head being the cleanest &mdash; reverse-engineer the algorithm they run, and prove it causally by ablating and patching, not just observing. That is a categorically stronger kind of evidence than probing's "the information is readable": it is "this mechanism computes this behavior, and removing it breaks the behavior." The model is not opaque in principle. It is unmapped in practice &mdash; and the map is being drawn.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>We can reverse-engineer circuits today only for small models and narrow behaviors. What must become true for interpretability to scale to a frontier model fast enough to be a real safety tool rather than a post-hoc autopsy?</p>
+    </div>
+
+    <p>From here, the trail of "seeing inside" continues. The reason circuits are so hard to isolate &mdash; that neurons refuse to mean just one thing &mdash; is the compression strategy you will dissect in <a href="g27-superposition.html">G27 &mdash; Superposition and Polysemanticity</a>. And once you have these interpretability tools in hand, you can ask the most consequential question in the whole course: do these models build internal models of the world they were never directly shown? That is <a href="g34-world-models.html">G34 &mdash; Internal World Models</a>, and the induction head you just traced is the warm-up for the circuits that answer it.</p>
+
+    <p class="diagram-caption">Reference note: the induction-head result, the two-head circuit, the training-time "phase change," and the case that induction heads drive much of in-context learning are all from Olsson et al. (2022), "In-Context Learning and Induction Heads," Transformer Circuits Thread. The probing-vs-causation distinction draws on the broader interpretability literature, including the linear-probe and activation-patching methods used in the world-model work cited in G34.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">
