@@ -53,15 +53,179 @@
 
   <div class="prereqs">
     <span class="prereqs-label">Prerequisites:</span>
-    <span style="font-size:0.78rem;color:var(--text-dim);">None &mdash; entry point</span>
+    <span class="prereqs-empty">None &mdash; entry point</span>
   </div>
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>A courier picks up a parcel addressed to "14 Rose Lane, Croydon." That street name means nothing to a sorting machine. So the postal system does something clever: it converts the address into coordinates &mdash; a latitude and longitude. Now the parcel has a position in space. Two homes on the same street sit close together as numbers; two homes in different cities sit far apart. The machine never reads English again. It just routes by distance.</p>
+
+    <p>That is exactly what happens when text enters a language model. The words you type never reach the math directly. They get converted into positions in a high-dimensional space, and from that point on the model works only with the coordinates. The whole "next-word guesser" story assumes the model is shuffling <em>words</em> around. It is not. It is doing geometry. And once you see the geometry, the guesser frame starts to crack &mdash; because positions in this space carry meaning the model was never explicitly taught.</p>
+
+    <p>This page walks the conversion in two stages. First, how raw text gets chopped into <strong>tokens</strong> (the postal codes). Second, how each token becomes a <strong>vector</strong> in an <strong>embedding space</strong> (the GPS coordinates) where distance encodes meaning. By the end you will understand why a model splits "unhappiness" into pieces, why "king &minus; man + woman" lands you near "queen," and why this whole arrangement beats the obvious alternative &mdash; a dictionary.</p>
+
+    <h2>Stage one: text becomes tokens, not words</h2>
+
+    <p>Start with a stubborn fact. A model does not have a slot for every English word. English has hundreds of thousands of words, and that is before you count names, typos, hashtags, code, German compound nouns, and emoji. If a model needed one entry per word, its vocabulary would be enormous, riddled with rare words it saw twice in training, and completely lost the first time it met a word it had never seen.</p>
+
+    <p>So models do not tokenize by words. They tokenize by <strong>sub-word pieces</strong> &mdash; chunks that are usually bigger than a letter and smaller than a word. The dominant method is <strong>Byte-Pair Encoding</strong> (BPE), introduced for language models by Sennrich, Haddow &amp; Birch (2016). The idea is almost embarrassingly simple, and that simplicity is the point.</p>
+
+    <h3>How BPE builds its vocabulary</h3>
+
+    <p>BPE learns its chunks from data using a merge loop. Picture it like a printer's apprentice setting type, who notices which letter-pairs keep showing up together and casts them as a single block to save effort.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Start from raw characters</h4>
+        <p>Every word begins as a sequence of individual characters. "low" is <code>l</code>, <code>o</code>, <code>w</code>. At this point the vocabulary is just the alphabet plus punctuation &mdash; tiny, but it can spell anything.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Count adjacent pairs</h4>
+        <p>Scan the whole training corpus and count which two-character pairs occur most often together. In English, pairs like <code>th</code>, <code>in</code>, and <code>er</code> dominate. The pair <code>er</code> alone shows up in millions of words.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Merge the most frequent pair into one token</h4>
+        <p>Take the winning pair and glue it into a single new token. Now <code>er</code> is one unit, not two. Add it to the vocabulary. The corpus gets re-tiled using this new, larger block wherever it fits.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Repeat thousands of times</h4>
+        <p>Run the merge loop until the vocabulary reaches a target size &mdash; typically 30,000 to 100,000+ tokens. Common words like "the" end up as a single token. Rare words stay broken into frequent fragments. The vocabulary self-organizes around what actually appears in human text.</p>
+      </div>
     </div>
+
+    <p>The result is a vocabulary that strikes a deliberate bargain. Frequent words get their own token, so processing them is cheap. Rare and never-before-seen words get spelled out of familiar fragments, so the model is never stuck. There is no "unknown word" error, because in the worst case a word decomposes all the way back to single characters.</p>
+
+    <h3>Why "unhappiness" splits into pieces</h3>
+
+    <p>Now the first verification question answers itself. The model splits "unhappiness" into sub-word tokens &mdash; roughly <code>un</code> | <code>happi</code> | <code>ness</code> &mdash; not because it is too lazy to learn the whole word, but because those pieces are <em>reusable currency</em>. The fragment <code>un</code> shows up in unfair, unknown, unable, undo. The suffix <code>ness</code> shows up in kindness, darkness, fitness. The stem <code>happi</code> connects to happy and happily.</p>
+
+    <p>If "unhappiness" got one dedicated token, the model would have to learn what it means from scratch, in isolation, from however few times it appeared in training. By splitting it, the model can compose its meaning from parts it has already seen millions of times in other contexts. The <code>un</code> piece carries negation it learned everywhere; the <code>ness</code> piece carries "the quality of being." The model assembles "the quality of not being happy" from components &mdash; which is the first quiet hint that this system <em>composes</em> meaning rather than memorizing it. You will see that compositional habit running through every later page, especially <a href="../module-3/g06-compositional-generalization.html">G6 &mdash; Compositional Generalization</a>.</p>
+
+    <p>Here is the same logic for code or a typo. Type "playoffz" and BPE will not panic. It will fall back to <code>play</code> | <code>off</code> | <code>z</code> or similar. Type a long German compound and it shatters into German fragments it knows. Coverage is total because the fallback floor is "individual characters," and characters always exist.</p>
+
+    <div class="diagram-container">
+      <p class="diagram-caption">Type anything below. Watch the demonstrative tokenizer split it into sub-word chips with illustrative IDs. (This is a simplified teaching tokenizer &mdash; a real one like GPT&#39;s learned its merges from billions of words, but the splitting behavior is the same idea.)</p>
+      <input type="text" id="tok-input" value="unhappiness redefined the playoffs" aria-label="Text to tokenize">
+      <div id="tok-output" class="slider-output"></div>
+      <div>
+        <button class="quiz-option" data-preset="unhappiness redefined the playoffs">Preset: unhappiness redefined the playoffs</button>
+        <button class="quiz-option" data-preset="The strawberry has three Rs">Preset: counting letters</button>
+        <button class="quiz-option" data-preset="antidisestablishmentarianism">Preset: one very long word</button>
+      </div>
+    </div>
+
+    <p>Try the "counting letters" preset and look closely. The word "strawberry" does not arrive as ten letters; it arrives as a couple of chunks. That single fact explains one of the most famous LLM failures &mdash; miscounting the letters in a word. The model literally cannot see the individual letters anymore. They were sealed inside tokens before reasoning began. Same story with arithmetic on long numbers: "1234567" may split into oddly-bundled digit groups, so the model is not doing column-by-column addition on digits it can see. It is reasoning over chunks. Tokenization is invisible plumbing, but it leaks into behavior in ways that look like stupidity and are actually a representation choice.</p>
+
+    <h2>Stage two: tokens become vectors with meaning</h2>
+
+    <p>Tokenizing is only the postal-code step. A token ID like <code>#487</code> is still just an arbitrary number &mdash; "the 487th entry in the vocabulary." Numbering tokens does not encode meaning any more than alphabetizing a phone book tells you who is friends with whom. The meaning comes in the next step: <strong>embedding</strong>.</p>
+
+    <p>Every token ID is mapped to a <strong>vector</strong> &mdash; a long list of numbers, often several thousand of them. You can read each vector as a position in a space with that many dimensions. We cannot picture a 4,000-dimensional space, so shrink the intuition: imagine a 3D room where every word in the language is a glowing point floating somewhere inside it. The <em>position</em> of each point is what matters. Words with related meanings drift toward the same region. "Dog," "puppy," and "terrier" cluster in one corner; "Tuesday," "Wednesday," and "weekend" cluster in another.</p>
+
+    <p>Crucially, these positions are not assigned by a human. They are <strong>learned</strong> during training. The model starts with random coordinates and, over trillions of next-token predictions, nudges each token's position until the geometry helps it predict well. Words that show up in similar contexts get pulled together, because that arrangement lowers prediction error. Meaning, in this system, is a side effect of learning to predict. We unpack what those learned coordinates actually store on the next page, <a href="g01-weights.html">G1 &mdash; What Weights Actually Encode</a>.</p>
+
+    <div class="diagram-container">
+      <svg width="520" height="260" viewBox="0 0 520 260" role="img" aria-label="Embedding space showing king minus man plus woman approximately equals queen as parallel vectors">
+        <rect x="1" y="1" width="518" height="258" rx="10" fill="none" stroke="var(--border)"></rect>
+        <line x1="40" y1="220" x2="490" y2="220" stroke="var(--surface3)" stroke-width="1"></line>
+        <line x1="40" y1="220" x2="40" y2="30" stroke="var(--surface3)" stroke-width="1"></line>
+        <text x="265" y="248" fill="var(--text-dim)" font-size="11" text-anchor="middle">dimension capturing "royalty"</text>
+
+        <circle cx="120" cy="170" r="6" fill="var(--cyan)"></circle>
+        <text x="120" y="190" fill="var(--text)" font-size="12" text-anchor="middle">man</text>
+        <circle cx="120" cy="90" r="6" fill="var(--purple)"></circle>
+        <text x="120" y="78" fill="var(--text)" font-size="12" text-anchor="middle">king</text>
+        <circle cx="300" cy="170" r="6" fill="var(--cyan)"></circle>
+        <text x="300" y="190" fill="var(--text)" font-size="12" text-anchor="middle">woman</text>
+        <circle cx="300" cy="90" r="6" fill="var(--purple)"></circle>
+        <text x="300" y="78" fill="var(--text)" font-size="12" text-anchor="middle">queen</text>
+
+        <line x1="120" y1="170" x2="120" y2="96" stroke="var(--green)" stroke-width="2" marker-end="url(#arrow)"></line>
+        <line x1="300" y1="170" x2="300" y2="96" stroke="var(--green)" stroke-width="2" marker-end="url(#arrow)"></line>
+        <line x1="120" y1="170" x2="294" y2="170" stroke="var(--amber)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrowA)"></line>
+        <line x1="120" y1="90" x2="294" y2="90" stroke="var(--amber)" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrowA)"></line>
+
+        <text x="135" y="135" fill="var(--green)" font-size="10">+royalty</text>
+        <text x="315" y="135" fill="var(--green)" font-size="10">+royalty</text>
+        <text x="190" y="162" fill="var(--amber)" font-size="10">man&#8594;woman</text>
+        <text x="190" y="82" fill="var(--amber)" font-size="10">king&#8594;queen</text>
+
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--green)"></path>
+          </marker>
+          <marker id="arrowA" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--amber)"></path>
+          </marker>
+        </defs>
+      </svg>
+      <p class="diagram-caption">The arrow from "man" to "king" (adding royalty) is parallel to the arrow from "woman" to "queen." Because the gendered pairs sit the same distance apart, vector arithmetic lands you in the right neighborhood.</p>
+    </div>
+
+    <h3>What "king &minus; man + woman &asymp; queen" actually means</h3>
+
+    <p>This is the famous result, and it sounds like a magic trick until you see the geometry. It comes from Mikolov et al. (2013), the word2vec paper, which showed that learned word vectors support <em>arithmetic</em>. Take the vector for "king," subtract the vector for "man," add the vector for "woman," and the closest point to your result is "queen."</p>
+
+    <p>Here is why it works, in plain terms. Because positions are learned from context, the space ends up with consistent <em>directions</em> that correspond to consistent <em>relationships</em>. There is, roughly, a "gender" direction in the space. Moving along it turns "man" into "woman," "actor" into "actress," "uncle" into "aunt." There is, roughly, a "royalty" direction. Moving along it turns "man" into "king," "woman" into "queen."</p>
+
+    <p>So when you compute "king &minus; man," you are isolating the royalty direction &mdash; you stripped away the maleness and kept the royalty. Add "woman" and you re-attach femaleness to that royalty. Where do you land? In the region of the space that means "royal + female" &mdash; which is exactly where "queen" lives. The arithmetic works because relationships are stored as geometry, not as facts. Nobody wrote a rule saying "queen is the female king." The rule fell out of arranging words by context until the directions lined up. That is the second verification question answered: the equation means that semantic relationships are encoded as <strong>consistent directions and distances</strong> in the space, so meaning can be manipulated with vector math.</p>
+
+    <div class="callout callout-why">
+      <div class="callout-label">A note on the evidence</div>
+      <p>The crisp "king &minus; man + woman = queen" result was cleanest in early word-vector models like word2vec, where each word had a single fixed vector. Modern transformers compute richer, context-dependent vectors, and researchers have shown the arithmetic is more approximate and dataset-sensitive than the headline suggests. The relationship-as-direction intuition holds and is well supported; treat the exact equation as an illustrative idealization, not a precise law.</p>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why can you do arithmetic like "king &minus; man + woman" and land near "queen"?</div>
+      <button class="quiz-option" data-letter="A">Because the model stores a lookup table of word relationships, including the fact that queen is the female version of king.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because relationships between words are encoded as consistent directions in the embedding space, so subtracting and adding vectors moves you along those directions.</button>
+      <button class="quiz-option" data-letter="C">Because the tokenizer splits "king" and "queen" into shared sub-word pieces that cancel out during the subtraction.</button>
+      <div class="quiz-feedback" data-correct="Exactly. The space learns directions (like gender and royalty) from context. Vector arithmetic walks along those directions, so removing 'male' and adding 'female' from a royal word lands you near 'queen.'" data-incorrect="Not quite. There is no stored table of relationships, and the tokenizer is a separate, earlier step. The arithmetic works because the embedding space encodes relationships as consistent geometric directions."></div>
+    </div>
+
+    <h2>Why an embedding space beats a dictionary</h2>
+
+    <p>It is fair to ask: why not just use a dictionary? Give each word a number, store a definition, look it up when needed. That is the obvious engineering instinct, and it is exactly what the "next-word guesser" frame quietly assumes &mdash; that the model has some giant table it indexes into. The embedding space is better for three reasons, and seeing them clearly is the third verification question answered.</p>
+
+    <p><strong>A dictionary has no notion of nearness.</strong> In a dictionary, "cat" and "dog" are far apart (different letters, different pages) while "cat" and "catastrophe" sit adjacent. Alphabetical order is meaningless for understanding. The embedding space is the opposite: "cat" and "dog" sit close because they behave similarly in language, while "cat" and "catastrophe" sit far apart despite sharing letters. Distance equals meaning, not spelling. That single property is what lets the model generalize &mdash; treat similar things similarly &mdash; which a lookup table can never do.</p>
+
+    <p><strong>A dictionary is rigid; the space is continuous.</strong> A dictionary entry is a discrete cell &mdash; you either have the word or you do not. The embedding space is smooth. You can be 80% of the way from "warm" to "hot." You can sit between "river" and "stream." New or rare words land in sensible neighborhoods based on the company they keep. This continuity is what makes the arithmetic above even possible; you cannot subtract one dictionary entry from another.</p>
+
+    <p><strong>A dictionary stores definitions; the space stores relationships.</strong> A definition tells you what a word means in isolation. But intelligence lives in relationships &mdash; how concepts connect, contrast, and combine. The embedding space encodes "Paris is to France as Tokyo is to Japan" as a repeated geometric pattern, without anyone storing that fact. It captures that "doctor" and "nurse" are related-but-different in a way no definition pair could. The space is a compressed model of how meanings relate, which is a fundamentally richer object than a list of meanings.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The dictionary view (the "guesser" assumption)</div>
+        <p>Words are entries in a table. "cat" is row 1,204. To use it, look it up. Similarity is accidental (alphabetical). Relationships must be stored one by one. Unseen words break the lookup.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The embedding view (what actually happens)</div>
+        <p>Tokens are positions in a learned space. "cat" is a direction among thousands. Similar meanings are physically near. Relationships are directions, computed not stored. Unseen words land in sensible neighborhoods.</p>
+      </div>
+    </div>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>If meaning is geometry, does the model read each token's vector on its own?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>No &mdash; and this is the crucial limit of everything on this page. The embedding gives each token a starting position that means roughly the same thing every time, regardless of sentence. But "bank" in "river bank" and "bank" in "savings bank" need different meanings. The embedding alone cannot do that. The model fixes it in the next layers using <strong>attention</strong>, which lets each token pull in information from the other tokens around it and adjust its meaning in context. You will see exactly how in <a href="../module-3/g02-attention.html">G2 &mdash; Transformer Attention</a>: token vectors are never read in isolation; attention routes information between them by relevance.</p>
+      </div>
+    </div>
+
+    <p>One more place this geometry pays off, far downstream from the model itself. When you build an agent that needs to search its own notes or a knowledge base, you do not match keywords &mdash; you embed the query and the documents into this same kind of space and retrieve whatever sits <em>nearest</em>. A search for "feline illness" surfaces a document about "sick cats" even with zero shared words, because the vectors are close. That is the entire engine behind semantic search and retrieval-augmented memory, which you will build in <a href="../module-5/g22-memory-architectures.html">G22 &mdash; Memory Architectures</a>. The same embedding geometry that makes "king &minus; man + woman" work is what powers an agent's long-term recall.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>An LLM does not work on words. It chops text into reusable sub-word tokens, then maps each token to a position in a high-dimensional space where <em>distance equals meaning</em> and <em>direction equals relationship</em>. Meaning is geometry, learned from context, not looked up from a table. This is the first crack in the "next-word guesser" frame: before the model predicts anything, it has already built a structured, mathematical map of how concepts relate &mdash; and you can do arithmetic on it.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If tokenization is why models miscount letters and fumble long-number arithmetic, what would change if a lab shipped a truly character-level model &mdash; and what would it cost?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the vector-arithmetic result ("king &minus; man + woman &asymp; queen") is from Mikolov, T., Sutskever, I., Chen, K., Corrado, G. &amp; Dean, J. (2013), "Distributed Representations of Words and Phrases and their Compositionality," NeurIPS. The sub-word tokenization method (BPE) is from the page&#39;s key citation, Sennrich, Haddow &amp; Birch (2016).</p>
+
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">
@@ -84,5 +248,130 @@
 
 <script src="../js/nav.js"></script>
 <script>LLMNav.init('g11-tokenization');</script>
+<script>
+(function () {
+  var input = document.getElementById('tok-input');
+  var output = document.getElementById('tok-output');
+  if (!input || !output) return;
+
+  // Deterministic demonstrative tokenizer. NOT a real BPE model — it just
+  // illustrates sub-word splitting: known affixes peel off, long stems break
+  // into syllable-ish chunks, everything else stays whole. IDs are a stable
+  // hash so the same piece always shows the same "#NN".
+  var PREFIXES = ['un', 'redefin', 'redefine', 're', 'anti', 'dis', 'pre', 'over', 'under', 'non', 'inter'];
+  var SUFFIXES = ['ness', 'ment', 'tion', 'sion', 'ing', 'ed', 'ly', 'ed', 'es', 's', 'er', 'ery', 'able', 'ism', 'ist'];
+
+  function hashId(piece) {
+    var h = 0;
+    for (var i = 0; i < piece.length; i++) {
+      h = (h * 31 + piece.charCodeAt(i)) % 900;
+    }
+    return h + 100; // 3-digit-ish, stable per piece
+  }
+
+  // Break a single alphabetic word into illustrative sub-word pieces.
+  function splitWord(word) {
+    var lower = word.toLowerCase();
+    var pieces = [];
+    var rest = lower;
+
+    // Peel a leading prefix if present (longest match first).
+    var sortedPrefix = PREFIXES.slice().sort(function (a, b) { return b.length - a.length; });
+    for (var p = 0; p < sortedPrefix.length; p++) {
+      if (rest.length > sortedPrefix[p].length + 1 && rest.indexOf(sortedPrefix[p]) === 0) {
+        pieces.push(sortedPrefix[p]);
+        rest = rest.slice(sortedPrefix[p].length);
+        break;
+      }
+    }
+
+    // Peel a trailing suffix if present (longest match first).
+    var trailing = null;
+    var sortedSuffix = SUFFIXES.slice().sort(function (a, b) { return b.length - a.length; });
+    for (var s = 0; s < sortedSuffix.length; s++) {
+      var suf = sortedSuffix[s];
+      if (rest.length > suf.length + 1 && rest.slice(-suf.length) === suf) {
+        trailing = suf;
+        rest = rest.slice(0, rest.length - suf.length);
+        break;
+      }
+    }
+
+    // Whatever stem remains: keep short stems whole, chunk long stems into ~4-char blocks.
+    if (rest.length > 0) {
+      if (rest.length <= 5) {
+        pieces.push(rest);
+      } else {
+        for (var i = 0; i < rest.length; i += 4) {
+          pieces.push(rest.slice(i, i + 4));
+        }
+      }
+    }
+    if (trailing) pieces.push(trailing);
+    if (pieces.length === 0) pieces.push(lower);
+    return pieces;
+  }
+
+  // Tokenize a full string: split on whitespace, keep punctuation as its own piece.
+  function tokenize(text) {
+    var tokens = [];
+    var words = text.split(/\s+/);
+    for (var w = 0; w < words.length; w++) {
+      var word = words[w];
+      if (!word) continue;
+      // Separate leading/trailing punctuation into their own tokens.
+      var m = word.match(/^([^A-Za-z0-9]*)([A-Za-z0-9]*)([^A-Za-z0-9]*)$/);
+      if (m) {
+        if (m[1]) tokens.push(m[1]);
+        if (m[2]) {
+          if (/^[0-9]+$/.test(m[2]) && m[2].length > 3) {
+            // Long numbers split into oddly-bundled digit groups (illustrative).
+            for (var d = 0; d < m[2].length; d += 3) tokens.push(m[2].slice(d, d + 3));
+          } else if (/[A-Za-z]/.test(m[2])) {
+            tokens = tokens.concat(splitWord(m[2]));
+          } else {
+            tokens.push(m[2]);
+          }
+        }
+        if (m[3]) tokens.push(m[3]);
+      } else {
+        tokens.push(word);
+      }
+    }
+    return tokens;
+  }
+
+  function render() {
+    var tokens = tokenize(input.value);
+    if (tokens.length === 0) {
+      output.textContent = 'Type something above to see it become tokens.';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < tokens.length; i++) {
+      var piece = tokens[i]
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      html += '<span class="token-chip">' + piece +
+              '<span class="token-id">#' + hashId(tokens[i]) + '</span></span>';
+    }
+    html += '<span class="token-id">' + tokens.length + ' tokens</span>';
+    output.innerHTML = html;
+  }
+
+  input.addEventListener('input', render);
+
+  var presets = document.querySelectorAll('button[data-preset]');
+  for (var b = 0; b < presets.length; b++) {
+    presets[b].addEventListener('click', function () {
+      input.value = this.getAttribute('data-preset');
+      render();
+    });
+  }
+
+  render();
+})();
+</script>
 </body>
 </html>

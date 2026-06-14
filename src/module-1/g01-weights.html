@@ -58,10 +58,159 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Picture the job of mapping every river on Earth. The lazy way is a giant list: the Mississippi flows south, the Nile flows north, the Amazon dumps into the Atlantic. Useful, until someone shows you a river you have never catalogued and asks which way it runs. Your list is silent. The smart way is to stop memorizing rivers and start encoding the <em>physics</em> behind them &mdash; how elevation drives flow, how tributaries merge, how rainfall and slope conspire to carve a channel. Master that compressed model and you can predict a river you have never seen. You traded a list of facts for a model of how rivers work.</p>
+
+    <p>That is the single most important idea about what lives inside a large language model. Its weights are not a list of rivers. They are the river physics. When you internalize this, the &quot;next-word guesser&quot; frame doesn&rsquo;t just weaken &mdash; it collapses, because you finally see what the guessing is built on.</p>
+
+    <h2>The misconception: weights as a dictionary</h2>
+
+    <p>The most common mental model of an LLM is a colossal lookup table. In this picture, training stuffs facts into storage like rows in a spreadsheet: <code>capital_of("France") &rarr; "Paris"</code>. Ask a question, the model finds the matching row, reads back the value. It feels intuitive because that is how a database works, and databases are the information machines most of us know best.</p>
+
+    <p>It is also wrong, and wrong in a way that matters for every claim about machine intelligence you will make later. A modern frontier model has on the order of hundreds of billions of <strong>parameters</strong> &mdash; the individual numbers, the weights, that get tuned during training. That sounds like a lot of storage until you compare it to the input. During pre-training the model reads on the order of a trillion or more tokens drawn from books, code, scientific papers, and the open web. There is simply not enough room to store every sequence it sees. The model is forced to <em>compress</em>, and compression is where the magic hides.</p>
+
+    <p>Here is the difference in one line. A lookup table answers questions it has already filed. A compressed statistical model answers questions it has never filed, by deriving the answer from structure. That distinction &mdash; retrieval versus structured prediction &mdash; is the whole game.</p>
+
+    <p>An analogy from consulting makes the pressure concrete. Imagine a junior analyst told to memorize the answer to every client question their firm has ever fielded. It works until the client asks something slightly new, and then the analyst is stuck. Now imagine a senior partner who, instead of memorizing answers, has internalized how the business actually works &mdash; unit economics, incentive structures, how markets move. The partner has never seen your specific question either, but they can derive a sound answer on the spot. The junior is a lookup table. The partner is a compressed world model. Training does not produce the junior; the sheer volume of data, set against limited storage, forces it to produce the partner. Memorization is not an option at that scale, so generalization becomes the only way to keep the prediction error falling.</p>
+
+    <h2>What compression actually produces</h2>
+
+    <p>When you force a system to predict a trillion tokens accurately with far less storage than the data itself, it cannot win by memorizing. The optimization (you will see the mechanism in <a href="g12-training-objective.html">G12 &mdash; The Training Objective</a> and <a href="../module-2/g13-backpropagation.html">G13 &mdash; Backpropagation</a>) hunts for the most compact representation that still predicts well across wildly different topics. What it finds are <em>high-dimensional geometric structures</em>.</p>
+
+    <p>Recall from <a href="g11-tokenization.html">G11 &mdash; Tokenization &amp; Embedding Spaces</a> that every token becomes a vector &mdash; a direction in a space with thousands of dimensions. The weights shape that space so its geometry carries meaning:</p>
+
+    <ul>
+      <li>Vectors for <em>Paris</em>, <em>London</em>, and <em>Tokyo</em> sit close together because they share the concept &ldquo;major world capital&rdquo; &mdash; not because they are alphabetically adjacent or appear at similar frequencies.</li>
+      <li>The direction from <em>king</em> to <em>queen</em> is roughly the same vector as the direction from <em>actor</em> to <em>actress</em>. The model has discovered a reusable &ldquo;gender transformation&rdquo; axis and applies it across unrelated nouns.</li>
+      <li><em>Thermometer</em> and <em>barometer</em> are neighbors not because they rhyme but because they both show up in measurement contexts &mdash; the geometry clusters by what a concept <em>does</em>, not how it is spelled.</li>
+    </ul>
+
+    <p>Nobody programmed these arrangements. They are <strong>discovered</strong> as the cheapest way to compress the regularities of human language. And this is the load-bearing claim of the whole course: the geometry <em>is</em> the knowledge. Intelligence is an emergent property of this compression, because a representation rich enough to predict the next token across all of human writing turns out to be rich enough to translate, reason, write code, and plan.</p>
+
+    <div class="diagram-container">
+      <svg width="100%" viewBox="0 0 520 250" aria-label="Concept vector space diagram showing how related concepts cluster geometrically">
+        <rect width="520" height="250" rx="8" fill="#0f1221"/>
+        <line x1="40" y1="210" x2="480" y2="210" stroke="#2a3050" stroke-width="1.5"/>
+        <line x1="40" y1="210" x2="40" y2="24" stroke="#2a3050" stroke-width="1.5"/>
+        <text x="486" y="214" fill="#5a6375" font-size="11">dim 1</text>
+        <text x="46" y="20" fill="#5a6375" font-size="11">dim 2</text>
+
+        <ellipse cx="370" cy="84" rx="58" ry="32" fill="rgba(0,229,255,0.06)" stroke="rgba(0,229,255,0.25)" stroke-width="1"/>
+        <text x="370" y="48" text-anchor="middle" fill="rgba(0,229,255,0.65)" font-size="10">World Capitals</text>
+        <circle cx="348" cy="78" r="5" fill="#00e5ff"/>
+        <text x="344" y="70" fill="#e2e8f0" font-size="11" text-anchor="middle">Paris</text>
+        <circle cx="374" cy="86" r="5" fill="#00e5ff"/>
+        <text x="374" y="102" fill="#e2e8f0" font-size="11" text-anchor="middle">London</text>
+        <circle cx="396" cy="76" r="5" fill="#00e5ff"/>
+        <text x="396" y="68" fill="#e2e8f0" font-size="11" text-anchor="middle">Tokyo</text>
+
+        <ellipse cx="150" cy="150" rx="58" ry="30" fill="rgba(251,191,36,0.06)" stroke="rgba(251,191,36,0.25)" stroke-width="1"/>
+        <text x="150" y="116" text-anchor="middle" fill="rgba(251,191,36,0.65)" font-size="10">Measurement Tools</text>
+        <circle cx="128" cy="148" r="5" fill="#fbbf24"/>
+        <text x="116" y="162" fill="#e2e8f0" font-size="11">thermometer</text>
+        <circle cx="170" cy="155" r="5" fill="#fbbf24"/>
+        <text x="170" y="170" fill="#e2e8f0" font-size="11" text-anchor="middle">barometer</text>
+
+        <ellipse cx="255" cy="196" rx="52" ry="18" fill="rgba(248,113,113,0.06)" stroke="rgba(248,113,113,0.25)" stroke-width="1"/>
+        <text x="255" y="180" text-anchor="middle" fill="rgba(248,113,113,0.65)" font-size="10">Code Errors</text>
+        <circle cx="234" cy="196" r="5" fill="#f87171"/>
+        <text x="222" y="209" fill="#e2e8f0" font-size="11">TypeError</text>
+        <circle cx="274" cy="193" r="5" fill="#f87171"/>
+        <text x="274" y="186" fill="#e2e8f0" font-size="11" text-anchor="middle">NameError</text>
+
+        <defs>
+          <marker id="g1arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#c084fc"/>
+          </marker>
+        </defs>
+        <line x1="82" y1="106" x2="134" y2="106" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#g1arrow)"/>
+        <text x="104" y="98" fill="#c084fc" font-size="10" text-anchor="middle">gender axis</text>
+        <circle cx="82" cy="106" r="5" fill="#c084fc" opacity="0.75"/>
+        <text x="78" y="120" fill="#e2e8f0" font-size="11" text-anchor="middle">king</text>
+        <circle cx="138" cy="106" r="5" fill="#c084fc" opacity="0.75"/>
+        <text x="138" y="120" fill="#e2e8f0" font-size="11" text-anchor="middle">queen</text>
+      </svg>
+      <p class="diagram-caption">Concepts cluster by semantic role, not by spelling or frequency. The geometry of the space is the model&rsquo;s knowledge.</p>
     </div>
+
+    <h2>&ldquo;Paris is the capital of France&rdquo; &mdash; stored without being stored</h2>
+
+    <p>So where does a fact like &ldquo;Paris is the capital of France&rdquo; live? Nowhere, as a discrete entry. There is no <code>capital_of</code> row. Instead, the relationship is distributed across the geometry: &ldquo;Paris&rdquo; sits in the capitals neighborhood, the phrase &ldquo;capital of France&rdquo; carves out a region of that space, and &ldquo;Paris&rdquo; happens to be the highest-probability completion sitting in that region. The model doesn&rsquo;t recall the fact; it <em>reconstructs</em> it from the shape of the space every time you ask.</p>
+
+    <p>This is not pure hand-waving about geometry. Work by Geva et al. (2021), &ldquo;Transformer Feed-Forward Layers Are Key-Value Memories,&rdquo; found that the feed-forward layers inside a transformer behave like a soft, learned memory: certain input patterns act as <em>keys</em> that activate particular hidden units, and those units write characteristic <em>values</em> into the model&rsquo;s evolving representation. Critically, this is not a clean dictionary. A single unit fires for many loosely related patterns, and any given output is assembled from a blend of many such units. So the model does have something memory-like inside it &mdash; but it is a smeared, overlapping, compressed memory, far closer to the river-physics map than to a spreadsheet. (We&rsquo;ll return to why this smearing happens when we look at how a few thousand directions are forced to represent millions of concepts.)</p>
+
+    <p>If the knowledge really is structure rather than stored strings, then in principle you should be able to <em>find</em> that structure inside the network and read it out. That ambition &mdash; reverse-engineering the geometry into human-legible circuits &mdash; is exactly the project of <a href="../module-6/g26-mechanistic-interpretability.html">G26 &mdash; Mechanistic Interpretability</a>, and the early successes there are some of the strongest evidence that the weights encode genuine structure rather than memorized noise.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">An LLM correctly answers &ldquo;What is the capital of Burkina Faso?&rdquo; even though that exact sentence almost certainly never appeared in its training data. What best explains this?</div>
+      <button class="quiz-option" data-letter="A">It retrieved the stored question-answer pair from a hidden lookup table built during training.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">It reconstructed the answer from geometric structure &mdash; &ldquo;Burkina Faso&rdquo; sits in a West-African-capitals region where &ldquo;Ouagadougou&rdquo; is the highest-probability completion.</button>
+      <button class="quiz-option" data-letter="C">It searched the internet at the moment you asked and copied the result back to you.</button>
+      <div class="quiz-feedback" data-correct="Exactly. The model navigates its representation space rather than retrieving a filed pair. &lsquo;Ouagadougou&rsquo; is the structurally correct completion of that concept pattern &mdash; structured prediction, not lookup." data-incorrect="Not quite. There is no filed pair and no live internet search during generation. The model derives the answer from the geometry of its weights &mdash; the structure it compressed during training."></div>
+    </div>
+
+    <h2>Retrieval versus structured prediction</h2>
+
+    <p>The cleanest way to feel the difference is to watch the two mental models try to answer the same question and fail or succeed for different reasons.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The Guesser View</div>
+        <p>Weights are a giant dictionary. Asking &ldquo;capital of Burkina Faso?&rdquo; means the model scans its stored rows for a matching key and returns the filed value. If the pair was never filed, the model should fail or return nothing &mdash; just like a database with no matching row. Knowledge equals storage; intelligence is just very fast retrieval. Under this view, a model can only ever parrot back what it was explicitly given.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">What&rsquo;s Actually Happening</div>
+        <p>Weights are a compressed geometric world model. &ldquo;Burkina Faso&rdquo; lands in a neighborhood of West African nations; &ldquo;capital of&rdquo; shifts the representation toward the capitals region; &ldquo;Ouagadougou&rdquo; is the highest-probability point where those structures intersect. No row was ever filed &mdash; the answer is <em>computed</em> from the shape of the space. This is why the model can answer phrasings, languages, and combinations it never saw: it predicts from structure, not from a list.</p>
+      </div>
+    </div>
+
+    <p>Walk the &ldquo;capital of Burkina Faso&rdquo; question through the structured-prediction view, step by step, to see that no row is ever consulted.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The tokens become vectors</h4>
+        <p>&ldquo;Burkina&rdquo; and &ldquo;Faso&rdquo; enter as token vectors (the mechanism from G11). On their own they are just points in space &mdash; but they land in a region populated by African nation-names, because that is where training pressure placed them.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>The phrase shapes the query</h4>
+        <p>&ldquo;What is the capital of&rdquo; is not noise to be matched against a key. It acts on the representation, pushing it along the learned &ldquo;capital-of&rdquo; direction &mdash; the same direction that, applied to &ldquo;France,&rdquo; lands near &ldquo;Paris.&rdquo;</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>The structures intersect</h4>
+        <p>The model is now sitting at the intersection of two structures: the West-African-nations neighborhood and the capitals region. The highest-probability point in that intersection is &ldquo;Ouagadougou.&rdquo;</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>The answer is read out, not retrieved</h4>
+        <p>&ldquo;Ouagadougou&rdquo; is emitted as the most likely next token. At no point did the model find a filed &ldquo;Burkina Faso &rarr; Ouagadougou&rdquo; pair. It computed the answer from the geometry &mdash; which is exactly why it also handles the question in French, in a sentence, or buried inside a larger request.</p>
+      </div>
+    </div>
+
+    <h2>What happens with a question it has never seen</h2>
+
+    <p>This is where the lookup-table model dies for good. Ask something genuinely novel &mdash; &ldquo;Write a limerick explaining why a thermometer and a barometer are cousins&rdquo; &mdash; and there is no row to retrieve. The guesser view predicts failure. Instead the model composes an answer by combining structures it already holds: the measurement-tools cluster, the rules of limericks, the notion of family resemblance. It <em>interpolates</em> across its compressed world model, generating something coherent that it was never shown.</p>
+
+    <p>That generative power has a sharp edge, and intellectual honesty requires naming it now. Because facts live as compressed, blended structure rather than verified records, the model can interpolate just as fluently into a <em>false</em> answer. Ask for the capital of a country that does not exist, or a citation for a paper never written, and the geometry will happily produce a confident, well-formed, wrong response &mdash; the structure says &ldquo;a plausible city name goes here&rdquo; and the model obliges. This is the root of <a href="../module-3/g33-hallucination.html">G33 &mdash; Hallucination</a>, and it is not a bug bolted on; it is the flip side of the very mechanism that lets the model answer Burkina Faso. The same compression that produces intelligence produces confident error.</p>
+
+    <p>It is worth being careful with our language here. The evidence strongly suggests weights encode reusable structure rather than stored strings &mdash; the king/queen geometry, the interpretability results, and the model&rsquo;s success on novel phrasings all point the same way. But researchers still debate exactly how much of model behavior is structural generalization versus sophisticated memorization, and the answer almost certainly varies by how often a fact appeared in training. Rare facts behave more like fragile memories; common, well-structured relationships behave more like physics. Hold both in mind.</p>
+
+    <p>Carry one thing forward from this page. The difference between a lookup table and a compressed statistical model is the difference between storage and understanding &mdash; the table returns only what was filed, while the compressed model derives answers it was never given by reading them out of structure. That is why &ldquo;Paris is the capital of France&rdquo; can live in the weights without being stored as a fact anywhere, and why a question the model has never seen produces a fluent answer rather than silence: the model interpolates across its geometric world model, combining structures it already holds. Every later claim in this course &mdash; that the model reasons, plans, generalizes, and acts &mdash; rests on this foundation. The guessing is real. What it is built on is a model of how the world works.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Quick test: in one sentence, why is &ldquo;weights are a dictionary&rdquo; the wrong model?</span><span>+</span></div>
+      <div class="toggle-reveal-body"><p>Because a dictionary can only return entries it has already filed, while the model routinely answers questions, phrasings, and combinations it never saw &mdash; which is only possible if it is computing answers from compressed structure rather than retrieving stored strings.</p></div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>An LLM&rsquo;s weights are a compressed geometric world model, not a fact database. Knowledge lives as structure &mdash; directions and neighborhoods in a high-dimensional space &mdash; so the model reconstructs answers by structured prediction rather than retrieving stored rows. The next-word guesser is only the training mechanism; the world model is the result, and that is where intelligence lives.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If weights store the &ldquo;physics of language&rdquo; rather than discrete facts, how reliably can you edit a single fact (say, a company&rsquo;s new CEO) without corrupting related knowledge &mdash; and why is model editing so hard?</p>
+    </div>
+
+    <p><strong>Reference:</strong> Geva, M., Schuster, R., Berant, J., &amp; Levy, O. (2021). &ldquo;Transformer Feed-Forward Layers Are Key-Value Memories.&rdquo; <em>EMNLP</em>.</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">

@@ -59,10 +59,115 @@
 
   <div class="content">
 
-    <div class="content-placeholder">
-      <strong>Content Coming Soon</strong>
-      This concept page is scaffolded and ready for content. The full explanation, interactive elements, and citations will be added in the content-writing phase.
+    <p>Imagine you want to get good at predicting the next ball in a cricket match. Not just guessing &mdash; actually predicting, over thousands of deliveries, better than chance. To do that, you cannot memorize a list of "this bowler bowls a yorker on the fifth ball." You have to learn the physics of how a ball swings in humid air, the psychology of a bowler who just got hit for six, the condition of a pitch on day four, and the strategy of a captain protecting a lead. The prediction task is simple to state. What it forces you to learn is the entire game.</p>
+
+    <p>That is the whole argument of this page. Next-token prediction &mdash; the only thing a base language model is ever trained to do &mdash; is the cricket-ball problem at the scale of all human writing. The objective is almost insultingly simple: given a stretch of text, predict the token that comes next. But to do that <em>well</em>, across physics papers and legal briefs and recipes and dialogue and code, the model is forced to learn grammar, facts, causal relationships, arithmetic, and even a working theory of what other minds are thinking. The simplicity of the goal is not a limitation. It is the engine.</p>
+
+    <h2>The objective in one sentence</h2>
+
+    <p>A base LLM is trained on a single task: read a sequence of <a href="g11-tokenization.html">tokens</a> and assign a probability to every possible next token. The model outputs a probability distribution &mdash; "given everything so far, there's a 60% chance the next token is <code>blue</code>, 12% it's <code>cloudy</code>, 3% it's <code>green</code>" &mdash; and the training process rewards it for putting high probability on whatever token actually came next in the real text. That's it. The model is not told what any word means. It is not given facts. It is shown text and asked, over and over, billions of times: <em>what comes next?</em></p>
+
+    <p>The reason this matters so much &mdash; and the reason it deserves its own page in this course &mdash; is that this is the precise mechanism the skeptic is pointing at when they say "it's just predicting the next word." They are right about the mechanism and wrong about the conclusion. The leap they miss is the one between the task and what the task <em>demands</em>.</p>
+
+    <h2>Self-supervised learning: the trick that lets it scale</h2>
+
+    <p>Here is the question that should be nagging at you. If a model needs to learn from examples, and learning usually means showing a model the right answer, who labeled all that text? Who sat down and wrote, for trillions of words, "the correct next word here is X"?</p>
+
+    <p>Nobody did. And that is the quiet genius of the setup. The technical name is <strong>self-supervised learning</strong>, and the idea is this: the text supplies its own answers. Take any sentence from a book &mdash; "The capital of France is Paris" &mdash; and you can manufacture a training example for free. Hide the last word, ask the model to predict it, then check against the word that was already there. The label is not added by a human; it is just the next token that the author already wrote. Every sentence ever written is, automatically, millions of self-grading practice problems.</p>
+
+    <p>Contrast this with the older paradigm, <strong>supervised learning</strong>, where humans hand-label each example: a person tags ten thousand emails as "spam" or "not spam," and the model learns from those tags. Supervised learning works, but it has a hard ceiling &mdash; human labeling is slow, expensive, and finite. You will never label a trillion examples by hand. Self-supervised learning removes the human from the loop entirely. The training data is the entire internet, every book, every codebase, and none of it needs annotation because the next token <em>is</em> the answer. This is why next-token prediction scales when hand-labeled approaches cannot: the supply of free, self-grading examples is effectively the whole written record of humanity. The objective that looks trivial is exactly the objective that can consume an ocean of data &mdash; and consuming that ocean is what builds the capability.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Before reading on: why can't you just hand-label your way to a model this good?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>Because the numbers don't work. A frontier model trains on something like 10&ndash;15 trillion tokens. If a human labeler could annotate one token per second without sleeping, labeling a single trillion tokens would take over 30,000 years. Self-supervision sidesteps this completely &mdash; the "label" for each token is simply the token that already follows it in the source text, so the dataset labels itself at the speed of reading. The constraint stops being "how many humans can we hire" and becomes "how much compute can we afford," which is exactly the constraint that scales.</p>
+      </div>
     </div>
+
+    <h2>Why grammar is the easy part &mdash; and facts come for free</h2>
+
+    <p>It is tempting to think prediction only teaches surface patterns: word A is usually followed by word B. That would explain grammar. "The cat sat on the ___" &mdash; the model learns that nouns follow "the," that "mat" is a plausible completion. Fine. But grammar is the shallowest thing prediction forces the model to learn, and stopping there misses the whole point.</p>
+
+    <p>Consider what it takes to predict the last word of: "The capital of France is ___." A pure grammar machine knows a place name should go here. But to put high probability on <code>Paris</code> specifically &mdash; rather than <code>Lyon</code>, <code>Berlin</code>, or <code>Tokyo</code> &mdash; the model must have <em>encoded the fact</em> that Paris is the capital of France. There is no grammatical rule that produces "Paris" here. The only way to lower your prediction error on the millions of geography sentences in the training data is to actually learn the geography. The objective doesn't ask the model to learn facts; it makes learning facts the cheapest way to be less wrong. As you saw in <a href="g01-weights.html">G1 &mdash; What Weights Actually Encode</a>, this is why "Paris is the capital of France" lives in the weights without being stored as a literal entry &mdash; it's compressed into the structure that minimizes prediction error.</p>
+
+    <p>Scale that logic across the entire corpus and you get the cascade. To predict tokens in a chemistry textbook, the model is pressured to learn chemistry. To predict the next line of a Python function, it learns programming logic. To predict the punchline of a joke, it learns what makes things surprising. Each domain is a wall the model keeps bumping into, and the only door through every wall is to actually understand the thing being written about. Prediction is not the goal the model achieves. It is the pressure that forces every other capability into existence.</p>
+
+    <h2>The cases where guessing is impossible without reasoning</h2>
+
+    <p>Now we reach the heart of it &mdash; the third verification question, and the strongest part of the argument. Skeptics will grant that prediction memorizes facts. Memorization, they'll say, is still not intelligence. So here is the move: there are sentences where the next token <em>cannot</em> be retrieved from memory. It can only be computed. To predict it, the model has no choice but to reason. Walk through two of them step by step.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>The sentence that needs a world model</h4>
+        <p>"The trophy did not fit in the suitcase because it was too ___." The next word is either <code>big</code> or <code>small</code>. Both are common, both are grammatically perfect. Co-occurrence statistics are useless here &mdash; "it was too big" and "it was too small" are roughly equally frequent in English.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Resolving the pronoun requires understanding the situation</h4>
+        <p>To choose correctly, the model must figure out what "it" refers to. If "it" is the trophy, the trophy is too <code>big</code>. If "it" is the suitcase, the suitcase is too <code>small</code>. Picking the right one means understanding a physical fact: a thing fails to fit inside a container when the thing is too big OR the container is too small &mdash; and the grammar of "because" tells you the subject is the trophy. This is the Winograd schema, and it is unsolvable by pattern matching alone.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>The sentence that needs arithmetic</h4>
+        <p>"37 + 48 = ___." The correct next token is <code>85</code>. There is no English-language regularity that makes "85" follow "37 + 48 =". The model cannot have memorized this exact sum unless that specific equation appeared in training &mdash; and there are more two-digit sums than fit comfortably in any corpus's coverage of the rare ones.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Carrying is a procedure, not a lookup</h4>
+        <p>To get <code>85</code> reliably, the model has to perform the operation: add 7 and 8 to get 15, write 5, carry the 1, add 3 + 4 + 1 to get 8. When models get arithmetic right on number combinations they demonstrably never saw, they cannot be retrieving an answer &mdash; they must have internalized the procedure of addition. The procedure is what minimizes prediction error across all the arithmetic in the data, so prediction pressure builds it.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Why "at scale" is the load-bearing phrase</h4>
+        <p>One correct answer could be luck. But when a model gets these right at scale &mdash; across thousands of novel Winograd sentences, across sums it never saw &mdash; luck is ruled out statistically. Consistent success on inputs it could not have memorized is the signature of a learned relationship, not a stored pattern. That is the difference between a parrot and a thinker.</p>
+      </div>
+    </div>
+
+    <p>This is what the GPT paper made concrete (Radford et al., 2018). Its title &mdash; "Improving Language Understanding by Generative Pre-Training" &mdash; is itself the thesis: generative pre-training (predicting the next token over a large corpus) <em>produces language understanding</em> as a measurable byproduct. The authors showed that a single model trained only on next-token prediction, with no task-specific design, could then be lightly adapted to question answering, textual entailment, and commonsense reasoning &mdash; tasks it was never explicitly trained for. The prediction objective had quietly built the general-purpose machinery those tasks need.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why is "The trophy did not fit in the suitcase because it was too big" a better argument for reasoning than "The capital of France is Paris"?</div>
+      <button class="quiz-option" data-letter="A">Because geography is easier than physics, so the France example proves less.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because the correct completion can't be retrieved from memory &mdash; both "big" and "small" are common, so the model must reason about what "it" refers to and how fitting works.</button>
+      <button class="quiz-option" data-letter="C">Because the trophy sentence appears more often in training data than the France sentence.</button>
+      <div class="quiz-feedback" data-correct="Exactly. The France example shows the model encoded a fact. The trophy example shows it must compute an answer that no co-occurrence statistic supplies &mdash; resolving the pronoun requires a small model of how objects and containers work. That's reasoning, not lookup." data-incorrect="Not quite. The key difference is retrievability: 'Paris' can be memorized, but 'big' vs. 'small' are equally frequent, so the model can't memorize its way to the right answer &mdash; it has to reason about the situation."></div>
+    </div>
+
+    <h2>Predicting dialogue forces a theory of mind</h2>
+
+    <p>Push the logic one step further and it produces something genuinely surprising. A huge fraction of human text is people talking &mdash; novels, interviews, scripts, forum threads, transcripts. To predict the next line of a conversation, the model cannot just track words. It has to track <em>who knows what</em>.</p>
+
+    <p>Take a classic setup written into a story: Sally puts her ball in a basket and leaves the room. While she's gone, Anne moves the ball to a box. Sally comes back. The text continues: "Sally looks for her ball in the ___." To predict <code>basket</code> &mdash; the correct, human answer &mdash; the model must represent that Sally holds a <em>false belief</em>: she doesn't know about the move, so she'll look where she left it, not where it actually is. Predicting that token requires modeling the contents of someone else's mind, separate from reality. Psychologists call this theory of mind, and it is one of the more sophisticated things human cognition does. Next-token prediction, applied to the enormous amount of dialogue people have written, quietly pressures the model to build a working version of it &mdash; because getting dialogue predictions right is impossible otherwise.</p>
+
+    <p>Notice the pattern across all of these examples. Nobody designed a "fact module," a "carry-the-one module," or a "theory-of-mind module." They are all downstream consequences of one relentless objective applied to data rich enough to contain those structures. Push hard enough on "predict the next token," over diverse enough text, at large enough scale, and these capabilities don't get programmed &mdash; they precipitate out. That precipitation, when it produces abilities that smaller models simply don't have, is what you'll explore in <a href="../module-2/g05-emergence.html">G5 &mdash; Emergent Capabilities</a>: the same single objective is also what gives rise, at sufficient scale, to brand-new abilities that were never present in smaller versions of the same model.</p>
+
+    <h2>Turning the skeptic's own argument around</h2>
+
+    <p>So when someone says "it's just predicting the next word," the honest response is not to deny it. It's to agree, and then finish the sentence they left hanging.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">The Skeptic's Frame</div>
+        <p>"It just predicts the next word. There's no understanding &mdash; it's a glorified autocomplete that learned which words tend to follow which."</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">The Accurate Frame</div>
+        <p>"Yes &mdash; it predicts the next word. And to do that well across all of human writing, it had to learn grammar, facts, arithmetic, causality, and a model of other minds. The simplicity of the objective is what forced the depth of the learning."</p>
+      </div>
+    </div>
+
+    <p>The skeptic treats "predicts the next word" as the ceiling of what the model does. It is actually the floor &mdash; the minimal description of the training signal &mdash; and everything interesting is what that signal builds on top of itself. A weather model "just predicts tomorrow's temperature," but to do it well it had to encode atmospheric physics. We don't say weather forecasting is trivial because its objective is a single number. The objective is the lever; the world model is what the lever moves.</p>
+
+    <p>One honest caveat, because this course doesn't oversell. Saying next-token prediction <em>forces</em> these capabilities is shorthand. The more careful claim is that prediction creates strong pressure toward learning them, and the evidence strongly suggests the models respond to that pressure by building real internal structure &mdash; not just surface correlations. How deep that structure goes, and whether it amounts to genuine "understanding," is exactly the debate this course works toward in its later modules. What is not in serious doubt is the core point of this page: the training objective is simple, and what it demands is not.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>"Next-token prediction" describes the training signal, not the ceiling of what the model learns. To predict well across all of human writing, the model is forced to encode grammar, facts, arithmetic procedures, causal world models, and even theory of mind &mdash; because for each of these, actually learning the underlying relationship is the cheapest way to lower prediction error. The objective is trivial; what it demands is everything humans encode in language.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If next-token prediction forces the model to build a theory of mind just to predict dialogue, what categories of human knowledge are systematically UNDER-learned simply because people rarely write them down?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: the Winograd schema example ("the trophy / the suitcase") originates with Levesque et al. (2012), "The Winograd Schema Challenge"; the false-belief ("Sally&ndash;Anne") task is the classic theory-of-mind test from developmental psychology (Baron-Cohen, Leslie &amp; Frith, 1985).</p>
   </div>
 
   <div class="verification" role="region" aria-label="Verification questions">
