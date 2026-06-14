@@ -150,7 +150,15 @@ This isn't a technical deep-dive for researchers. It's a **complete mental model
 
 ## Getting Started
 
-### Option 1: Quick Start (Easiest)
+### 🚀 Live Course (No Setup Required!)
+
+👉 **[Start Learning Now](https://llm-intelligence-course.vercel.app/launch.html)**
+
+The course is hosted live on Vercel. Just click the link above and begin.
+
+---
+
+### Option 1: Quick Start (Download & Run Locally)
 
 1. **Download or clone** this repository
 2. **Open** `launch.html` in your browser
