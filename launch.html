@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Intelligence & Agent Autonomy — Course Gateway</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #07090f 0%, #0f1221 50%, #161c30 100%);
+            color: #e2e8f0;
+            line-height: 1.75;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .logo {
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #00e5ff;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            background: linear-gradient(135deg, #00e5ff 0%, #60a5fa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .tagline {
+            font-size: 20px;
+            color: #8892a4;
+            margin-bottom: 40px;
+        }
+
+        .hero-cta {
+            display: inline-block;
+            margin-bottom: 60px;
+        }
+
+        .launch-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 40px;
+            background: linear-gradient(135deg, #00e5ff 0%, #06b6d4 100%);
+            color: #07090f;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(0, 229, 255, 0.25);
+        }
+
+        .launch-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(0, 229, 255, 0.35);
+        }
+
+        .launch-btn:active {
+            transform: translateY(0);
+        }
+
+        .arrow {
+            font-size: 20px;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 60px;
+        }
+
+        .section {
+            background: rgba(15, 18, 33, 0.6);
+            border: 1px solid rgba(0, 229, 255, 0.1);
+            border-radius: 12px;
+            padding: 32px;
+            backdrop-filter: blur(10px);
+        }
+
+        .section h2 {
+            color: #00e5ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .section p {
+            color: #8892a4;
+            font-size: 14px;
+            line-height: 1.8;
+            margin-bottom: 12px;
+        }
+
+        .section ul {
+            list-style: none;
+            color: #8892a4;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+
+        .section li {
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+
+        .section li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #00e5ff;
+            font-weight: 600;
+        }
+
+        .highlights {
+            background: rgba(15, 18, 33, 0.6);
+            border: 1px solid rgba(0, 229, 255, 0.1);
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(10px);
+        }
+
+        .highlights h2 {
+            color: #00e5ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .highlight-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-bottom: 0;
+        }
+
+        .highlight-item {
+            background: rgba(30, 38, 64, 0.4);
+            border-left: 3px solid #00e5ff;
+            padding: 16px;
+            border-radius: 6px;
+        }
+
+        .highlight-label {
+            color: #00e5ff;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        .highlight-value {
+            color: #e2e8f0;
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .setup-section {
+            background: rgba(15, 18, 33, 0.8);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            border-radius: 12px;
+            padding: 32px;
+            margin-bottom: 40px;
+        }
+
+        .setup-section h2 {
+            color: #60a5fa;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .setup-step {
+            margin-bottom: 24px;
+        }
+
+        .setup-step h3 {
+            color: #e2e8f0;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .setup-step p {
+            color: #8892a4;
+            font-size: 14px;
+            line-height: 1.8;
+            margin-bottom: 8px;
+        }
+
+        .code-block {
+            background: #07090f;
+            border: 1px solid rgba(96, 165, 250, 0.15);
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #00e5ff;
+            overflow-x: auto;
+            margin-top: 8px;
+        }
+
+        .code-block code {
+            color: #e2e8f0;
+        }
+
+        .code-block code .keyword {
+            color: #60a5fa;
+        }
+
+        .success-check {
+            background: rgba(52, 211, 153, 0.1);
+            border-left: 3px solid #34d399;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-top: 12px;
+            color: #a7f3d0;
+            font-size: 14px;
+        }
+
+        .footer {
+            text-align: center;
+            color: #5a6375;
+            font-size: 13px;
+            padding: 40px 0 20px;
+        }
+
+        .footer p {
+            margin-bottom: 8px;
+        }
+
+        a {
+            color: #00e5ff;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+            transition: border-color 0.2s ease;
+        }
+
+        a:hover {
+            border-bottom-color: #00e5ff;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 36px;
+            }
+
+            .content-grid {
+                grid-template-columns: 1fr;
+                gap: 24px;
+            }
+
+            .highlight-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section,
+            .highlights,
+            .setup-section {
+                padding: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">Learning Experience</div>
+            <h1>LLM Intelligence & Agent Autonomy</h1>
+            <p class="tagline">From "next-word guesser" to genuine artificial intelligence</p>
+
+            <div class="hero-cta">
+                <button class="launch-btn" onclick="launchCourse()">
+                    Launch Course
+                    <span class="arrow">→</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="highlights">
+            <h2>Course Overview</h2>
+            <div class="highlight-grid">
+                <div class="highlight-item">
+                    <div class="highlight-label">Difficulty Level</div>
+                    <div class="highlight-value">Intermediate</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-label">Duration</div>
+                    <div class="highlight-value">Self-Paced, ~20–30 hours</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-label">Content</div>
+                    <div class="highlight-value">34 Deep-Dive Topics</div>
+                </div>
+                <div class="highlight-item">
+                    <div class="highlight-label">Modules</div>
+                    <div class="highlight-value">7 Thematic Sections</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <div class="section">
+                <h2>What You'll Learn</h2>
+                <ul>
+                    <li>How text becomes mathematics inside an LLM</li>
+                    <li>Where genuine intelligence emerges during training</li>
+                    <li>The mechanisms that enable reasoning and understanding</li>
+                    <li>How alignment shapes capability into safety</li>
+                    <li>How agents learn to act autonomously in the world</li>
+                    <li>How to look inside a model and verify intelligence</li>
+                    <li>The philosophy of machine consciousness and intentionality</li>
+                </ul>
+            </div>
+
+            <div class="section">
+                <h2>How to Use This Course</h2>
+                <ul>
+                    <li>Read sequentially or jump to topics of interest</li>
+                    <li>No prerequisites beyond intermediate Python &amp; algebra</li>
+                    <li>Each topic is self-contained with clear links to dependencies</li>
+                    <li>Includes diagrams, examples, and verification questions</li>
+                    <li>Progress tracking—the course remembers where you left off</li>
+                    <li>Fully offline after the first load</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section" style="margin-bottom: 60px;">
+            <h2>Why This Course Matters</h2>
+            <p>
+                If you build with or study LLMs, the "next-word guesser" frame is dangerously incomplete. It explains away genuine intelligence as statistical mimicry—but the evidence is overwhelming: LLMs exhibit reasoning, transfer learning, tool use, and goal-directed behavior that go far beyond pattern matching.
+            </p>
+            <p style="margin-top: 12px;">
+                This course answers the central question: <strong>If an LLM just predicts the next word—where does genuine intelligence come from?</strong> By the end, you'll have a complete, defensible understanding of how intelligence emerges, what makes it real, and how it becomes autonomous action.
+            </p>
+        </div>
+
+        <div class="setup-section">
+            <h2>Getting Started (Quick Setup)</h2>
+
+            <div class="setup-step">
+                <h3>Step 1: Navigate to the Course Directory</h3>
+                <p>Open a terminal or PowerShell window and navigate to the course folder:</p>
+                <div class="code-block">
+                    <code><span class="keyword">cd</span> "C:\Claude Cowork\Projects\ai autonomy"</code>
+                </div>
+            </div>
+
+            <div class="setup-step">
+                <h3>Step 2: Start a Local Web Server</h3>
+                <p>Run one of the commands below (choose the one that matches your system):</p>
+
+                <p><strong>Python 3 (Recommended):</strong></p>
+                <div class="code-block">
+                    <code>python <span class="keyword">-m</span> http.server 8000</code>
+                </div>
+
+                <p style="margin-top: 12px;"><strong>Python 2 (if Python 3 isn't installed):</strong></p>
+                <div class="code-block">
+                    <code>python <span class="keyword">-m</span> SimpleHTTPServer 8000</code>
+                </div>
+
+                <p style="margin-top: 12px;"><strong>Node.js (if you have it installed):</strong></p>
+                <div class="code-block">
+                    <code>npx http-server <span class="keyword">-p</span> 8000</code>
+                </div>
+
+                <div class="success-check">
+                    ✓ You should see a message like "Serving HTTP on port 8000". Leave this terminal open while you read the course.
+                </div>
+            </div>
+
+            <div class="setup-step">
+                <h3>Step 3: Open the Course in Your Browser</h3>
+                <p>Once the server is running, open this link in your browser:</p>
+                <div class="code-block">
+                    <code>http://localhost:8000/launch.html</code>
+                </div>
+                <p style="margin-top: 12px;">Then click the <strong>"Launch Course"</strong> button below to enter the full curriculum.</p>
+            </div>
+
+            <div class="setup-step">
+                <h3>Why Do We Need a Server?</h3>
+                <p>
+                    Browsers block certain JavaScript functionality when pages are opened directly as files (the <code>file://</code> protocol). The course uses <code>localStorage</code> to track your progress, which requires a web server. Starting a local server (like the one above) solves this without putting anything on the internet—it all runs on your computer.
+                </p>
+            </div>
+
+            <div class="setup-step" style="margin-top: 32px;">
+                <h3>Ready to Begin?</h3>
+                <p><strong>Once the server is running above,</strong> click this button:</p>
+                <div style="margin-top: 16px;">
+                    <button class="launch-btn" onclick="launchCourse()" style="width: 100%; justify-content: center;">
+                        Launch Course
+                        <span class="arrow">→</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><strong>Pro Tip:</strong> Bookmark this page. If you close your browser, just navigate back here and launch the course—your progress will be saved.</p>
+            <p>Questions? This course is self-contained. All materials are included.</p>
+        </div>
+    </div>
+
+    <script>
+        function launchCourse() {
+            // Check if we can access the course
+            // Try to fetch the index to make sure the server is running
+            fetch('src/index.html')
+                .then(response => {
+                    if (response.ok) {
+                        window.location.href = 'src/index.html';
+                    } else {
+                        showError('Course not found. Make sure you\'re running a local server.');
+                    }
+                })
+                .catch(error => {
+                    showError('Cannot reach the course. Is your local server running? See the setup instructions above.');
+                });
+        }
+
+        function showError(message) {
+            alert(message + '\n\nSetup instructions are on this page. Follow them and try again.');
+        }
+    </script>
+</body>
+</html>
