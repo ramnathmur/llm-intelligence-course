@@ -934,8 +934,11 @@ body {
   overflow-x: auto;
 }
 .diagram-container svg {
-  max-width: 100%;
+  display: block;
+  width: 100%;
   height: auto;
+  max-width: 100%;
+  margin: 0 auto;
 }
 .diagram-caption {
   font-size: 0.78rem;
