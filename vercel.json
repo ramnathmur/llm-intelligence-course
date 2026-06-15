@@ -3,6 +3,10 @@
   "outputDirectory": ".",
   "rewrites": [
     {
+      "source": "/",
+      "destination": "/launch.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/$1"
     }
