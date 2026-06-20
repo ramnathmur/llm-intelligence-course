@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N07 &mdash; Building Attention From Scratch &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N07 &mdash; Building Attention From Scratch">
+<meta property="og:description" content="Dot-product similarity as a dynamic routing mechanism">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="n07-attention-mechanism.html">Module 3: Sequence Modelling and Attention</a>
+    <span class="sep">&#8250;</span>
+    Building Attention From Scratch
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">N07 &middot; Module 3</div>
+    <h1>Building Attention From Scratch</h1>
+    <p class="one-liner">Dot-product similarity as a dynamic routing mechanism</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Picture a room full of specialists at a conference. You arrive with a question &mdash; your <em>query</em>. Every specialist holds up a card describing their expertise &mdash; their <em>key</em>. You glance at each card, score how relevant it is to your question, then weight the advice you collect &mdash; their <em>values</em> &mdash; by those relevance scores. The answer you walk away with is a blend, weighted toward the people whose expertise matched your question most closely. That is dot-product attention.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>Attention lets every position in a sequence look at every other position simultaneously. This single idea solved the long-range dependency problem that crippled RNNs for a decade. When a word in position 80 needs to refer back to a noun in position 3, attention does it in one step &mdash; no information bottleneck, no vanishing gradient over the gap. Every modern language model, image model, and code generator is built on this mechanism. Building it from dot products makes the architecture legible: you can trace exactly what it computes, why it works, and where it can fail.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>How dot-product attention works mathematically, why scaling by the square root of the key dimension is necessary, what multi-head attention adds over single-head attention, and the difference between self-attention and cross-attention.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-2/n06-rnns-lstms.html" class="prereq-chip">N06 &mdash; RNNs and LSTMs &mdash; Sequence Modelling Before Transformers</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>Why RNNs Could Not Solve Long-Range Dependencies</h2>
+
+    <p>In an RNN, information travels through time one step at a time. Position 1 passes a hidden state to position 2, which passes one to position 3, and so on. By the time the hidden state reaches position 80, it has been compressed, overwritten, and transformed dozens of times. The signal from position 1 is faint at best, gone at worst.</p>
+
+    <p>LSTMs helped. Their gating mechanisms let the network selectively preserve information across long gaps. But gates are imperfect filters. Gradient signals still had to travel through every time step between source and destination. On sequences of hundreds or thousands of tokens, even LSTMs struggled <span class="citation" title="Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., &amp; Polosukhin, I. (2017). Attention Is All You Need. NeurIPS.">(Vaswani et al., 2017)</span>.</p>
+
+    <p>The attention mechanism sidesteps the problem entirely. Instead of routing information through a chain, it lets every position connect directly to every other position in a single computation. Distance becomes irrelevant. Position 80 looks at position 3 with the same computational cost as looking at position 79.</p>
+
+    <h2>The Core Idea: Similarity as Routing</h2>
+
+    <p>Think of attention as a soft lookup. You have a question (query). You have a set of candidate answers (values). Each candidate also has a label describing what kind of answer it is (key). You compute how similar your question is to each label, and you return a weighted average of the answers, weighted by that similarity.</p>
+
+    <p>In formal terms, the inputs to a single attention head are three matrices: <strong>Q</strong> (queries), <strong>K</strong> (keys), and <strong>V</strong> (values). These are all derived from the same input sequence &mdash; each token's embedding is projected into three different spaces using three different learned weight matrices.</p>
+
+    <p>The computation unfolds in four steps:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Compute raw similarity scores</h4>
+        <p>For each query, compute the dot product with every key. The dot product of two vectors is large when they point in similar directions and near zero when they are perpendicular. High dot product means high relevance &mdash; the query and key are well-matched.</p>
+        <p>In matrix form: <code>scores = Q @ K.T</code>. If the sequence has length <em>n</em> and the key dimension is <em>d_k</em>, Q and K are both of shape <code>(n, d_k)</code>. The scores matrix is <code>(n, n)</code> &mdash; every query against every key.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Scale the scores</h4>
+        <p>Divide every score by the square root of the key dimension: <code>scores = scores / sqrt(d_k)</code>. This is the scaling step. Without it, dot products in high-dimensional spaces grow so large that the softmax saturates, producing near-zero gradients. More on this below.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Apply softmax to get weights</h4>
+        <p>Apply softmax row by row across the scores matrix: <code>weights = softmax(scores, dim=-1)</code>. Each row sums to 1. Large scores become large weights; small scores shrink toward zero. The weights encode how much attention each position should pay to every other position.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Compute the weighted average of values</h4>
+        <p>Multiply the weights by the values matrix: <code>output = weights @ V</code>. Each output token is now a weighted blend of all value vectors, where the weights came from the query-key similarity computation. High-relevance positions contribute more; low-relevance positions contribute almost nothing.</p>
+      </div>
+    </div>
+
+    <p>Putting it together in one line: <code>output = softmax(Q @ K.T / sqrt(d_k)) @ V</code>. This is the complete formula for scaled dot-product attention <span class="citation" title="Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., &amp; Polosukhin, I. (2017). Attention Is All You Need. NeurIPS.">(Vaswani et al., 2017)</span>.</p>
+
+    <h2>Why Scaling by Square Root of d_k Is Necessary</h2>
+
+    <p>This is one of those details that looks like a minor implementation choice but is actually load-bearing.</p>
+
+    <p>Consider what happens to the dot product of two random vectors as the dimension grows. Each vector has <em>d_k</em> components. If each component is drawn from a normal distribution with mean 0 and variance 1, the dot product of two such vectors has mean 0 and variance <em>d_k</em>. Its standard deviation is the square root of <em>d_k</em>.</p>
+
+    <p>As <em>d_k</em> grows, the dot products grow proportionally. With large scores &mdash; say, values in the tens or hundreds &mdash; the softmax function behaves very differently than with small scores. Softmax amplifies differences: a score of 100 versus 99 becomes extremely lopsided after softmax. The resulting distribution becomes almost a one-hot vector. Almost all weight lands on the single highest-scoring key.</p>
+
+    <p>That sounds desirable, but it is not. When softmax becomes nearly one-hot, its gradient becomes nearly zero for almost every position. The model cannot learn to spread attention across multiple relevant positions. Gradients vanish in the softmax layer before they even reach Q, K, and V.</p>
+
+    <p>Dividing by the square root of <em>d_k</em> normalises the dot products back to a range where softmax produces smooth, non-degenerate distributions. The gradient can flow. The model can learn <span class="citation" title="Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., &amp; Polosukhin, I. (2017). Attention Is All You Need. NeurIPS.">(Vaswani et al., 2017)</span>.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Scaling by <code>sqrt(d_k)</code> is not a magic constant. It is a variance-stabilisation technique. Without it, softmax saturates in high-dimensional spaces and gradients vanish before reaching the query and key projections. The scaling step keeps the attention distribution soft enough for the model to learn.</p>
+    </div>
+
+    <!-- INTERACTIVE: Toggle-reveal -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: what would happen to the attention weights if d_k = 512 and you removed the scaling step?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>With d_k = 512, unscaled dot products between random unit vectors have a standard deviation of about 22 (the square root of 512). The softmax input values would routinely be in the range of &plusmn;20 or larger. At these magnitudes, softmax assigns essentially all weight to the single highest-scoring key, producing near-zero weight everywhere else. The output is nearly a hard lookup rather than a soft blend. Worse, the gradient of softmax in this regime is almost zero across all but one position &mdash; the model cannot learn to distribute attention, and training stalls.</p>
+      </div>
+    </div>
+
+    <h2>Self-Attention vs. Cross-Attention</h2>
+
+    <p>The attention formula is the same in both cases. What differs is where Q, K, and V come from.</p>
+
+    <p>In <strong>self-attention</strong>, all three matrices &mdash; queries, keys, and values &mdash; are derived from the same sequence. Every token in a sentence can attend to every other token in the same sentence. This is how the encoder in a Transformer builds contextualised representations: each token's output is a weighted blend of all other tokens in the same sequence, with the weights determined by relevance.</p>
+
+    <p>In <strong>cross-attention</strong>, the queries come from one sequence and the keys and values come from a different sequence. The decoder of a translation model uses cross-attention: each position in the output sequence attends over the full encoder output. The decoder's position at step 5 can ask &ldquo;which parts of the French sentence are most relevant to generating the next English word?&rdquo; and receive a weighted blend of the French representations as the answer.</p>
+
+    <p>In code, the only difference is which tensors you pass in:</p>
+
+    <pre><code># Self-attention: Q, K, V all come from the same source
+output = attention(Q=x, K=x, V=x)
+
+# Cross-attention: Q from the decoder, K and V from the encoder
+output = attention(Q=decoder_x, K=encoder_output, V=encoder_output)</code></pre>
+
+    <h2>Implementing Scaled Dot-Product Attention in PyTorch</h2>
+
+    <p>The full mechanism is only a handful of lines. The implementation below is minimal but complete &mdash; every step corresponds directly to the formula:</p>
+
+    <pre><code>import torch
+import torch.nn.functional as F
+import math
+
+def scaled_dot_product_attention(Q, K, V, mask=None):
+    """
+    Q: (batch, seq_len, d_k)
+    K: (batch, seq_len, d_k)
+    V: (batch, seq_len, d_v)
+    mask: optional boolean mask (batch, seq_len, seq_len)
+    """
+    d_k = Q.shape[-1]
+
+    # Step 1 &amp; 2: dot products, then scale
+    scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)
+
+    # Optional: mask out future positions (for autoregressive decoding)
+    if mask is not None:
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+
+    # Step 3: softmax to get attention weights
+    weights = F.softmax(scores, dim=-1)
+
+    # Step 4: weighted sum of values
+    output = torch.matmul(weights, V)
+
+    return output, weights</code></pre>
+
+    <p>The mask is used in decoder self-attention to prevent a position from attending to future positions. A triangular mask of zeros blocks the upper-right portion of the scores matrix. After softmax, those positions receive negative infinity &rarr; weight of zero, so they contribute nothing to the output.</p>
+
+    <h2>From One Head to Many: Multi-Head Attention</h2>
+
+    <p>A single attention head learns one kind of relevance. Given the sentence &ldquo;The cricketer who trained in Chennai became the best opener,&rdquo; a single head might learn to link &ldquo;opener&rdquo; back to &ldquo;cricketer.&rdquo; But you might simultaneously want to track the modifier relationship (&ldquo;best&rdquo; modifies &ldquo;opener&rdquo;), the location relationship (&ldquo;trained in Chennai&rdquo;), and the subject-verb relationship (&ldquo;cricketer became&rdquo;).</p>
+
+    <p>Multi-head attention runs <em>h</em> independent attention heads in parallel, each with its own learned query, key, and value projections <span class="citation" title="Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., &amp; Polosukhin, I. (2017). Attention Is All You Need. NeurIPS.">(Vaswani et al., 2017)</span>. Each head operates in a lower-dimensional subspace &mdash; if the model dimension is 512 and there are 8 heads, each head operates in 64 dimensions. After each head computes its own output, all outputs are concatenated and projected back to the model dimension.</p>
+
+    <pre><code>class MultiHeadAttention(torch.nn.Module):
+    def __init__(self, d_model, num_heads):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.d_k = d_model // num_heads
+        self.num_heads = num_heads
+
+        # Single projection matrices for all heads (more efficient)
+        self.W_q = torch.nn.Linear(d_model, d_model)
+        self.W_k = torch.nn.Linear(d_model, d_model)
+        self.W_v = torch.nn.Linear(d_model, d_model)
+        self.W_o = torch.nn.Linear(d_model, d_model)
+
+    def split_heads(self, x):
+        # x: (batch, seq_len, d_model)
+        # returns: (batch, num_heads, seq_len, d_k)
+        batch, seq_len, _ = x.shape
+        x = x.view(batch, seq_len, self.num_heads, self.d_k)
+        return x.transpose(1, 2)
+
+    def forward(self, Q, K, V, mask=None):
+        # Project and split into heads
+        Q = self.split_heads(self.W_q(Q))
+        K = self.split_heads(self.W_k(K))
+        V = self.split_heads(self.W_v(V))
+
+        # Scaled dot-product attention on all heads simultaneously
+        output, weights = scaled_dot_product_attention(Q, K, V, mask)
+
+        # Concatenate heads and project back to d_model
+        batch, _, seq_len, _ = output.shape
+        output = output.transpose(1, 2).contiguous()
+        output = output.view(batch, seq_len, -1)   # flatten heads
+        return self.W_o(output)</code></pre>
+
+    <h3>Why Multiple Heads Outperform a Single Wide Head</h3>
+
+    <p>You might ask: why not simply use a single attention head with a larger key dimension? Would a single head in 512 dimensions learn everything that 8 heads in 64 dimensions each learn?</p>
+
+    <p>The empirical answer is no, and the theoretical explanation points to the softmax bottleneck. A single head applies one softmax over the full sequence, producing one set of weights. Those weights must simultaneously capture all types of relationships &mdash; syntactic, semantic, positional, referential. The result is a compromise: the head learns whichever pattern is most frequent and most strongly rewarded by the loss, likely at the expense of rarer but important patterns.</p>
+
+    <p>Multiple heads each apply their own softmax. Each head can specialise. Ablation studies show that different heads do indeed learn different functions: some track syntactic dependencies, others track positional proximity, others handle coreference <span class="citation" title="Clark, K., Khandelwal, U., Levy, O., &amp; Manning, C. D. (2019). What Does BERT Look at? An Analysis of BERT's Attention. ACL Workshop on BlackboxNLP.">(Clark et al., 2019)</span>. Crucially, the full model retains all these perspectives simultaneously by concatenating the heads before the final projection.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Attention is quadratic in sequence length: the scores matrix is <code>(n, n)</code>. Doubling the sequence length quadruples the memory and computation. For sequences of 100,000 tokens &mdash; a full book &mdash; standard attention is infeasible. This motivated a decade of research into efficient attention variants: sparse attention, linear attention, flash attention, and state-space models. What trade-offs would you expect each approach to make against the standard mechanism?</p>
+    </div>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You train a model with d_k = 256 but forget to apply the sqrt(d_k) scaling step. During training, the loss decreases quickly at first and then stalls early. What is the most likely cause?</div>
+      <button class="quiz-option" data-letter="A">The model is overfitting because the weights are too sharp.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The softmax is saturating. Large unscaled dot products make attention nearly one-hot, so gradients through the softmax are near zero and the Q and K projections cannot learn.</button>
+      <button class="quiz-option" data-letter="C">The model dimension is too large and the number of heads should be increased to compensate.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. With d_k = 256, unscaled dot products have a standard deviation of 16. Softmax at those scales produces near-one-hot distributions, and the gradient of softmax becomes nearly zero across all but one position per row. The W_q and W_k matrices stop receiving useful gradient signal. Scaling by 1/sqrt(256) = 1/16 brings the inputs back to a range where softmax is smooth."
+           data-incorrect="Recall what happens when softmax receives very large inputs. At those magnitudes, softmax amplifies the single largest score to near 1.0 and suppresses everything else. The gradient of softmax depends on the output distribution &mdash; when the distribution is nearly one-hot, the gradient is nearly zero almost everywhere."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A translation model's decoder uses cross-attention. Where do the queries, keys, and values come from?</div>
+      <button class="quiz-option" data-letter="A">Queries, keys, and values all come from the decoder's own hidden states.</button>
+      <button class="quiz-option" data-letter="B">Queries come from the encoder output; keys and values come from the decoder's hidden states.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Queries come from the decoder's hidden states; keys and values come from the encoder output.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly right. The decoder asks questions (queries) based on what it has generated so far. The encoder has already processed the source sentence and its output provides the pool of keys (what answers are available?) and values (what information does each position carry?). The decoder attends over the full source encoding on every generation step."
+           data-incorrect="Think about who is doing the looking and who is being looked at. The decoder is generating the output and needs to consult the source. The decoder's current state forms the query. The source sentence representation provides the keys and values."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why does multi-head attention with 8 heads in d_k=64 generally outperform single-head attention in d_k=512, even though both use the same total dimensionality?</div>
+      <button class="quiz-option" data-letter="A">Eight heads use less memory because the projections are smaller.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Each head applies a separate softmax and can specialise in a different type of relationship. A single head must capture all relationship types with one set of weights and one softmax, which forces it to compromise.</button>
+      <button class="quiz-option" data-letter="C">Single-head attention is actually better but multi-head is used because it parallelises more efficiently on GPUs.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The key is the separate softmax per head. One softmax must assign attention weights that simultaneously capture syntactic structure, coreference, positional proximity, and semantic relatedness. Multiple independent softmaxes allow specialisation. Empirical studies confirm that different heads learn qualitatively different attention patterns."
+           data-incorrect="Think about what each softmax constrains. A single softmax must produce one weight distribution that handles all relationship types. Multiple softmaxes can each optimise for a different type of pattern independently. The final concatenation then gives the model access to all of them."></div>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why is the dot product scaled by the square root of the key dimension?</li>
+        <li>What is the difference between self-attention and cross-attention?</li>
+        <li>Why does multi-head attention outperform single-head attention?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAVIGATION FOOTER -->
+  <div class="page-nav" data-prev="n06-rnns-lstms" data-next="n07-attention-mechanism">
+    <a href="../module-2/n06-rnns-lstms.html" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">N06 &mdash; RNNs and LSTMs</span>
+    </a>
+    <div></div>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n07-attention-mechanism');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrolled = window.scrollY;
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (total > 0 ? (scrolled / total) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Toggle-reveal panels
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      var isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      var arrow = header.querySelector('span:last-child');
+      if (arrow) arrow.textContent = isOpen ? '+' : '−';
+    });
+  });
+
+  // Quiz interactions
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.style.background = '';
+          b.style.color = '';
+        });
+        btn.style.background = correct ? 'var(--green-dim)' : 'var(--red-dim)';
+        btn.style.color = correct ? 'var(--green)' : 'var(--red)';
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.padding = '1rem 1.25rem';
+          feedback.style.fontSize = '0.88rem';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--text-muted)';
+          feedback.style.borderTop = '1px solid var(--border)';
+        }
+      });
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var isOpen = verHeader.classList.contains('open');
+      verHeader.classList.toggle('open', !isOpen);
+      verHeader.setAttribute('aria-expanded', String(!isOpen));
+      var body = document.querySelector('.verification-body');
+      if (body) body.classList.toggle('open', !isOpen);
+    });
+    verHeader.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verHeader.click(); }
+    });
+  }
+
+  // Mobile nav toggle
+  var navToggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (navToggle && overlay && sidebar) {
+    navToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('visible');
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

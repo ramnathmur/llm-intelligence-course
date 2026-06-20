@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F05 &mdash; Features and Data &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F05 &mdash; Features and Data">
+<meta property="og:description" content="How raw information becomes the numbers a model can actually process.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/f05-features-and-data.html">Module 2: Data &amp; Features</a>
+    <span class="sep">&#8250;</span>
+    Features and Data
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">F05 &middot; Module 2</div>
+    <h1>Features and Data</h1>
+    <p class="one-liner">How raw information becomes the numbers a model can actually process.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A survey form that converts a patient&rsquo;s described symptoms into standardised checkboxes a diagnostic system can process &mdash; the translation choices shape what the system can detect.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Models cannot accept text, images, or dates directly &mdash; everything must become a number. Feature engineering is the translation layer, and bad feature choices cripple even the best architecture.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why raw data must be transformed before a model touches it, what the main transformations are, and how bad feature choices damage model performance regardless of architecture quality.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f01-what-is-a-model.html" class="prereq-chip">F01 &mdash; What Is a Model?</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Picture a triage nurse at a hospital intake desk. A patient walks in and describes their problem: &ldquo;I feel terrible, burning up, and my chest hurts when I breathe.&rdquo; That sentence is rich with information, but a diagnostic computer cannot read prose. So the nurse translates: she ticks boxes on a standardised form &mdash; <em>fever: yes</em>, <em>chest pain: yes</em>, <em>respiratory involvement: yes</em>, <em>temperature: 39.2&deg;C</em>. The computer gets the form, not the story. And here is the critical point: the boxes the nurse has available shape everything the system can detect. If the form has no box for &ldquo;breathing pain,&rdquo; that clue vanishes.</p>
+
+    <p>Feature engineering is that translation job. You take raw reality &mdash; patient descriptions, email text, cricket match statistics, house prices, photos &mdash; and you convert it into a table of numbers that a model can calculate with. Every machine learning model, from the simplest logistic regression to a neural network with billions of parameters, accepts exactly one thing as input: a vector of numbers. The entire craft of feature engineering is deciding which numbers to provide and how to construct them.</p>
+
+    <p>This page walks the four main transformations that convert raw data into usable features: <strong>normalisation</strong>, <strong>encoding of categories</strong>, <strong>date and text handling</strong>, and <strong>feature crosses</strong>. By the end you will understand not just <em>what</em> these techniques do, but <em>why</em> skipping or botching them breaks training &mdash; even when the model architecture is perfectly designed.</p>
+
+    <h2>Why raw data breaks models</h2>
+
+    <p>Start with a motivating failure. Suppose you are building a model to predict house prices. Your data has two columns: <em>square footage</em> (ranging from 500 to 5,000) and <em>number of bathrooms</em> (ranging from 1 to 5). You feed both directly to a gradient-based model and watch it train.</p>
+
+    <p>The model will struggle &mdash; not because the data is bad, but because the <em>scales</em> are wildly different. Square footage swings by 4,500 units; bathrooms by 4. When the training algorithm computes gradients (the nudges that update the model&rsquo;s weights), the square footage column dominates. The model will sprint down that dimension while barely moving in the bathroom dimension. Training slows, oscillates, or fails to converge entirely. You fix this with normalisation.</p>
+
+    <p>Now add a third column: <em>neighbourhood</em>, with values like &ldquo;Mayfair,&rdquo; &ldquo;Shoreditch,&rdquo; and &ldquo;Hackney.&rdquo; A model cannot do arithmetic on city names. You must convert them to numbers &mdash; but the conversion method you choose changes what the model can learn. Get it wrong and you accidentally teach the model that Hackney is arithmetically between Mayfair and Shoreditch, which is geographic nonsense. You fix this with encoding.</p>
+
+    <p>These are not exotic edge cases. They are the default state of real data. Feature engineering is the discipline that turns default-broken into ready-to-train.</p>
+
+    <h2>Normalisation: putting all scales on the same footing</h2>
+
+    <p>The core intuition is simple: if different columns live on wildly different numerical scales, learning algorithms that use gradients will have a hard time. Normalisation rescales every column so they occupy roughly the same numerical range.</p>
+
+    <h3>Min-max scaling</h3>
+
+    <p>The most direct approach. For every value in a column, subtract the column minimum and divide by the range (max minus min). The result is a number between 0 and 1. A house with 1,000 square feet in a dataset ranging from 500 to 5,000 becomes <code>(1000 - 500) / (5000 - 500) = 0.11</code>. A 5,000 sq ft house becomes 1.0. Now both columns &mdash; square footage and bathrooms &mdash; live between 0 and 1, and the gradient treats them as equals.</p>
+
+    <p>Min-max is intuitive but fragile when outliers exist. A single 50,000 sq ft commercial building in your dataset would compress all the residential houses into a narrow band near zero, destroying the variation you care about.</p>
+
+    <h3>Standardisation (Z-score normalisation)</h3>
+
+    <p>A more robust alternative. Subtract the column mean and divide by the standard deviation. The result is a value in &ldquo;standard deviation units&rdquo; &mdash; how many standard deviations a data point sits from average. A typical value near the mean becomes a number close to zero; an extreme value might be 2 or 3.</p>
+
+    <p>Standardisation handles outliers better than min-max because the calculation uses statistical spread, not the raw extremes. It is the default choice for most gradient-based models <span class="citation" title="LeCun, Y., Bottou, L., Orr, G. B., &amp; M&uuml;ller, K.-R. (1998). Efficient BackProp. Neural Networks: Tricks of the Trade, Springer.">(LeCun et al., 1998)</span>.</p>
+
+    <h3>Why normalisation matters for gradient-based training</h3>
+
+    <p>Gradient descent works by measuring the slope of the loss function in every direction and taking a step downhill. When features are on very different scales, the loss function looks like a long, narrow valley &mdash; steep in the bathroom direction (small scale) and shallow in the square footage direction (large scale). The gradient points diagonally across the valley instead of straight down. Each training step wastes most of its effort fighting the shape of the terrain, and learning slows dramatically.</p>
+
+    <p>Normalisation reshapes the loss landscape into something closer to a bowl: more symmetric, easier to navigate. The algorithm can take larger, more confident steps and converge faster <span class="citation" title="Ioffe, S. &amp; Szegedy, C. (2015). Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift. ICML.">(Ioffe &amp; Szegedy, 2015)</span>.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if you normalise using statistics from your whole dataset (including test data), what goes wrong?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>You have committed <strong>data leakage</strong>. You used future information (the test set&rsquo;s mean and standard deviation) to transform training data. The model has indirectly &ldquo;seen&rdquo; the test set before evaluating on it, so your accuracy score is artificially inflated. The correct protocol: compute normalisation statistics on the training set only, then apply those same statistics to transform both the training and test sets. This is why preprocessing steps belong inside cross-validation folds, not outside them.</p>
+      </div>
+    </div>
+
+    <h2>Encoding categorical variables</h2>
+
+    <p>A category is any feature whose values are labels rather than numbers &mdash; neighbourhood names, product types, colours, cricket shot outcomes, blood types. Categories are among the most common feature types in business data, and they cannot be fed to most models as raw text.</p>
+
+    <h3>Label encoding: the tempting shortcut</h3>
+
+    <p>The simplest approach is to assign each category an integer. If you have three neighbourhoods &mdash; Mayfair, Shoreditch, Hackney &mdash; label encoding produces 0, 1, 2. Clean and compact.</p>
+
+    <p>The problem: the model reads those numbers as a scale. It learns that Hackney (2) is &ldquo;twice as much neighbourhood&rdquo; as Shoreditch (1), and that Mayfair (0) is the &ldquo;base.&rdquo; That ordering is an artifact of the encoding, not a property of the data. For a decision tree model, which only asks &ldquo;is this value above or below a threshold,&rdquo; label encoding is fine. For any model that does arithmetic on inputs &mdash; linear models, neural networks &mdash; label encoding injects false structure and corrupts learning.</p>
+
+    <p><strong>Rule of thumb:</strong> use label encoding only for <em>ordinal</em> categories &mdash; those where the order genuinely matters. T-shirt sizes (Small, Medium, Large, XL) are ordinal; their numeric order (0, 1, 2, 3) reflects real structure. Neighbourhood names are not ordinal; their order is arbitrary.</p>
+
+    <h3>One-hot encoding: a dummy variable for each category</h3>
+
+    <p>The standard fix for nominal (unordered) categories. Instead of one column with values 0, 1, 2, create <em>three columns</em> &mdash; one per neighbourhood. Each column contains 1 if this row belongs to that neighbourhood, 0 otherwise. A house in Shoreditch gets <code>[0, 1, 0]</code>. A house in Mayfair gets <code>[1, 0, 0]</code>. No category is numerically &ldquo;higher&rdquo; than any other. The model learns a separate weight for each category independently.</p>
+
+    <p>One-hot is the right default for nominal categories. Its cost is width: a category with 100 values produces 100 columns. For very high-cardinality categories (postcode with thousands of distinct values), one-hot becomes impractical and you would use alternatives like <em>target encoding</em> (replacing each category with the mean outcome for that category in the training data) or <em>embedding layers</em> (learning a dense vector per category, exactly like token embeddings in language models).</p>
+
+    <div class="comparison-table">
+      <div class="col-header">Label Encoding</div>
+      <div class="col-header">One-Hot Encoding</div>
+      <div class="col-body">
+        <p>Single column. Compact. Implies an ordering that may not exist. Safe for ordinal categories (sizes, severity ratings). Dangerous for nominal ones (colours, cities).</p>
+      </div>
+      <div class="col-body">
+        <p>One column per category. Wider output. No false ordering. Default choice for nominal categories. Impractical for very high-cardinality variables.</p>
+      </div>
+    </div>
+
+    <h3>When the quiz question actually matters</h3>
+
+    <p>Here is a concrete test case. You are building a model to predict hospital readmission. One feature is <em>ward type</em>: Cardiology (0), Oncology (1), Orthopaedics (2). Label encoding would imply Orthopaedics is &ldquo;twice&rdquo; Oncology. That is clinically meaningless and statistically corrupting. One-hot gives each ward its own binary signal and lets the model discover that Cardiology and Oncology wards might share readmission patterns, without being told to look for that. The encoding preserves optionality.</p>
+
+    <h2>Handling dates, text, and missing data</h2>
+
+    <p>These three cases come up in almost every real business dataset, and each has a straightforward treatment.</p>
+
+    <h3>Dates</h3>
+
+    <p>A raw date like <code>2024-03-15</code> means nothing to a model as a string. Even as a Unix timestamp (seconds since 1 January 1970), a model cannot easily learn that March is springtime, that Fridays have different purchasing patterns, or that year-end spikes are seasonal.</p>
+
+    <p>The standard approach is to <em>decompose</em> the date into separate numeric features: year, month (1&ndash;12), day of week (0&ndash;6), day of month, quarter. For cyclical features like month and day of week, where December (12) is actually close to January (1), you can also encode them as sine/cosine pairs to preserve the circular structure. The choice of decomposition shapes what patterns the model can find &mdash; include day-of-week if you expect weekly patterns; omit it if your data has none.</p>
+
+    <h3>Text</h3>
+
+    <p>Free text &mdash; customer reviews, support tickets, medical notes &mdash; is the richest and most demanding feature type. For classical models (not neural networks), the standard approach is <em>bag of words</em>: count how many times each word in a fixed vocabulary appears in this document. The result is a very wide, very sparse vector &mdash; mostly zeros. TF-IDF (term frequency &ndash; inverse document frequency) is a weighted refinement that down-ranks words that appear everywhere (like &ldquo;the&rdquo;) and up-ranks words that are distinctive to specific documents <span class="citation" title="Salton, G. &amp; McGill, M.J. (1983). Introduction to Modern Information Retrieval. McGraw-Hill.">(Salton &amp; McGill, 1983)</span>.</p>
+
+    <p>For neural networks, text goes through a tokeniser and embedding layer instead &mdash; the process described in the LLM Intelligence course. The key point here is that text never goes in raw; it always passes through a translation step.</p>
+
+    <h3>Missing data</h3>
+
+    <p>Real data has holes. A column for &ldquo;income&rdquo; might be blank for 30% of rows. A model cannot receive a blank. You must decide: <em>impute</em> (fill the gap with an estimate) or <em>indicate</em> (add a binary &ldquo;was this value missing?&rdquo; column), or both.</p>
+
+    <p>Simple imputation replaces missing values with the column mean (for numbers) or most frequent category (for categories). More sophisticated imputation uses other columns to estimate the missing value. The &ldquo;missingness indicator&rdquo; column is important when the fact that a value is missing is itself informative &mdash; a patient who skips a blood test may be sicker, on average, than one who completes it. Dropping that signal by imputing silently discards information.</p>
+
+    <h2>Feature crosses: teaching the model about interactions</h2>
+
+    <p>A feature cross is a synthetic feature created by multiplying or combining two (or more) existing features. It captures interaction effects that neither feature expresses on its own.</p>
+
+    <p>Consider a food delivery platform. You have two features: <em>time of day</em> (morning, afternoon, evening) and <em>day of week</em> (Mon&ndash;Sun). Individually, these features tell you something. But the valuable signal is the <em>combination</em>: a Friday evening is not just Friday plus evening &mdash; it is a distinct consumption context with its own demand pattern. Saturday morning is a different world from Saturday evening. A model that receives only the individual features must learn these interactions from data alone, which requires more data and more capacity. A feature cross hands that interaction to the model explicitly.</p>
+
+    <p>In practice, you create a feature cross by concatenating the values (so <code>Friday_evening</code> becomes one categorical variable), or by multiplying numeric features. For example, crossing &ldquo;age&rdquo; by &ldquo;income&rdquo; creates an &ldquo;age-weighted income&rdquo; feature that might predict savings behaviour better than either variable alone.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Feature crosses are a form of <em>domain knowledge injection</em>. You are telling the model &ldquo;these two things matter jointly, not just individually.&rdquo; Deep neural networks can in principle discover interactions themselves given enough data, but crosses give the model a head start and can dramatically reduce the data required to learn a pattern. Google&rsquo;s production recommendation systems rely heavily on feature crosses precisely because interaction signals are so information-dense <span class="citation" title="Cheng, H. T. et al. (2016). Wide &amp; Deep Learning for Recommender Systems. arXiv:1606.07792.">(Cheng et al., 2016)</span>.</p>
+    </div>
+
+    <h3>When not to cross</h3>
+
+    <p>Feature crosses multiply width. Cross three features with 10 categories each and you have 1,000 possible combinations &mdash; most of which may appear only once in your data, making them statistically unreliable. Cross too aggressively and you risk <em>overfitting</em>: the model learns patterns specific to your training data that do not generalise. Use crosses when you have strong domain reason to expect an interaction, and validate that the crossed feature improves held-out performance.</p>
+
+    <!-- INTERACTIVE: SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model predicts hospital readmission. One feature is &ldquo;ward type&rdquo; with values Cardiology, Oncology, and Orthopaedics. A data scientist assigns 0, 1, 2. What is the main risk?</div>
+      <button class="quiz-option" data-letter="A">The model will run out of memory because three values require more storage than a binary variable.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model will treat ward types as having a numeric ordering &mdash; implying Orthopaedics is &ldquo;twice&rdquo; Oncology &mdash; and learn a spurious arithmetic relationship.</button>
+      <button class="quiz-option" data-letter="C">Label encoding always causes slower training than one-hot encoding regardless of the model type.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. Label encoding assigns an implicit ordering. For a nominal category like ward type, where no ordering exists, this corrupts the model&rsquo;s weight updates. One-hot encoding gives each ward its own independent column and avoids the false arithmetic."
+           data-incorrect="The concern is not about storage or speed &mdash; it is about false arithmetic structure. A model doing arithmetic on 0, 1, 2 &ldquo;learns&rdquo; that Orthopaedics is twice as much as Oncology, which is medically meaningless and corrupts learning. One-hot encoding removes this artefact."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You want to let a model discover that &ldquo;Friday evening&rdquo; is a distinct demand context &mdash; not just Friday + evening. The most direct way to express this is:</div>
+      <button class="quiz-option" data-letter="A">Train a deeper neural network; it will learn the interaction automatically given enough data.</button>
+      <button class="quiz-option" data-letter="B">Normalise the day-of-week and time-of-day columns using Z-score standardisation.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Create a feature cross: a new categorical variable combining day and time slot into a single value like &ldquo;Friday_evening.&rdquo;</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. A feature cross encodes the joint pattern directly, giving the model an explicit signal for each day&ndash;time combination. While a deep network can theoretically learn this without the cross, the cross makes learning faster and more data-efficient."
+           data-incorrect="Normalisation is a scale-alignment technique, not an interaction technique. A deeper network can discover interactions, but it requires more data and compute to do so. The feature cross is the direct, efficient answer."></div>
+    </div>
+
+    <h2>The full pipeline in practice</h2>
+
+    <p>Feature engineering does not happen all at once. It is a pipeline with a defined sequence:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Handle missing values</h4>
+        <p>Impute or drop. Add missingness indicator columns where the gap itself is informative. Missing data must be resolved before any transformation can proceed.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Encode categoricals</h4>
+        <p>Choose label encoding for ordinal categories, one-hot for nominal ones. High-cardinality categories may require target encoding or learned embeddings. The encoding must be fitted on training data only.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Decompose dates and text</h4>
+        <p>Break dates into numeric components. Convert text to bag-of-words, TF-IDF, or embeddings depending on the model architecture. Again: compute vocabularies and statistics on training data only.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Create feature crosses</h4>
+        <p>Add synthetic interaction features where domain knowledge suggests joint patterns matter. Keep a close eye on cardinality explosion.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Normalise numeric columns</h4>
+        <p>Apply min-max or Z-score scaling. Compute the scaling statistics on the training set; transform train, validation, and test sets using those same statistics. Normalisation is the final step &mdash; applied after encoding, so categorical dummies can be scaled together with continuous features.</p>
+      </div>
+    </div>
+
+    <p>The order matters. Encoding comes before normalisation because the one-hot columns produced by encoding need to be scaled alongside the continuous columns. Missing value handling comes first because downstream transformations cannot operate on gaps. Crosses come after base features are clean, so the components being combined are already trustworthy.</p>
+
+    <h2>Why feature quality beats model complexity</h2>
+
+    <p>There is a temptation, especially after reading about the power of deep learning, to assume that a sufficiently large model will correct for bad feature engineering. It will not, for a fundamental reason.</p>
+
+    <p>A model can only find signal in the information it is given. If neighbourhood names are label-encoded and the model learns a spurious numeric ordering, it will build predictions on top of that artefact. Adding more layers deepens the corruption &mdash; it does not undo it. If the month feature is missing and you are trying to predict seasonal demand, no amount of additional parameters reconstructs information that was never provided.</p>
+
+    <p>Andrej Karpathy, then at Tesla, described this as the reason that data and feature quality improvements typically outperformed architecture improvements in their production perception systems: &ldquo;The boring work pays.&rdquo; The same observation recurs across the industry. A simple linear model with good features often outperforms a deep network with bad ones <span class="citation" title="Domingos, P. (2012). A Few Useful Things to Know about Machine Learning. Communications of the ACM, 55(10), 78&ndash;87.">(Domingos, 2012)</span>.</p>
+
+    <p>This is the diagnostic principle worth internalising: when a model performs poorly, your first audit should not be the architecture but the features. Are scales consistent? Are categoricals encoded correctly? Is there data leakage in the normalisation step? Are obvious interactions absent? Bad features are silent. The model will train without error. It will just learn the wrong things.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Neural networks like GPT learn their own feature representations from raw text through tokenisation and embedding. Does that mean feature engineering is obsolete? Think about where it still matters: tabular data, small datasets, regulated industries where interpretability is required. What are the limits of letting the model &ldquo;figure it out&rdquo;?</p>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Feature engineering is translation. Raw data speaks a language &mdash; text, categories, dates, scales &mdash; that models cannot read. Every transformation converts one element of that language into a number. The translation choices are not neutral: they determine what relationships the model can see, what structure it might confuse as real, and whether the learning algorithm can navigate the parameter space efficiently. A model is never smarter than its features.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why does normalisation matter for gradient-based training? What goes wrong when input features have very different scales?</li>
+        <li>When should you use one-hot encoding versus label encoding? Give a concrete example where the wrong choice would corrupt model learning.</li>
+        <li>What is a feature cross and when would you use one? What is the main risk of crossing too many features?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV FOOTER -->
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('f05-features-and-data');</script>
+</body>
+</html>

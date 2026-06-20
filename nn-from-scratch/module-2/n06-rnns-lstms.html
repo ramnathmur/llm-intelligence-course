@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N06 &mdash; RNNs and LSTMs &mdash; Sequence Modelling Before Transformers &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N06 &mdash; RNNs and LSTMs &mdash; Sequence Modelling Before Transformers">
+<meta property="og:description" content="The sequence models that came before transformers &mdash; and why vanishing gradients killed them.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/n05-optimisers.html">Module 2: Training at Scale</a>
+    <span class="sep">&#8250;</span>
+    RNNs and LSTMs &mdash; Sequence Modelling Before Transformers
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">N06 &middot; Module 2</div>
+    <h1>RNNs and LSTMs &mdash; Sequence Modelling Before Transformers</h1>
+    <p class="one-liner">The sequence models that came before transformers &mdash; and why vanishing gradients killed them.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Reading a 1,000-page novel by taking notes only on the last paragraph before reading the next one. Eventually you lose the plot. RNNs face exactly this problem: information from early in a sequence is diluted by the time the model reaches the end.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Understanding RNNs and LSTMs explains <em>why</em> the transformer was a breakthrough. Their limitations &mdash; vanishing gradients and the inability to parallelise &mdash; are precisely what self-attention was designed to overcome. If you skip this page, transformers look like an arbitrary engineering choice. After this page, they look like an inevitable response to a set of well-defined failures.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    How RNNs process sequences step-by-step, why gradients vanish when backpropagating through many time steps, what specific problem LSTM gates address, and why neither architecture can be parallelised across sequence positions during training.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/n03-activation-functions.html" class="prereq-chip">N03 &mdash; Activation Functions</a>
+    <a href="../module-2/n05-optimisers.html" class="prereq-chip">N05 &mdash; Optimisers &mdash; SGD to Adam</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Before 2017, if you wanted a neural network to process language, time-series data, or any input where order mattered, there was one dominant answer: the <strong>Recurrent Neural Network</strong>, or RNN. It powered Google Translate, speech recognition, and early chatbots. It also had a fatal flaw that the field spent a decade trying to paper over.</p>
+
+    <p>This page tells the full story: how RNNs work, why they fail, how the Long Short-Term Memory (LSTM) cell partially rescued them, and why &mdash; despite those rescue efforts &mdash; the transformer still made both architectures obsolete. Understanding this history is not nostalgia. It is the fastest path to understanding why modern architectures are built the way they are.</p>
+
+    <h2>The core problem: sequences are not fixed-length</h2>
+
+    <p>Every model you built in earlier pages in this course takes a fixed-size input. Feed it a vector of 10 numbers, it produces an output. Feed it a vector of 11 numbers and it breaks &mdash; the weight matrices have the wrong shape.</p>
+
+    <p>Language does not work that way. "The cat sat." is three words. "The cat that the dog that the man owned chased sat." is twelve words. Both express something a model might need to process, and neither has a fixed length.</p>
+
+    <p>You could pad every sentence to the length of the longest one, but that wastes computation and obscures structure. You could use a sliding window, but then you lose dependencies between words that are far apart. The field needed an architecture that could process sequences of variable length, tracking information across positions.</p>
+
+    <p>The RNN was that architecture.</p>
+
+    <h2>How an RNN works: the hidden state as a notepad</h2>
+
+    <p>Imagine an analyst who must read a long strategy document and produce a summary. They cannot hold the whole document in their head at once. So they read one paragraph, jot down a few notes, then read the next paragraph with those notes in hand. The notes evolve as they read. By the end, their notepad captures whatever the process managed to retain.</p>
+
+    <p>An RNN works the same way. At each position in the sequence, it maintains a <strong>hidden state</strong> &mdash; a vector of numbers that acts as the notepad. When a new token (word, character, or data point) arrives, the RNN combines it with the current hidden state to produce a new hidden state. The updated state then carries forward to the next position.</p>
+
+    <p>Formally, at time step <code>t</code>, the RNN computes:</p>
+
+    <pre><code>h_t = tanh(W_h @ h_(t-1) + W_x @ x_t + b)</code></pre>
+
+    <p>Where <code>h_t</code> is the new hidden state, <code>h_(t-1)</code> is the previous hidden state, <code>x_t</code> is the current input token, <code>W_h</code> and <code>W_x</code> are learned weight matrices, and <code>tanh</code> is the activation function from <a href="../module-1/n03-activation-functions.html">N03 &mdash; Activation Functions</a>.</p>
+
+    <p>Notice what is the same across all time steps: the weight matrices <code>W_h</code> and <code>W_x</code>. The RNN uses the <em>same</em> parameters at every position. This is called <strong>weight sharing</strong> across time, and it is what allows the same model to handle sequences of any length.</p>
+
+    <p>The output at each time step is typically derived from the hidden state:</p>
+
+    <pre><code>y_t = W_out @ h_t + b_out</code></pre>
+
+    <p>In a language model, <code>y_t</code> would be a probability distribution over the vocabulary &mdash; the model's prediction of what comes next.</p>
+
+    <h3>Training an RNN: Backpropagation Through Time</h3>
+
+    <p>Training an RNN uses the same principle as training any neural network: compute the loss, take the gradient, update the weights. But the computation graph for an RNN stretches <em>across time</em>. Each time step depends on the previous one, so the gradient must flow backwards through all the time steps to reach the weight matrices. This is called <strong>Backpropagation Through Time</strong>, or BPTT <span class="citation" title="Werbos, P. J. (1990). Backpropagation through time: what it does and how to do it. Proceedings of the IEEE, 78(10), 1550&ndash;1560.">(Werbos, 1990)</span>.</p>
+
+    <p>Think of it like a post-project review at a consulting firm. The client engagement produced a bad outcome. To identify the root cause, the partners trace back through every decision in the project timeline &mdash; the final presentation, the interim report, the initial scoping, the first kick-off call. The responsibility for the bad outcome is distributed across all those decisions, weighted by how much each one contributed. BPTT does exactly this, tracing responsibility for a bad prediction back through every time step in the sequence.</p>
+
+    <h2>The vanishing gradient problem</h2>
+
+    <p>Here is where things go wrong. When you backpropagate through many time steps, the gradient must pass through the <code>tanh</code> activation at <em>each</em> step. The <code>tanh</code> function maps any input to a value between &minus;1 and +1. Its derivative &mdash; the slope at any point &mdash; is always at most 1, and is often much smaller.</p>
+
+    <p>When you multiply many numbers that are each smaller than 1 together, the product shrinks toward zero. Fast.</p>
+
+    <p>If the gradient shrinks by a factor of 0.5 at each time step, then over 20 steps it becomes <code>0.5^20 = 0.000001</code>. Over 100 steps, it is effectively zero. The weights that process early tokens receive gradients so small that they barely update at all. The model cannot learn from distant context.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The vanishing gradient problem is not a bug in the training algorithm. It is an inherent consequence of the RNN's architecture: multiplying the same weight matrix and the same bounded activation function together hundreds of times causes the gradient signal to exponentially decay. The network becomes deaf to information from far back in the sequence.</p>
+    </div>
+
+    <p>This is why the novel-reading analogy is so apt. Each time the RNN processes a new token, it is like rewriting the notepad with a slightly diluted version of its previous contents plus the new information. After 50 rewrites, what was written on page 1 of the notepad has been diluted into near-nothingness.</p>
+
+    <p>There is also a mirror-image problem: <strong>exploding gradients</strong>. If the weight matrix has values greater than 1, the gradient grows exponentially instead of shrinking, causing the weights to swing wildly during training. The standard fix is <strong>gradient clipping</strong> &mdash; if the gradient norm exceeds a threshold, scale it down. This patches the exploding problem but does nothing for the vanishing problem <span class="citation" title="Pascanu, R., Mikolov, T., &amp; Bengio, Y. (2013). On the difficulty of training recurrent neural networks. ICML.">(Pascanu et al., 2013)</span>.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: why does gradient vanishing specifically hurt long-range dependencies, not short-range ones?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>A gradient flowing back from time step 50 to time step 49 only travels one step and barely shrinks. A gradient flowing back from step 50 to step 1 must pass through 49 multiplications, each shrinking it. Short-range dependencies &mdash; like predicting the next word in "the cat sat on the ___" &mdash; require only a few steps of backpropagation. The gradient survives. Long-range dependencies &mdash; like resolving a pronoun to its subject 30 words earlier &mdash; require many steps. The gradient dies before it arrives. The model learns local patterns easily and global structure almost not at all.</p>
+      </div>
+    </div>
+
+    <h2>The LSTM: gates as a solution</h2>
+
+    <p>In 1997, Sepp Hochreiter and J&uuml;rgen Schmidhuber proposed a radical redesign: the <strong>Long Short-Term Memory</strong> cell <span class="citation" title="Hochreiter, S. &amp; Schmidhuber, J. (1997). Long short-term memory. Neural Computation, 9(8), 1735&ndash;1780.">(Hochreiter &amp; Schmidhuber, 1997)</span>. It became one of the most cited papers in machine learning history, because it worked.</p>
+
+    <p>The key insight: instead of trying to force gradients to survive through many <code>tanh</code> squashings, create a separate pathway &mdash; the <strong>cell state</strong> &mdash; where information can flow unchanged. Then use <strong>gates</strong> to control what flows into, out of, and through that pathway.</p>
+
+    <p>Think of a hospital patient's medical record. Three staff roles manage it:</p>
+    <ul>
+      <li>A <strong>records clerk</strong> (forget gate) who reviews the current record and decides which old entries are no longer relevant.</li>
+      <li>An <strong>admitting nurse</strong> (input gate) who decides which new information from today's assessment gets added to the record.</li>
+      <li>A <strong>attending physician</strong> (output gate) who reads the record and decides what to share in the handover summary to the next team.</li>
+    </ul>
+
+    <p>Each gate is a small neural network that outputs a vector of values between 0 and 1. Multiplying the cell state by values close to 0 erases information. Multiplying by values close to 1 preserves it. The model <em>learns</em> when to remember and when to forget, rather than having that determined by the fixed arithmetic of the architecture.</p>
+
+    <h3>The four computations inside an LSTM cell</h3>
+
+    <p>At each time step, the LSTM cell performs four computations. The inputs are: the previous hidden state <code>h_(t-1)</code>, the previous cell state <code>C_(t-1)</code>, and the current input <code>x_t</code>.</p>
+
+    <pre><code># Forget gate: what fraction of the old cell state to retain
+f_t = sigmoid(W_f @ [h_(t-1), x_t] + b_f)
+
+# Input gate: what new information to write
+i_t = sigmoid(W_i @ [h_(t-1), x_t] + b_i)
+C_tilde = tanh(W_C @ [h_(t-1), x_t] + b_C)
+
+# Cell state update: combine old memory with new
+C_t = f_t * C_(t-1) + i_t * C_tilde
+
+# Output gate: what to read out as the hidden state
+o_t = sigmoid(W_o @ [h_(t-1), x_t] + b_o)
+h_t = o_t * tanh(C_t)</code></pre>
+
+    <p>The notation <code>[h_(t-1), x_t]</code> means the two vectors are concatenated into one before the matrix multiply.</p>
+
+    <p>The key line is the cell state update: <code>C_t = f_t * C_(t-1) + i_t * C_tilde</code>. This is an <strong>additive</strong> update. The old cell state is scaled (possibly zeroed) and then added to new content. The gradient of this operation flows back through addition, which does not multiply the gradient by anything &mdash; it passes through intact. This is the LSTM's core trick: the cell state creates a <strong>gradient highway</strong> where information (and its gradients) can travel across many time steps without being destroyed by repeated multiplications <span class="citation" title="Hochreiter, S. &amp; Schmidhuber, J. (1997). Long short-term memory. Neural Computation, 9(8), 1735&ndash;1780.">(Hochreiter &amp; Schmidhuber, 1997)</span>.</p>
+
+    <h3>The Gated Recurrent Unit: a leaner variant</h3>
+
+    <p>In 2014, Cho et al. proposed the <strong>Gated Recurrent Unit</strong> (GRU) <span class="citation" title="Cho, K., van Merrienboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H., &amp; Bengio, Y. (2014). Learning phrase representations using RNN encoder-decoder for statistical machine translation. EMNLP.">(Cho et al., 2014)</span>. A GRU merges the cell state and hidden state into one, and replaces the three gates with two: a <strong>reset gate</strong> and an <strong>update gate</strong>. Fewer parameters, slightly simpler to train, and on many tasks essentially equivalent to an LSTM. Both became standard tools before the transformer era.</p>
+
+    <h2>What LSTMs cannot fix</h2>
+
+    <p>LSTMs improved greatly on vanilla RNNs. For sequences of a few hundred tokens, they could capture meaningful long-range dependencies. But they did not solve the problem &mdash; they deferred it.</p>
+
+    <h3>Long-range memory is still limited</h3>
+
+    <p>The cell state is not infinitely expressive. It is a fixed-size vector &mdash; perhaps 512 numbers &mdash; that must somehow compress the entire history of a sequence. For a novel-length input, that vector must decide what to keep and what to discard from thousands of prior tokens. The forget gate helps, but it is learned and imperfect. On sequences of thousands of tokens, LSTMs still lose track of distant information.</p>
+
+    <p>Bahdanau et al. (2015) partially fixed this for translation with the <strong>attention mechanism</strong> <span class="citation" title="Bahdanau, D., Cho, K., &amp; Bengio, Y. (2015). Neural machine translation by jointly learning to align and translate. ICLR.">(Bahdanau et al., 2015)</span> &mdash; letting the decoder look back at all encoder hidden states rather than just the final one. This was the seed idea that, two years later, became the transformer. But attention was bolted onto the LSTM, not built into it. The fundamental architecture was still recurrent.</p>
+
+    <h3>Parallelisation is impossible</h3>
+
+    <p>This is the LSTM's structural, unfixable problem.</p>
+
+    <p>Consider how you train an MLP. You have a batch of 256 examples. You compute the forward pass for all 256 simultaneously &mdash; one giant matrix multiplication. Modern GPUs are designed for exactly this: thousands of cores all doing matrix arithmetic in parallel.</p>
+
+    <p>Now consider training an LSTM on a sequence of 500 tokens. Step 2 depends on the hidden state from step 1. Step 3 depends on step 2. Step 500 depends on step 499. Each step must wait for the previous one to finish. You <em>cannot</em> run all 500 steps in parallel, because their outputs are causally chained. You are forced to process them sequentially, one step at a time.</p>
+
+    <p>This makes LSTM training slow. Not because the individual computations are expensive, but because a GPU designed to run 4,000 operations in parallel is being used to run 500 operations in strict sequence. You are wasting the hardware.</p>
+
+    <p>For a 500-token sequence with 512-dimensional hidden states, the GPU utilisation is a fraction of what it could be. For a 2,000-token sequence &mdash; a fairly short document by real-world standards &mdash; the problem compounds further. Training modern large-scale models on LSTMs would take not weeks but years.</p>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check: Vanishing Gradients</div>
+      <div class="quiz-question">An RNN is trained to predict the last word in a 100-token sentence. The subject that the last verb must agree with appeared at token 3. Why might the model fail to learn this dependency?</div>
+      <button class="quiz-option" data-letter="A">Because the RNN cannot read token 3 &mdash; it only processes the last few tokens in the window.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because the gradient signal from the final prediction error must travel back through 97 time steps, shrinking at each one, until it is too small to meaningfully update the weights that process token 3.</button>
+      <button class="quiz-option" data-letter="C">Because the hidden state is re-initialised at each time step, so the information from token 3 is discarded before the model reaches token 100.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. The RNN does read token 3 &mdash; the forward pass visits every token in sequence. But the backward pass is where things break. The gradient from the loss at step 100 must survive 97 multiplications by the tanh derivative, each less than 1, shrinking exponentially. By the time it reaches step 3, it is effectively zero. The weights for early tokens receive no meaningful update signal."
+           data-incorrect="Not quite. Option A is wrong because RNNs process the full sequence, not just a window. Option C is wrong because the hidden state is carried forward, not re-initialised. The real issue is in the backward pass: the gradient, not the hidden state, fails to survive the long return journey. See the explanation above."></div>
+    </div>
+
+    <h2>A side-by-side comparison: RNN, LSTM, Transformer</h2>
+
+    <p>Understanding the differences concretely prepares you for the transformer pages ahead.</p>
+
+    <div class="comparison-table">
+      <div class="col-header">Property</div>
+      <div class="col-header">RNN / LSTM</div>
+      <div class="col-header">Transformer</div>
+      <div class="col-body">Long-range memory</div>
+      <div class="col-body">Limited: information decays through time</div>
+      <div class="col-body">Direct: every token attends to every other</div>
+      <div class="col-body">Training parallelism</div>
+      <div class="col-body">None: must process tokens sequentially</div>
+      <div class="col-body">Full: all positions computed simultaneously</div>
+      <div class="col-body">Gradient path length</div>
+      <div class="col-body">O(sequence length): long paths vanish</div>
+      <div class="col-body">O(1): attention is direct, no chain</div>
+      <div class="col-body">Parameter sharing</div>
+      <div class="col-body">Same weights at every time step</div>
+      <div class="col-body">Same weights at every position</div>
+      <div class="col-body">Inference</div>
+      <div class="col-body">Sequential: each token waits for previous</div>
+      <div class="col-body">Also sequential (autoregressive)</div>
+    </div>
+
+    <p>Note the last row. During <em>training</em>, transformers win decisively on parallelism because the target sequence is known in advance and all positions can be processed at once. During <em>inference</em> (generating new tokens one at a time), transformers are also sequential &mdash; each new token depends on all previous ones. The parallelism advantage is primarily a training-time property, and it is the reason transformers could scale to sizes that would have been infeasible with LSTMs.</p>
+
+    <h2>Why LSTMs still appear in some codebases</h2>
+
+    <p>LSTMs are not extinct. For several problems, they remain competitive or preferable:</p>
+
+    <ul>
+      <li><strong>Very short sequences with tight latency constraints.</strong> On a 10-step time series, there is no meaningful long-range dependency to capture. An LSTM is simpler, faster to train, and easier to deploy on edge hardware than a full transformer.</li>
+      <li><strong>Streaming data where you process one step at a time.</strong> If new data arrives continuously and you cannot buffer a full sequence, the recurrent architecture fits naturally. You keep the hidden state and update it with each new point.</li>
+      <li><strong>Some audio and signal processing tasks.</strong> Convolutional-recurrent hybrids persist in speech recognition pipelines where the input is a short-window spectrogram frame sequence.</li>
+    </ul>
+
+    <p>But for language, document understanding, code generation, or any task where sequences exceed a few hundred tokens and training data is plentiful, the transformer dominates. The LSTM's era as the default sequence model lasted from roughly 1997 to 2017 &mdash; two decades of productive use before a better design displaced it.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>LSTM gates are learned by the same gradient descent that trains the rest of the network. Early in training, the gates are random. What do you think the forget gate does before training converges &mdash; does it tend to forget more or retain more? And why might initialising the forget gate bias toward 1 (retain everything) early in training help gradient flow? This initialisation trick, proposed by Jozefowicz et al. (2015), became a standard practice.</p>
+    </div>
+
+    <h2>The bridge to transformers</h2>
+
+    <p>The transformer, proposed by Vaswani et al. in 2017, did not invent a new problem. It solved the two problems that RNNs and LSTMs could not:</p>
+
+    <p><strong>Problem 1: Long-range dependencies.</strong> Instead of routing information through a chain of hidden states, transformers use <strong>self-attention</strong> to allow every token to directly attend to every other token. The path length between any two positions is always 1 step. No vanishing gradient across positions.</p>
+
+    <p><strong>Problem 2: Parallelism.</strong> Because self-attention computes all pairwise relationships in one matrix operation (when the full target sequence is available), all positions can be processed simultaneously during training. The sequential bottleneck disappears.</p>
+
+    <p>When you later study self-attention, every design decision will make more sense with this background: why the query-key-value structure exists, why positional encodings are needed (self-attention has no built-in sense of order &mdash; a problem RNNs never had), and why the architecture exploded in scale as soon as it could be trained on GPUs at full utilisation.</p>
+
+    <p>The LSTM was not a dead end. It was the clearest possible proof of what the field needed next.</p>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why do gradients vanish when backpropagating through many time steps in a vanilla RNN?</li>
+        <li>What specific problem do LSTM gates solve, and how does the cell state's additive update create a gradient highway?</li>
+        <li>Why cannot RNNs or LSTMs be parallelised across sequence positions during training?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav" data-prev="n05-optimisers" data-next="n07-attention-mechanism"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>if (window.LLMNav) LLMNav.init('n06-rnns-lstms');</script>
+</body>
+</html>

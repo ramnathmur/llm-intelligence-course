@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E08 &mdash; Evaluation Pipelines &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E08 &mdash; Evaluation Pipelines">
+<meta property="og:description" content="Metrics design, LLM-as-judge, and regression testing &mdash; the infrastructure practitioners most consistently skip.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="e08-evaluation-pipelines.html">Module 3: Evaluation &amp; Quality</a>
+    <span class="sep">&#8250;</span>
+    Evaluation Pipelines
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">E08 &middot; Module 3</div>
+    <h1>Evaluation Pipelines</h1>
+    <p class="one-liner">Metrics design, LLM-as-judge, and regression testing &mdash; the infrastructure practitioners most consistently skip.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A software team without unit tests. Every deployment is a prayer. The moment you add tests, you can refactor with confidence, catch regressions before production, and prove that version 2 is objectively better than version 1.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Without an evaluation pipeline, every change to a prompt or model is a gamble. Evaluation turns LLM development from iteration-by-intuition into iteration-by-evidence &mdash; the discipline that makes improvement measurable and regression visible before it reaches production.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why evaluation pipelines are necessary, how LLM-as-judge works and where it fails, and what a minimal production eval looks like for a real system such as a RAG-based question answering service.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e01-prompt-engineering.html" class="prereq-chip">E01 &mdash; Prompt Engineering as a System</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Imagine a management consultant who delivers a recommendation, then returns two weeks later with a revised recommendation. When the client asks whether the new version is better, the consultant replies: "It feels better." That answer would end the engagement.</p>
+
+    <p>Yet this is precisely how most AI engineering teams operate when they change a prompt or swap a model. They run a few manual tests, something looks better, and they ship. There is no formal record of what changed, no structured comparison against the previous version, and no way to detect regressions until a user files a complaint.</p>
+
+    <p>Evaluation pipelines exist to replace "it feels better" with "it scores 12% higher on our rubric, with no degradation on the edge cases we measure." This page explains how to build that infrastructure, why the naive approaches fail, and what the minimum viable version looks like for a production system.</p>
+
+    <h2>What you are actually measuring</h2>
+
+    <p>Before selecting any metric, you need to answer one question: <strong>what does "good" mean for this specific application?</strong> The answer is almost never generic. "Good" for a customer service bot means accurate, on-brand, and concise. "Good" for a medical documentation assistant means factually precise, clinically structured, and never fabricated. "Good" for a code generation tool means executable, idiomatic, and no security vulnerabilities.</p>
+
+    <p>This sounds obvious but is consistently skipped. Engineers reach for off-the-shelf metrics without first writing down what the application is supposed to do. The result is a well-measured system optimised for the wrong thing.</p>
+
+    <h3>The four dimensions of LLM output quality</h3>
+
+    <p>Across most applications, quality decomposes into four dimensions. Not all four are relevant to every system, but they are a useful starting checklist:</p>
+
+    <ul>
+      <li><strong>Correctness.</strong> Does the output contain accurate information? For factual tasks, this is the primary dimension. For creative tasks, it may not apply at all.</li>
+      <li><strong>Relevance.</strong> Does the output address the actual question? A technically correct answer to a different question is still a failure.</li>
+      <li><strong>Format compliance.</strong> Does the output conform to the required structure? JSON where JSON is required. Tables where tables are required. Length within specified bounds.</li>
+      <li><strong>Style and tone.</strong> Does the output match the intended voice, register, and brand guidelines? For customer-facing applications, this often matters as much as correctness.</li>
+    </ul>
+
+    <p>Define which dimensions apply to your system. Write them down. These definitions will become the scaffolding for every metric you choose or build.</p>
+
+    <h2>The metrics landscape</h2>
+
+    <p>LLM evaluation metrics fall into three families, distinguished by whether they require a reference answer and whether they use a model to score outputs.</p>
+
+    <h3>Reference-based metrics: BLEU, ROUGE, and their limits</h3>
+
+    <p>Reference-based metrics compare the model's output against a pre-written reference answer. <strong>BLEU</strong> (Bilingual Evaluation Understudy) counts n-gram overlaps between the output and the reference <span class="citation" title="Papineni et al. (2002). BLEU: A Method for Automatic Evaluation of Machine Translation. ACL.">(Papineni et al., 2002)</span>. <strong>ROUGE</strong> (Recall-Oriented Understudy for Gisting Evaluation) does the same for summarisation, focusing on recall rather than precision <span class="citation" title="Lin. (2004). ROUGE: A Package for Automatic Evaluation of Summaries. ACL Workshops.">(Lin, 2004)</span>.</p>
+
+    <p>Both metrics were designed for machine translation and summarisation in the early 2000s, when models produced outputs that were either clearly correct or clearly wrong and where a single reference answer was a reasonable ground truth. They measure lexical similarity: how many of the same words appear in the same order.</p>
+
+    <p>For modern LLM applications, this creates a serious problem. Consider a customer service query with a reference answer: "Your order will arrive in 3-5 business days." A model that outputs "Delivery typically takes between three and five working days" is providing an equivalent, fluent answer. BLEU and ROUGE would score it poorly because the word-level overlap is low.</p>
+
+    <p>The practical consequence: reference-based n-gram metrics are appropriate only when the space of acceptable outputs is narrow and lexically constrained. For translation of highly formulaic texts, they still have value. For general-purpose LLM applications &mdash; question answering, summarisation, analysis, code generation &mdash; they are a poor fit and will mislead you.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Distinction</div>
+      <p>BLEU and ROUGE measure <em>lexical similarity to a reference</em>. They do not measure correctness, helpfulness, or quality in any general sense. A model can score perfectly on BLEU while giving a catastrophically wrong answer, if that wrong answer happens to share n-grams with the reference.</p>
+    </div>
+
+    <h3>Semantic similarity metrics</h3>
+
+    <p>The next generation of reference-based metrics addresses the lexical-overlap problem by operating in embedding space rather than token space. <strong>BERTScore</strong> computes the cosine similarity between contextualised token embeddings from BERT-family models, rather than counting word overlaps <span class="citation" title="Zhang et al. (2020). BERTScore: Evaluating Text Generation with BERT. ICLR.">(Zhang et al., 2020)</span>. This means "working days" and "business days" would score well because their embeddings are close together.</p>
+
+    <p>Semantic metrics are a meaningful improvement over n-gram metrics for applications with paraphrase-heavy outputs. They still have a fundamental limitation: they measure similarity to the reference, not quality of the output in absolute terms. If your reference answer is subtly wrong, or if there are multiple valid answers the reference does not anticipate, the metric will penalise correct outputs that differ from the reference.</p>
+
+    <p>For any system where multiple valid outputs exist &mdash; which is most LLM applications &mdash; reference-based metrics will always undercount quality. They are useful as one signal among many, not as a primary judge.</p>
+
+    <h3>LLM-as-judge: the emerging standard</h3>
+
+    <p>The approach that has gained the most traction in production AI teams is using a second LLM to evaluate the output of the first. LLM-as-judge works because frontier models have developed enough language understanding to approximate human judgment on many quality dimensions &mdash; particularly relevance, coherence, and instruction-following &mdash; at a fraction of the cost and time of human review <span class="citation" title="Zheng et al. (2023). Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. NeurIPS.">(Zheng et al., 2023)</span>.</p>
+
+    <p>The basic setup is a prompt sent to the judge model that includes: the original question or task, the model's output, and a rubric or scoring instructions. The judge produces a score (typically 1-5 or 1-10) and often a brief explanation of that score. You run this at scale across your evaluation dataset and aggregate the scores.</p>
+
+    <p>LLM-as-judge is not without problems. Understanding its failure modes is as important as knowing how to set it up.</p>
+
+    <h2>The three failure modes of LLM-as-judge</h2>
+
+    <p>Production teams consistently encounter three patterns of systematic failure when using LLMs to evaluate outputs. Each has a known mitigation.</p>
+
+    <h3>Failure mode 1: Position bias</h3>
+
+    <p>When the judge is asked to compare two outputs (pairwise evaluation), it has a documented preference for whichever output appears first in the prompt. This bias is consistent and large enough to corrupt comparisons when not controlled for <span class="citation" title="Zheng et al. (2023). Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. NeurIPS.">(Zheng et al., 2023)</span>.</p>
+
+    <p><strong>Mitigation:</strong> Always run pairwise comparisons twice with the order swapped. If the judge prefers A over B in both orderings, that is a robust signal. If it prefers A in one ordering and B in the other, treat the comparison as a tie. This doubles your judge API cost for pairwise evals, but the alternative is results that are partially determined by prompt formatting rather than output quality.</p>
+
+    <h3>Failure mode 2: Verbosity bias</h3>
+
+    <p>LLM judges systematically prefer longer, more detailed outputs, even when a shorter output is objectively more correct or more appropriate for the task <span class="citation" title="Zheng et al. (2023). Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena. NeurIPS.">(Zheng et al., 2023)</span>. A model that writes three paragraphs when one would suffice will often outscore a model that is appropriately concise.</p>
+
+    <p><strong>Mitigation:</strong> If output length is relevant to your application (and for customer-facing systems, it almost always is), include explicit length criteria in your rubric. Something like: "Evaluate only relevance and accuracy, not length. Penalise outputs that include unnecessary padding or preamble." You may also want a separate length-compliance metric that you compute directly rather than through judge scoring.</p>
+
+    <h3>Failure mode 3: Self-preference bias</h3>
+
+    <p>When the same model family is used as both the generator and the judge, the judge systematically rates the generator's outputs higher than outputs from other models, even when human raters disagree <span class="citation" title="Panickssery et al. (2024). LLM Evaluators Recognize and Favor Their Own Generations. arXiv:2404.13076.">(Panickssery et al., 2024)</span>. A GPT-4 judge will prefer GPT-4 outputs; a Claude judge will prefer Claude outputs.</p>
+
+    <p><strong>Mitigation:</strong> Use a judge from a different model family than the generator. If you are building on Claude, evaluate with GPT-4 and vice versa. If this is not possible (cost, access), calibrate by running a sample of judge evaluations against human ratings to measure the bias direction and magnitude, then apply a correction factor.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      The research community is actively studying the conditions under which LLM-as-judge is and is not reliable. Current evidence suggests it correlates reasonably well with human judgment for general quality dimensions (coherence, relevance, instruction-following) but poorly for domain-specific correctness in specialist fields (medicine, law, advanced mathematics). If your application operates in a domain where factual correctness is non-negotiable and requires domain expertise to verify, LLM-as-judge should not be your primary metric. Human expert review remains necessary for ground-truth validation in high-stakes domains.
+    </div>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A team is using GPT-4 to generate customer support replies and also using GPT-4 as the LLM judge to evaluate reply quality. Which failure mode is most likely affecting their evaluation results?</div>
+      <button class="quiz-option" data-letter="A">Position bias &mdash; GPT-4 will prefer whichever output appears first in the comparison prompt.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Self-preference bias &mdash; the GPT-4 judge will systematically rate GPT-4 outputs higher than outputs from other models, skewing comparisons.</button>
+      <button class="quiz-option" data-letter="C">Verbosity bias &mdash; GPT-4 will prefer longer outputs, causing it to over-score detailed but unhelpful replies.</button>
+      <button class="quiz-option" data-letter="D">Reference bias &mdash; without a gold-standard reference answer, GPT-4 cannot score outputs reliably.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. Self-preference bias is the risk when the same model family generates and judges outputs. The mitigation is to use a different model family as the judge — for example, Claude evaluating GPT-4 outputs, or GPT-4 evaluating Claude outputs."
+           data-incorrect="Position bias (A) and verbosity bias (C) are real failure modes but are not specific to using the same model as generator and judge. Reference bias (D) is not a documented failure mode of LLM-as-judge — the whole point is that it does not require a reference. The defining issue here is that GPT-4 is both generator and judge."></div>
+    </div>
+
+    <h2>Designing your evaluation dataset</h2>
+
+    <p>An eval is only as good as the dataset it runs on. A dataset of easy, unambiguous cases will make every model look good. A dataset that does not include the failure modes you care about will miss the regressions that matter.</p>
+
+    <h3>The minimum viable eval dataset</h3>
+
+    <p>A useful starting point is 50-100 cases, constructed from three sources:</p>
+
+    <ul>
+      <li><strong>Production samples.</strong> Real inputs from real users are the most valuable cases in your dataset. They reflect the actual distribution your system will encounter. Aim for at least 60% of your eval cases to come from production logs.</li>
+      <li><strong>Edge cases you have already encountered.</strong> Every bug report, every user complaint, every failed response should generate an eval case. These are the system's known failure modes. If a prompt change regresses on any of them, you need to know immediately.</li>
+      <li><strong>Adversarial cases.</strong> Deliberately craft inputs that are likely to stress the system: ambiguous questions, very long inputs, inputs in unexpected languages or formats, inputs that touch the boundary of what the system is designed to handle.</li>
+    </ul>
+
+    <p>Labelling these cases is the part that requires human judgment. For each case, you need a ground truth &mdash; either a reference answer, a set of criteria the answer must satisfy, or a human quality rating. This is investment that most teams resist. It is also the investment that makes everything else work.</p>
+
+    <h3>Maintaining the dataset over time</h3>
+
+    <p>An eval dataset is not a one-time artifact. It requires active maintenance:</p>
+
+    <ul>
+      <li>Add new cases when users report failures that your current eval did not catch.</li>
+      <li>Review and update cases when your application's scope changes.</li>
+      <li>Periodically audit for cases that no longer represent your user distribution.</li>
+      <li>Track dataset drift &mdash; if your product evolves significantly, the eval cases written at launch may measure the wrong thing by month six.</li>
+    </ul>
+
+    <p>Treat the eval dataset as a living software artifact, subject to the same version control and review discipline as code.</p>
+
+    <h2>Regression testing: the deployment gate</h2>
+
+    <p>The highest-value use of an evaluation pipeline is not knowing how good your current system is &mdash; it is knowing whether a change made things worse. This is regression testing, borrowed directly from software engineering.</p>
+
+    <p>The workflow is straightforward. Before any change to a prompt, model version, retrieval configuration, or post-processing logic, run the eval suite against the current system and record the baseline scores. After the change, run the same eval suite and compare. If any metric falls below a threshold you define in advance, the change does not ship.</p>
+
+    <p>This changes the development dynamic fundamentally. Instead of "let's try this and see what happens," the question becomes "does this pass the gate?" That is the transition from engineering by intuition to engineering by evidence.</p>
+
+    <h3>Setting thresholds</h3>
+
+    <p>Threshold-setting is where many teams struggle. There is no universal answer, but three principles help:</p>
+
+    <ul>
+      <li><strong>Calibrate to production-acceptable quality.</strong> Run your eval on the current production system. That score is your baseline. A regression threshold of 95% of the baseline score is a reasonable starting point &mdash; you are saying "no change that degrades quality by more than 5% on this metric is acceptable."</li>
+      <li><strong>Distinguish hard failures from soft degradations.</strong> Some metrics are binary gates (format compliance: the output must be valid JSON, or it fails). Others are gradient signals (quality score: a 3% drop is acceptable, a 10% drop is not). Treat them differently in your pipeline.</li>
+      <li><strong>Review thresholds quarterly.</strong> As your eval dataset grows and your understanding of user needs matures, your thresholds will need recalibration.</li>
+    </ul>
+
+    <h2>The minimum viable evaluation pipeline for a production RAG system</h2>
+
+    <p>Retrieval-Augmented Generation (RAG) systems &mdash; where the model answers questions based on documents it retrieves at runtime &mdash; are currently the most common LLM architecture in production. They also present a specific evaluation challenge because there are two components to measure: the retrieval quality and the generation quality.</p>
+
+    <p>A minimum viable eval pipeline for a production RAG system has five components:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Retrieval recall test</h4>
+        <p>For each question in your eval dataset, verify that the retrieval step returns at least one document chunk that contains the answer. Measure retrieval recall: what percentage of questions result in the correct source document being retrieved? A low retrieval recall means the generator never had a chance &mdash; it was being asked to answer from documents that did not contain the answer. This metric isolates retrieval failures from generation failures.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Faithfulness score</h4>
+        <p>For each answer the model generates, check whether every factual claim in the answer can be attributed to the retrieved documents. This is the RAG-specific version of hallucination detection. Use an LLM judge with a focused prompt: "For each factual claim in the answer, determine whether it is supported by the provided source documents. Score 1 if all claims are supported, 0 if any claim is unsupported." A faithfulness score below 90% typically indicates a systemic problem with how the model is being prompted to use retrieved context.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Answer relevance score</h4>
+        <p>Measure whether the answer actually addresses the question, regardless of whether it is faithful to the documents. An answer can be perfectly faithful to the retrieved documents but still miss what the user was actually asking. Use an LLM judge to score relevance independently of faithfulness. Both scores are necessary; neither is sufficient alone.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Format compliance check</h4>
+        <p>Run a deterministic check that the output conforms to the required structure. This does not require an LLM judge &mdash; a simple parser is more reliable, cheaper, and faster. If you require JSON, parse it and verify the required fields are present. If you require a specific response structure (bullet points, a summary section, a source citation), check for it with a regex or string match. Format failures are the easiest regressions to catch and the most embarrassing to miss.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Latency and cost tracking</h4>
+        <p>Measure end-to-end latency and token cost for every eval run. Quality improvements that double latency or triple cost may not be deployable. Track these as dimensions of the eval, not as afterthoughts. A change that improves quality by 5% while increasing cost by 40% is a trade-off decision, not an obvious improvement.</p>
+      </div>
+    </div>
+
+    <p>This five-component pipeline can be built in a few days and will catch the most common regression patterns. It is not comprehensive, but it is the minimum bar for responsible production deployment.</p>
+
+    <h2>Tooling and infrastructure choices</h2>
+
+    <p>The evaluation pipeline does not need to be a complex system. In the early stages of a project, a well-structured Python script and a spreadsheet are sufficient. What matters is that the pipeline runs automatically on every candidate change, not that it uses a sophisticated framework.</p>
+
+    <h3>Running evals automatically</h3>
+
+    <p>The most important infrastructure decision is where the eval runs and when it is triggered. The goal is to make running evals the path of least resistance. Two patterns work well:</p>
+
+    <ul>
+      <li><strong>CI/CD integration.</strong> Add the eval suite to your continuous integration pipeline. Every pull request that modifies a prompt, model configuration, or retrieval parameter triggers an eval run. Results appear in the PR review. This normalises evaluation as part of the development workflow rather than a special event.</li>
+      <li><strong>Scheduled production monitoring.</strong> Run a subset of your eval suite against the live production system on a schedule (daily or weekly). This catches drift &mdash; cases where the system's quality changes over time due to changes in the underlying model, the knowledge base, or the user distribution &mdash; rather than just catching regressions from explicit changes.</li>
+    </ul>
+
+    <h3>Specialised eval frameworks</h3>
+
+    <p>Several frameworks have emerged to simplify LLM evaluation. RAGAS is designed specifically for RAG systems and provides pre-built metrics for faithfulness, answer relevance, and context recall <span class="citation" title="Es et al. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation. arXiv:2309.15217.">(Es et al., 2023)</span>. LangSmith provides evaluation tooling integrated with the LangChain ecosystem. Braintrust and Promptfoo are evaluation platforms that provide dataset management, LLM-as-judge pipelines, and result tracking out of the box.</p>
+
+    <p>These tools reduce implementation time significantly. The appropriate choice depends on your existing stack and whether the framework's built-in metrics align with what you actually need to measure. Be cautious of adopting a framework's default metrics without first verifying they match your application's definition of quality. A framework that ships with sensible defaults for generic text generation may have defaults that are poorly calibrated for your specific domain.</p>
+
+    <h2>The human-in-the-loop layer</h2>
+
+    <p>Automated evals are necessary but not sufficient. They can measure what you have already defined to measure. They cannot identify new failure modes you have not anticipated, cannot notice that a system's outputs have started feeling subtly off-brand even though they score well on the rubric, and cannot catch the kind of edge-case failures that only surface through real use.</p>
+
+    <p>A sustainable eval practice includes a human review layer that runs alongside the automated pipeline. In practice, this means:</p>
+
+    <ul>
+      <li><strong>Weekly sampling.</strong> A team member reviews a random sample of production outputs each week &mdash; perhaps 20-30 cases. The goal is to catch patterns the automated system is not measuring. Each pattern that surfaces should become a new eval case or a new metric.</li>
+      <li><strong>Failure triage.</strong> When users report bad outputs, those outputs are logged, categorised, and added to the eval dataset. Over time, the dataset becomes a comprehensive map of the system's failure surface.</li>
+      <li><strong>Periodic rubric review.</strong> Every quarter, the scoring rubric used by the LLM judge should be reviewed against recent human ratings to check for drift between what the rubric measures and what humans actually consider high quality.</li>
+    </ul>
+
+    <p>The human layer is what keeps the automated layer honest. Without it, teams tend to optimise for what they measure and stop noticing what they do not.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Evaluation pipelines create an incentive to optimise for what is measured. This is Goodhart's Law applied to AI: when a measure becomes a target, it ceases to be a good measure. A team that discovers their LLM judge has a verbosity bias may, over time, prompt-engineer their generator to produce longer outputs &mdash; which scores better but serves users worse. The antidote is to periodically validate your automated metrics against human ratings and to treat any divergence between automated scores and human satisfaction as a signal that the eval needs recalibration, not that users are wrong.</p>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>An evaluation pipeline is not a one-time setup. It is an ongoing discipline. The teams that benefit most from it are those that treat the eval dataset as a product artifact with its own maintenance cycle &mdash; adding cases as the product evolves, removing stale cases, and recalibrating metrics against human judgment on a regular cadence.</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the difference between a reference-based metric (ROUGE, BLEU) and an LLM-as-judge metric? When is each appropriate?</li>
+        <li>What are the three failure modes of LLM-as-judge evaluation and how do you mitigate each?</li>
+        <li>What is the minimum viable evaluation pipeline for a production RAG system, and what does each component measure?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e08-evaluation-pipelines" data-next="e08-evaluation-pipelines"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e08-evaluation-pipelines');</script>
+<script>AIEngNav.init('e08-evaluation-pipelines');</script>
+
+</body>
+</html>

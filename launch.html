@@ -268,6 +268,108 @@
             margin-bottom: 8px;
         }
 
+        /* Course cards */
+        .courses-section {
+            margin-bottom: 60px;
+        }
+
+        .courses-section h2 {
+            color: #00e5ff;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .course-cards {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .course-card {
+            background: rgba(15, 18, 33, 0.6);
+            border: 1px solid rgba(0, 229, 255, 0.1);
+            border-radius: 12px;
+            padding: 28px;
+            backdrop-filter: blur(10px);
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .course-card:hover {
+            border-color: rgba(0, 229, 255, 0.35);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 28px rgba(0, 229, 255, 0.12);
+            border-bottom-color: rgba(0, 229, 255, 0.35);
+        }
+
+        .course-card.core {
+            border-color: rgba(0, 229, 255, 0.3);
+            background: rgba(0, 229, 255, 0.04);
+        }
+
+        .course-card.core:hover {
+            border-color: rgba(0, 229, 255, 0.5);
+            box-shadow: 0 8px 28px rgba(0, 229, 255, 0.18);
+        }
+
+        .course-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+            background: rgba(0, 229, 255, 0.12);
+            color: #00e5ff;
+            border: 1px solid rgba(0, 229, 255, 0.25);
+        }
+
+        .course-card.core .course-badge {
+            background: rgba(0, 229, 255, 0.2);
+            border-color: rgba(0, 229, 255, 0.45);
+        }
+
+        .course-card h3 {
+            color: #e2e8f0;
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .course-card p {
+            color: #8892a4;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .course-card-arrow {
+            display: inline-block;
+            color: #00e5ff;
+            font-size: 16px;
+            margin-top: 16px;
+            opacity: 0.7;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .course-card:hover .course-card-arrow {
+            opacity: 1;
+            transform: translateX(4px);
+        }
+
+        @media (max-width: 768px) {
+            .course-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+
         a {
             color: #00e5ff;
             text-decoration: none;
@@ -373,6 +475,41 @@
             <p style="margin-top: 12px;">
                 This course answers the central question: <strong>If an LLM just predicts the next word—where does genuine intelligence come from?</strong> By the end, you'll have a complete, defensible understanding of how intelligence emerges, what makes it real, and how it becomes autonomous action.
             </p>
+        </div>
+
+        <div class="courses-section">
+            <h2>Learning Path — 4 Courses</h2>
+            <div class="course-cards">
+
+                <a class="course-card" href="./ml-foundations/index.html">
+                    <div class="course-badge">STEP 1 — FOUNDATIONS</div>
+                    <h3>ML Foundations</h3>
+                    <p>9 gaps · 2 modules · Algebra only — no code required. Build the mental models for loss functions, gradient descent, and how neural networks learn before touching a transformer.</p>
+                    <span class="course-card-arrow">→</span>
+                </a>
+
+                <a class="course-card" href="./nn-from-scratch/index.html">
+                    <div class="course-badge">STEP 2 — BUILD IT</div>
+                    <h3>Building Neural Networks From Scratch</h3>
+                    <p>9 gaps · 3 modules · Python required. Implement autograd, MLPs, LSTMs, attention, and a full GPT character by character.</p>
+                    <span class="course-card-arrow">→</span>
+                </a>
+
+                <a class="course-card core" href="./src/index.html">
+                    <div class="course-badge">STEP 3 — CORE COURSE ★</div>
+                    <h3>LLM Intelligence &amp; Agent Autonomy</h3>
+                    <p>34 gaps · 7 modules · The definitive guide from "next-word guesser" to genuine artificial intelligence — covering reasoning, alignment, agent architecture, interpretability, and the philosophy of machine mind.</p>
+                    <span class="course-card-arrow">→</span>
+                </a>
+
+                <a class="course-card" href="./ai-engineering/index.html">
+                    <div class="course-badge">STEP 4 — BUILD WITH IT</div>
+                    <h3>AI Engineering</h3>
+                    <p>11 gaps · 4 modules · The applied layer. Prompting, RAG, agent orchestration, evaluation pipelines, and LLMOps.</p>
+                    <span class="course-card-arrow">→</span>
+                </a>
+
+            </div>
         </div>
 
         <div class="setup-section">

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F06 &mdash; Overfitting and Regularisation &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F06 &mdash; Overfitting and Regularisation">
+<meta property="og:description" content="Why a model too good on training data fails in the real world &mdash; and how to stop it.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/f06-overfitting.html">Module 2: Generalisation and Error</a>
+    <span class="sep">&#8250;</span>
+    Overfitting and Regularisation
+  </div>
+
+  <div class="hero">
+    <div class="gap-badge" data-module="2">F06 &middot; Module 2</div>
+    <h1>Overfitting and Regularisation</h1>
+    <p class="one-liner">Why a model too good on training data fails in the real world &mdash; and how to stop it.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A student who memorises past exam questions verbatim but cannot answer novel questions &mdash; they have not learned the underlying concepts, only the surface patterns.
+    </div>
+  </div>
+
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Overfitting is the single most common failure mode in machine learning. Recognising it and applying the right remedy separates practitioners from tourists. A model that scores 99% on training data and 62% on new data is not a success &mdash; it is a warning sign you need to know how to read and respond to.
+  </div>
+
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    What overfitting is, why it happens, and which regularisation strategies address which causes. You will also be able to explain the bias-variance tradeoff without calculus, describe how dropout works as a structural regulariser, and identify when more data helps versus when it does not.
+  </div>
+
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f04-train-val-test.html" class="prereq-chip">F04 &mdash; Train / Validation / Test Splits</a>
+  </div>
+
+  <div class="content">
+
+    <p>Imagine a junior consultant joins a firm and studies every slide deck from the last three years of client engagements. Come Friday, they can recall every recommendation verbatim. Monday morning, a client walks in with a novel problem. The consultant freezes. They have seen nothing quite like this. Their recall is flawless; their judgment is absent.</p>
+
+    <p>That is overfitting. A machine learning model that has studied its training data too closely &mdash; absorbed not just the signal but also the noise, the accidents, the quirks &mdash; performs brilliantly on the problems it has already seen and poorly on anything genuinely new. High training accuracy masks low real-world accuracy. The model has memorised rather than learned.</p>
+
+    <p>This page dissects why overfitting happens, how to diagnose it, and what to do about it. By the end, the word "regularisation" will mean something precise to you, not a magic ingredient practitioners invoke to sound credible.</p>
+
+    <h2>What overfitting actually looks like</h2>
+
+    <p>Recall from <a href="../module-1/f04-train-val-test.html">F04 &mdash; Train / Validation / Test Splits</a> that you evaluate a model on held-out data it has never seen during training. Overfitting is visible in the gap between training performance and validation performance.</p>
+
+    <p>A well-generalising model has training accuracy and validation accuracy that are close to each other, and both are reasonably high. An overfitting model has <em>training accuracy far exceeding validation accuracy</em>. The training loss keeps falling as you train longer; the validation loss first falls and then starts rising again. That divergence is the diagnostic signal.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 560 290" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Learning curves showing training loss falling monotonically while validation loss forms a U-shape, with the optimal stopping point at the validation minimum">
+        <!-- Axes -->
+        <line x1="60" y1="240" x2="520" y2="240" stroke="var(--surface3)" stroke-width="1.5"/>
+        <line x1="60" y1="240" x2="60" y2="30" stroke="var(--surface3)" stroke-width="1.5"/>
+
+        <!-- Axis labels -->
+        <text x="290" y="268" fill="var(--text-dim)" font-size="11" text-anchor="middle">Training epochs (time)</text>
+        <text x="18" y="140" fill="var(--text-dim)" font-size="11" text-anchor="middle" transform="rotate(-90 18 140)">Loss</text>
+
+        <!-- Training loss curve: monotonically decreasing -->
+        <path d="M 70 60 C 130 65, 160 90, 200 110 C 250 135, 300 150, 380 165 C 430 172, 475 176, 510 178"
+              fill="none" stroke="var(--cyan)" stroke-width="2.5"/>
+        <text x="515" y="182" fill="var(--cyan)" font-size="11">Training</text>
+
+        <!-- Validation loss curve: decreases then rises (U-shape) -->
+        <path d="M 70 80 C 130 90, 165 108, 200 120 C 240 133, 270 138, 300 140 C 335 142, 360 148, 390 158 C 420 168, 460 185, 510 210"
+              fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-dasharray="6 3"/>
+        <text x="515" y="214" fill="var(--amber)" font-size="11">Validation</text>
+
+        <!-- Optimal stopping point vertical line -->
+        <line x1="300" y1="140" x2="300" y2="240" stroke="var(--green)" stroke-width="1.5" stroke-dasharray="4 4"/>
+        <text x="300" y="256" fill="var(--green)" font-size="10" text-anchor="middle">Optimal stop</text>
+
+        <!-- Overfitting annotation -->
+        <text x="420" y="120" fill="var(--red)" font-size="10" text-anchor="middle">Overfitting zone</text>
+        <text x="420" y="133" fill="var(--red)" font-size="10" text-anchor="middle">(val loss rising)</text>
+
+        <!-- Legend box -->
+        <rect x="62" y="32" width="190" height="46" rx="4" fill="var(--surface1)" opacity="0.7"/>
+        <line x1="72" y1="48" x2="100" y2="48" stroke="var(--cyan)" stroke-width="2"/>
+        <text x="106" y="52" fill="var(--text)" font-size="10">Training loss (always falls)</text>
+        <line x1="72" y1="66" x2="100" y2="66" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 3"/>
+        <text x="106" y="70" fill="var(--text)" font-size="10">Validation loss (rises after optimum)</text>
+      </svg>
+      <p class="diagram-caption">Learning curves are the primary overfitting diagnostic. The training loss (solid cyan) falls monotonically. The validation loss (dashed amber) falls initially, reaches a minimum, then rises as the model starts memorising training noise. The vertical green line marks the optimal stopping point.</p>
+    </div>
+
+    <p>That rising validation loss is the model's way of telling you: "I have stopped learning general patterns and started memorising specific ones." Every additional training step past the optimal point makes the model worse on data it will actually face in production.</p>
+
+    <h2>Why overfitting happens: capacity versus data</h2>
+
+    <p>Overfitting is a mismatch between <strong>model capacity</strong> and <strong>dataset size</strong>. A model's capacity is its ability to represent complex patterns. A single straight line has low capacity: it can represent only linear relationships. A deep neural network with millions of parameters has high capacity: it can represent extraordinarily complex, wiggly functions.</p>
+
+    <p>Think of it as a tailor. Give a tailor one customer and 200 measurements, and they will craft a suit so precisely fitted to that one person that nobody else could wear it. Give the same tailor measurements from 10,000 customers, and the suit patterns they develop will generalise across many body types. More data forces the tailor to find what is <em>common</em> rather than what is <em>idiosyncratic</em>.</p>
+
+    <p>A high-capacity model trained on too little data learns the idiosyncrasies. It finds a function that threads perfectly through every training example &mdash; including the mislabelled examples, the noisy measurements, the flukes. That function is useless for new data because the flukes do not recur.</p>
+
+    <p>A low-capacity model cannot fit even the training data well. It underfits: both training error and validation error are high, because the model is too simple to capture the real patterns. The balance between these two failure modes has a name.</p>
+
+    <h2>The bias-variance tradeoff</h2>
+
+    <p>This is the conceptual backbone of overfitting. Every model's prediction error on new data decomposes into three parts: <strong>bias</strong>, <strong>variance</strong>, and irreducible noise <span class="citation" title="Geman, S., Bienenstock, E., &amp; Doursat, R. (1992). Neural networks and the bias/variance dilemma. Neural Computation, 4(1), 1-58.">(Geman et al., 1992)</span>.</p>
+
+    <p><strong>Bias</strong> is systematic wrongness. A high-bias model is consistently off in the same direction because it is too simple to capture reality. It makes the same kind of mistake on every prediction. If you tried to fit a straight line to data that curves, every prediction along the curve would be wrong in a predictable, systematic way. High bias = underfitting.</p>
+
+    <p><strong>Variance</strong> is sensitivity to the specific training data you happened to use. A high-variance model gives very different answers depending on which training examples it saw. If you trained it on a slightly different subset, the model would look completely different. It has learned the noise of one particular sample rather than the signal of the underlying phenomenon. High variance = overfitting.</p>
+
+    <p><strong>Irreducible noise</strong> is the randomness in the world itself. Some outcomes are genuinely unpredictable, no matter how good the model. You cannot model away the fact that a coin flip has randomness built in. This component sets a floor on how low your error can go.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">High Bias (Underfitting)</div>
+        <p>Model is too simple. Training error is high. Validation error is also high, and roughly equal to training error. The model makes the same systematic mistake on every input. Adding more training data does not help much. You need a more complex model.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">High Variance (Overfitting)</div>
+        <p>Model is too complex or too well-trained. Training error is very low. Validation error is much higher. The model has absorbed training noise. Predictions change dramatically if training data changes. Adding more training data does help. You may also need regularisation.</p>
+      </div>
+    </div>
+
+    <p>The classic tradeoff: as you increase model complexity, bias falls but variance rises. The optimal model sits at the sweet spot where their combined contribution to total error is minimised. In practice, you find that sweet spot by watching your validation metrics and stopping when they stop improving.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Think first: when you add more training data, does it reduce bias, reduce variance, or both?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>More training data primarily reduces <strong>variance</strong>, not bias. When the model has seen thousands of diverse examples, it becomes harder to memorise noise because the noise is different in each example while the signal is consistent. The consistent signal accumulates; the noise cancels out. Bias, by contrast, is a property of the model's structural limitations &mdash; if your model cannot fit a curve, giving it more curved examples just confirms that it still cannot fit a curve. To reduce bias, you need a more expressive model, not more data.</p>
+      </div>
+    </div>
+
+    <h2>Diagnosing the problem before applying the remedy</h2>
+
+    <p>The first practical skill is not fixing overfitting &mdash; it is correctly diagnosing which problem you have. The remedies for underfitting and overfitting are nearly opposite, so misdiagnosis means applying the wrong treatment.</p>
+
+    <p>Pull up your training and validation metrics and ask four questions:</p>
+
+    <p><strong>Is training error high?</strong> If yes, the model is underfitting. You need more capacity, more training, or better features. Adding regularisation here would make things worse by further constraining an already too-simple model.</p>
+
+    <p><strong>Is training error low but validation error high?</strong> That is the overfitting signature. The gap between the two is the severity indicator. A 1% gap is often acceptable. A 20% gap is a crisis.</p>
+
+    <p><strong>Has the validation loss started rising while training loss keeps falling?</strong> You have passed the optimal stopping point. You should have stopped earlier, or you need regularisation.</p>
+
+    <p><strong>Are both errors low and close together?</strong> Congratulations. You have a well-generalising model. If the overall performance is still not good enough, you have an underfitting problem on harder data, which calls for a better model, not regularisation.</p>
+
+    <h2>Regularisation strategies: the toolkit</h2>
+
+    <p>Regularisation is any technique that reduces a model's tendency to overfit by constraining how complex its learned function can be. Different strategies work at different levels of the model. Knowing which lever to pull for which problem is what separates a practitioner from someone who applies the same remedy to every situation.</p>
+
+    <h3>L2 regularisation (weight decay)</h3>
+
+    <p>This is the simplest and most broadly applicable regulariser. During training, you add a penalty to the loss function proportional to the sum of squares of all the model's weights <span class="citation" title="Tikhonov, A. N. (1963). Solution of incorrectly formulated problems and the regularization method. Soviet Math. Doklady, 4, 1035-1038.">(Tikhonov, 1963)</span>.</p>
+
+    <p>Why does that work? Because the penalty forces the optimiser to trade off between fitting the data and keeping weights small. Large weights are how a model creates sharp, wiggly functions that chase individual training examples. By taxing large weights, you push the model toward smoother, simpler functions that fit the broad pattern instead of the noise.</p>
+
+    <p>The analogy: a junior analyst writing a report who knows their manager will count their words. They stop including every tangential detail and focus on what is essential. The word count penalty forces compression, and compression forces prioritisation of the signal over the noise.</p>
+
+    <p>In practice, L2 regularisation appears in most frameworks as the <code>weight_decay</code> parameter in the optimiser. Typical values sit between 1e-4 and 1e-2. Too high and you underfit; too low and you overfit. Tune it on your validation set.</p>
+
+    <h3>L1 regularisation and sparsity</h3>
+
+    <p>L1 regularisation penalises the sum of absolute values of weights (rather than squares). The practical difference is striking: L1 regularisation tends to push some weights all the way to zero, producing a <strong>sparse</strong> model where many parameters are exactly zero and only a few are active.</p>
+
+    <p>This is useful when you suspect most of your input features are irrelevant and you want the model to automatically identify and use only the informative ones. In classical machine learning on tabular data, L1 acts as an automatic feature selection mechanism. In deep learning it is less commonly used because the network usually identifies its own features internally.</p>
+
+    <h3>Dropout</h3>
+
+    <p>Dropout is a regularisation technique specific to neural networks, introduced by Srivastava et al. (2014) <span class="citation" title="Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I., &amp; Salakhutdinov, R. (2014). Dropout: A Simple Way to Prevent Neural Networks from Overfitting. Journal of Machine Learning Research, 15, 1929-1958.">(Srivastava et al., 2014)</span>. During each training step, dropout randomly "switches off" a fraction of neurons &mdash; typically 20–50% of them &mdash; by setting their outputs to zero for that step. The disabled neurons change randomly from step to step.</p>
+
+    <p>Why does randomly breaking your network make it better? Think about redundancy in a large organisation. If one senior analyst always does a particular type of analysis and everyone else defers to them, the team is fragile: the analyst leaves and the capability disappears. If the manager occasionally removes the senior analyst from a project at random, forcing other team members to handle that analysis, the team develops distributed competence. No single person becomes indispensable. The organisation becomes more robust.</p>
+
+    <p>Dropout does the same thing to neurons. Because any neuron might be absent on any training step, no individual neuron can become a critical dependency. The network must learn <em>redundant representations</em> &mdash; the same information encoded in multiple paths. This redundancy transfers directly to better generalisation: even if a few neurons are uncertain at inference time, others carry the signal.</p>
+
+    <p>At inference (test) time, dropout is turned off and all neurons are active. Their outputs are scaled down proportionally to compensate for the fact that the network was trained with fewer active neurons. The result is that the inference network behaves like an ensemble of many different sub-networks averaged together, which reduces variance and improves robustness.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight on Dropout</div>
+      <p>Dropout does not just prevent memorisation by making training harder. It forces the network to build redundant, distributed representations of the same information. At inference time, running all neurons simultaneously averages across those representations. This is why dropout is sometimes described as training an exponentially large ensemble of networks at the cost of a single one.</p>
+    </div>
+
+    <h3>Early stopping</h3>
+
+    <p>Early stopping is the simplest regulariser of all: watch the validation loss during training and stop when it stops improving. You do not wait for the training loss to converge; you stop at the point where the held-out data says performance is maximised.</p>
+
+    <p>It is economical and requires no changes to the model architecture or loss function. The practical implementation uses a "patience" parameter: stop if the validation metric has not improved for N consecutive epochs. N is typically between 5 and 20, depending on how noisy your training curves are. You also save the best-performing checkpoint during training so you can restore it after stopping.</p>
+
+    <p>Early stopping addresses overfitting by not giving the model the opportunity to memorise noise in the first place. It is often combined with other regularisers rather than used alone.</p>
+
+    <h3>Data augmentation</h3>
+
+    <p>Sometimes the right answer to overfitting is not to constrain the model but to expand the effective size of the training dataset. Data augmentation creates new training examples by applying realistic transformations to existing ones.</p>
+
+    <p>For image models: rotate an image of a cat slightly, mirror it horizontally, adjust the brightness. The label "cat" is still valid after all these transformations, but the model now sees a more diverse set of examples and must generalise rather than memorise specific pixel arrangements.</p>
+
+    <p>For text models: paraphrase sentences, swap synonyms, translate to another language and back. For tabular data: add small amounts of noise to continuous features, or resample existing examples (a technique called SMOTE when used for class imbalance).</p>
+
+    <p>Data augmentation is especially powerful when genuine data is scarce but the space of plausible variations is rich. It is a core component of modern computer vision pipelines and is becoming standard in text classification as well <span class="citation" title="Shorten, C., &amp; Khoshgoftaar, T. M. (2019). A survey on image data augmentation for deep learning. Journal of Big Data, 6(1), 1-48.">(Shorten &amp; Khoshgoftaar, 2019)</span>.</p>
+
+    <h3>Batch normalisation</h3>
+
+    <p>Batch normalisation (BatchNorm) was introduced primarily to speed up training, but it also has mild regularising effects <span class="citation" title="Ioffe, S., &amp; Szegedy, C. (2015). Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift. ICML 2015.">(Ioffe &amp; Szegedy, 2015)</span>. By normalising the activations within each layer to have zero mean and unit variance across a training batch, BatchNorm smooths the loss landscape and makes the network less sensitive to the exact scale of individual weights.</p>
+
+    <p>The regularising effect comes from the fact that each example's normalisation depends on the other examples in its batch. This introduces a small amount of noise into the gradient signal, which acts like a weak regulariser. In practice, when using BatchNorm, you can often reduce or eliminate dropout, since the normalisation noise provides some of the same effect.</p>
+
+    <h2>When more data helps and when it does not</h2>
+
+    <p>This is the third verification question, and it is genuinely important because practitioners waste effort collecting data for problems where data is not the bottleneck.</p>
+
+    <p><strong>More data helps when you have high variance (overfitting).</strong> A large, complex model memorising a small dataset will generalise better as the dataset grows. This is because the signal-to-noise ratio in the training data improves: the model sees each true pattern more often and is less able to rely on noise that happens to be consistent in a small sample but not in a large one. If your training accuracy is high and your validation accuracy is much lower, and you can get more data, get more data.</p>
+
+    <p><strong>More data does not help when you have high bias (underfitting).</strong> A linear model trying to fit a non-linear relationship will fail on 100 examples and fail on 1,000,000 examples equally. The model's structural limitation is what stops it from improving, not the number of training examples. If training accuracy and validation accuracy are both poor and close together, you need a better model, not more data.</p>
+
+    <p><strong>More data has diminishing returns.</strong> Going from 100 to 10,000 examples is transformative. Going from 10,000,000 to 100,000,000 examples is often marginal. The relationship between dataset size and validation accuracy is typically logarithmic &mdash; you need ten times the data for each incremental improvement of constant size. This matters enormously for project planning: at some point, architectural improvements, better features, or regularisation will yield more benefit per dollar of effort than data collection.</p>
+
+    <p><strong>More data helps less when data quality is low.</strong> Duplicate entries, systematic labelling errors, and non-representative samples do not help even in large quantities. A large noisy dataset can perform worse than a small clean one. Before collecting more data, audit the data you already have.</p>
+
+    <h2>Choosing the right regulariser</h2>
+
+    <p>The decision is not arbitrary. Each regulariser targets a specific failure mode.</p>
+
+    <p>Use <strong>L2 weight decay</strong> as a default starting point. It is broadly applicable, computationally free, and usually helps. Add it as a baseline and tune the coefficient on the validation set.</p>
+
+    <p>Use <strong>dropout</strong> when working with large fully-connected layers in a neural network. Typical rates: 0.3&ndash;0.5 for dense layers, 0.1&ndash;0.2 for convolutional layers. Do not use dropout if the model is already underfitting; it will make things worse.</p>
+
+    <p>Use <strong>early stopping</strong> always, as a free safeguard. Monitor validation loss and save the best checkpoint. It costs nothing and prevents the most egregious overfitting.</p>
+
+    <p>Use <strong>data augmentation</strong> when you have a domain where realistic synthetic variations exist (images, text, audio) and when your dataset is genuinely small relative to what the task requires.</p>
+
+    <p>Use <strong>a simpler model</strong> if regularisation alone is insufficient. A model that is enormously overparameterised relative to the task may require architectural changes, not just penalty terms. If you are using a 100-layer network to classify 200 training examples into two classes, no amount of dropout will compensate.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A neural network scores 95% on training data but only 68% on validation data. You add dropout with rate 0.5 and retrain. Training accuracy drops to 82% and validation accuracy rises to 79%. What just happened?</div>
+      <button class="quiz-option" data-letter="A">Dropout made the model worse because training accuracy fell from 95% to 82%.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Dropout reduced overfitting: the original 27-point gap between train and validation collapsed to a 3-point gap, and the metric that matters (validation accuracy) improved significantly.</button>
+      <button class="quiz-option" data-letter="C">The model is now underfitting because training accuracy is below 90%.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly right. Overfitting is measured by the gap between training and validation performance, not by training accuracy in isolation. Dropout deliberately reduces training accuracy by making the task harder during training. What matters is whether validation accuracy improved &mdash; and it did, by 11 percentage points."
+           data-incorrect="Watch the validation metric, not the training metric. Training accuracy is supposed to fall when you add dropout, because dropout makes training harder on purpose. The real question is whether validation accuracy went up. It went up from 68% to 79% &mdash; that is a significant improvement in the metric that actually matters."></div>
+    </div>
+
+    <h2>A practitioner's workflow</h2>
+
+    <p>Here is the decision sequence to run every time you train a model. It mirrors how experienced practitioners actually think, not how textbooks arrange the theory.</p>
+
+    <p><strong>Step 1:</strong> Train a simple baseline. Deliberately start with a model that is smaller than you think you need. Know its training and validation errors.</p>
+
+    <p><strong>Step 2:</strong> If training error is high, scale up. Add layers, parameters, or richer features. You cannot regularise your way to accuracy the model does not have.</p>
+
+    <p><strong>Step 3:</strong> Once training error is acceptably low, check the train/validation gap. If the gap is large, you are overfitting. Now apply regularisation.</p>
+
+    <p><strong>Step 4:</strong> Apply regularisers one at a time so you can measure each one's effect. Start with early stopping and weight decay (free and compositional with everything else). Add dropout if you have large dense layers. Add data augmentation if your domain supports it.</p>
+
+    <p><strong>Step 5:</strong> If regularisation does not close the gap sufficiently, collect more data. This is often the most effective remedy but the most expensive. Verify the data you are adding is high quality and representative of the deployment distribution.</p>
+
+    <p><strong>Step 6:</strong> Evaluate on the test set only once, at the very end, after all decisions are made. The test set is the final word, not an ongoing tuning signal.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Modern very large language models are trained with billions of parameters on trillions of tokens. The parameter-to-data ratio is enormous, yet these models generalise well to new text. Does this violate the classical bias-variance story? It turns out that in the overparameterised regime, something surprising happens: models can simultaneously interpolate training data (zero training error) and generalise well. This "double descent" phenomenon challenges the simple U-shaped bias-variance tradeoff picture you learned here, and remains an active area of research. You will encounter it again in the discussion of scaling laws.</p>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Overfitting is a capacity-data mismatch, not a model flaw. The same high-capacity model that overfits on 500 training examples will generalise well on 500,000 examples. Regularisation is how you make a model behave as if the dataset is larger than it is, by constraining the complexity of the function it can learn. The right remedy depends on diagnosing <em>which</em> mismatch you have &mdash; too much model, too little data, or both.</p>
+    </div>
+
+  </div>
+
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the difference between bias and variance in the bias-variance tradeoff?</li>
+        <li>How does dropout regularise a neural network?</li>
+        <li>When does adding more training data help overfitting and when does it not?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>
+if (typeof LLMNav !== 'undefined') {
+  LLMNav.init('f06-overfitting');
+}
+</script>
+</body>
+</html>

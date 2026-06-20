@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N05 &mdash; Optimisers &mdash; SGD to Adam &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N05 &mdash; Optimisers &mdash; SGD to Adam">
+<meta property="og:description" content="Momentum and adaptive learning rates are the difference between training in hours and days">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/n05-optimisers.html">Module 2: Training Dynamics</a>
+    <span class="sep">&#8250;</span>
+    Optimisers &mdash; SGD to Adam
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">N05 &middot; Module 2</div>
+    <h1>Optimisers &mdash; SGD to Adam</h1>
+    <p class="one-liner">Momentum and adaptive learning rates are the difference between training in hours and days</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Picture a ball rolling down a hilly landscape toward the lowest valley. Plain SGD has no memory &mdash; it bounces from slope to slope, changing direction at every step based only on the current tilt beneath it. Momentum builds up speed in consistent directions, so the ball rolls smoothly through shallow valleys rather than oscillating. Adam goes further: it also checks how rough each patch of terrain is and slows down on steep, erratic surfaces while speeding up on smooth, reliable gradients. Each upgrade fixes one specific failure mode of the one before it.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>Plain SGD works but slowly. The progression from SGD to Momentum to RMSprop to Adam is a story of understanding why gradients misbehave and engineering fixes for each failure mode. Every large language model you have ever interacted with was trained on an Adam variant &mdash; specifically AdamW. When you open a framework and pick an optimiser from a dropdown, you are choosing a theory of how gradients should be used. Understanding the genealogy lets you diagnose training problems, tune hyperparameters with intent rather than guesswork, and know which optimiser to reach for when Adam is not the right answer.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>Why the sequence SGD to Momentum to RMSprop to Adam exists, what specific failure mode each one fixes, how Adam combines the solutions from both Momentum and RMSprop into two running averages, and when you would choose plain SGD with momentum over Adam rather than defaulting to Adam in every setting.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/n01-autograd.html" class="prereq-chip">N01 &mdash; Autograd &mdash; How Gradients Flow</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>The Job of an Optimiser</h2>
+
+    <p>After autograd computes gradients, something must decide how to use them. That is the optimiser's job. It takes the gradient &mdash; a direction pointing toward higher loss &mdash; and produces an update to each parameter that nudges the network toward lower loss.</p>
+
+    <p>The naive rule is simple: subtract the gradient, scaled by a small number called the learning rate. This is gradient descent. In practice you do it on one batch at a time, so it is called Stochastic Gradient Descent, or SGD. It works. But it has failure modes that become obvious the moment you train anything non-trivial.</p>
+
+    <p>The history of optimisers is a history of diagnosing those failure modes and designing targeted fixes. Each algorithm in the family tree is an answer to a specific question: why is this training loop behaving badly, and what structural change would fix it?</p>
+
+    <h2>Stochastic Gradient Descent: The Baseline</h2>
+
+    <p>SGD performs one operation per step: multiply the gradient by a negative learning rate and add it to the parameter.</p>
+
+    <pre><code># Plain SGD update rule
+# theta: parameter, g: gradient, lr: learning rate
+theta = theta - lr * g</code></pre>
+
+    <p>The word "stochastic" is there because you use one mini-batch to estimate the gradient over the full dataset. That estimate is noisy. Different batches give slightly different gradients, so the path through the loss landscape is jagged rather than smooth.</p>
+
+    <p>SGD has two failure modes worth understanding deeply, because each one motivates a separate upgrade.</p>
+
+    <h3>Failure Mode 1: Oscillation in Ravines</h3>
+
+    <p>Imagine the loss landscape is shaped like a narrow canyon running diagonally. The walls of the canyon are steep. The floor of the canyon descends gently toward the minimum.</p>
+
+    <p>SGD sees steep walls and takes large steps perpendicular to the canyon floor &mdash; bouncing left and right across the canyon. Meanwhile it takes tiny steps along the canyon floor because the gradient there is small. Progress toward the minimum is slow. The path zigs and zags instead of running straight down the canyon.</p>
+
+    <p>This is the oscillation problem. The gradient at each step points in the locally steepest direction, which is often across the canyon rather than down it. SGD has no memory of where it has been, so it cannot recognise that it keeps undoing its own progress.</p>
+
+    <h3>Failure Mode 2: Uniform Treatment of All Parameters</h3>
+
+    <p>A neural network processes vastly different features. Some features appear in almost every training example &mdash; they receive a gradient signal on every batch. Other features are rare &mdash; a colour described by a single word, a domain-specific term that appears in 0.1% of the training data. Those rare features receive an update almost never.</p>
+
+    <p>SGD applies the same learning rate to both. The common features get updated too aggressively (causing oscillation) while the rare features barely move at all. This mismatch slows convergence across the board.</p>
+
+    <h2>Momentum: Fixing Oscillation</h2>
+
+    <p>Momentum fixes the oscillation problem by giving the optimiser a memory of past gradients. Instead of using the raw gradient at each step, it maintains a running average of all past gradients and moves in that averaged direction <span class="citation" title="Polyak, B.T. (1964). Some methods of speeding up the convergence of iteration methods. USSR Computational Mathematics and Mathematical Physics.">(Polyak, 1964)</span>.</p>
+
+    <pre><code># Momentum update rule
+# v: velocity (running average of gradients)
+# beta: momentum coefficient, typically 0.9
+v = beta * v + (1 - beta) * g
+theta = theta - lr * v</code></pre>
+
+    <p>The key number is <code>beta</code>, typically set to 0.9. At each step, 90% of the velocity carries forward from the previous step, and 10% comes from the new gradient. The effect is a weighted average of all past gradients, with recent ones weighted more heavily than older ones.</p>
+
+    <h3>Why This Fixes Oscillation</h3>
+
+    <p>Return to the canyon analogy. In the perpendicular direction (across the canyon), gradients alternate in sign: one step pushes left, the next pushes right. When you average them, they cancel each other out. Momentum suppresses oscillation in the perpendicular direction automatically.</p>
+
+    <p>Along the canyon floor, gradients consistently point the same way: toward the minimum. Averaging them does not cancel them &mdash; it amplifies them. Momentum builds up speed in the consistent direction while dampening the noisy perpendicular direction. The ball rolls down the canyon floor instead of bouncing across its walls.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Momentum works because it exploits signal-to-noise ratio. Directions that are consistently useful accumulate in the velocity and grow. Directions that are noisy and inconsistent cancel in the velocity and shrink. This is why momentum dramatically improves convergence even with no change to the learning rate.</p>
+    </div>
+
+    <h3>Choosing the Beta Coefficient</h3>
+
+    <p>Beta controls how much history the velocity carries. At beta = 0.9, the effective window is approximately 10 recent gradients. At beta = 0.99, it is approximately 100. Higher beta means smoother trajectories but slower response to genuine changes in the loss landscape.</p>
+
+    <p>In practice, 0.9 is the default that works across most settings. Tuning beta is rarely the right first step when training is struggling &mdash; the learning rate and architecture choices usually matter more.</p>
+
+    <h2>RMSprop: Fixing the Uniform Learning Rate</h2>
+
+    <p>Momentum solved oscillation. It did not solve the second failure mode: the fact that rare features receive too little update signal relative to common ones.</p>
+
+    <p>Geoffrey Hinton proposed RMSprop as a fix in an unpublished Coursera lecture in 2012 <span class="citation" title="Hinton, G. (2012). Lecture 6e: rmsprop. Coursera: Neural Networks for Machine Learning.">(Hinton, 2012)</span>. The idea is to track how large the gradient for each parameter has been recently, and use that to scale the update. Parameters with consistently large gradients get a smaller effective learning rate. Parameters with small gradients get a larger effective learning rate.</p>
+
+    <pre><code># RMSprop update rule
+# s: running average of squared gradients (one per parameter)
+# epsilon: small constant to prevent division by zero
+s = beta * s + (1 - beta) * g**2
+theta = theta - lr * g / (sqrt(s) + epsilon)</code></pre>
+
+    <p>Notice <code>s</code> accumulates squared gradients. The square root of <code>s</code> approximates the root mean square of recent gradients for that parameter. Dividing the gradient by this value normalises the update: large-gradient parameters get divided by a large number, shrinking their update; small-gradient parameters get divided by a small number, preserving their update.</p>
+
+    <h3>The Consulting Parallel</h3>
+
+    <p>Think of a consulting team where some team members speak at every meeting and others rarely contribute. A flat performance system treats every comment equally. A smart manager weights quiet members' rare contributions more heavily, recognising that frequency of input does not equal importance of input. RMSprop applies the same logic: it discounts parameters that shout frequently and amplifies parameters that speak rarely.</p>
+
+    <h3>What RMSprop Does Not Fix</h3>
+
+    <p>RMSprop adapts the learning rate per parameter. It does not add momentum. Training on RMSprop is smoother than plain SGD for heterogeneous data, but the trajectory can still oscillate in ravines because there is no velocity accumulation. You get one fix without the other.</p>
+
+    <h2>Adam: Combining Both Fixes</h2>
+
+    <p>Adam &mdash; Adaptive Moment Estimation &mdash; combines momentum and RMSprop into a single algorithm <span class="citation" title="Kingma, D.P. &amp; Ba, J. (2015). Adam: A Method for Stochastic Optimization. ICLR 2015.">(Kingma &amp; Ba, 2015)</span>. This is why it uses two running averages rather than one.</p>
+
+    <ul>
+      <li><strong>First moment (m):</strong> a running average of the gradients, just like momentum. This is the direction to move.</li>
+      <li><strong>Second moment (v):</strong> a running average of the squared gradients, just like RMSprop. This is the scale of the terrain in each direction.</li>
+    </ul>
+
+    <pre><code># Adam update rule
+# m: first moment (velocity), v: second moment (squared gradient average)
+# beta1: typically 0.9,  beta2: typically 0.999,  epsilon: 1e-8
+m = beta1 * m + (1 - beta1) * g
+v = beta2 * v + (1 - beta2) * g**2
+
+# Bias correction (explained below)
+m_hat = m / (1 - beta1**t)
+v_hat = v / (1 - beta2**t)
+
+theta = theta - lr * m_hat / (sqrt(v_hat) + epsilon)</code></pre>
+
+    <p>The final update divides the momentum-corrected gradient direction by the RMSprop-style scale factor. In the canyon analogy: Adam builds up speed down the canyon floor (momentum) while also moving faster on smooth terrain than rough terrain (adaptive rate).</p>
+
+    <h3>Bias Correction: Why It Exists</h3>
+
+    <p>Both running averages start at zero. Early in training, when <code>t</code> is small, this zero initialisation pulls the estimates toward zero &mdash; they are biased downward. The first few steps look like the gradients are near-zero even when they are not.</p>
+
+    <p>Kingma and Ba noticed this and added a correction: divide each running average by <code>(1 - beta**t)</code>. When <code>t</code> is small, the denominator is much less than 1, which scales the estimate back up toward its true value. As <code>t</code> grows large, the denominator approaches 1, and the correction term disappears. This is a simple but important stabilisation for early training.</p>
+
+    <h3>The Two Beta Hyperparameters</h3>
+
+    <p>Adam has two beta values. Beta1 (default 0.9) controls the momentum window &mdash; the same as standalone momentum. Beta2 (default 0.999) controls the second moment window. The high default for beta2 means Adam tracks squared gradients over a very long window &mdash; approximately 1,000 recent steps. This makes the adaptive scaling stable and slow to change, which prevents the effective learning rate from collapsing too aggressively in early training.</p>
+
+    <!-- INTERACTIVE ELEMENT: Toggle-reveal -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: Why does Adam use a much larger beta for the second moment (0.999) than the first moment (0.9)?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>The first moment (gradient direction) can and should respond quickly to the current landscape. A beta of 0.9 means recent gradients dominate &mdash; momentum builds fast. The second moment (scaling factor) should be stable and slow to change. If the scaling estimate oscillated wildly, the effective learning rate per parameter would be noisy, destabilising training. A beta of 0.999 averages squared gradients over approximately 1,000 steps, which produces a smooth, reliable estimate of how "rough" each parameter's terrain is. The asymmetry is intentional: fast adaptation of direction, slow adaptation of scale.</p>
+      </div>
+    </div>
+
+    <h2>AdamW: The Version That Trains LLMs</h2>
+
+    <p>The version of Adam actually used to train LLMs is AdamW, proposed by Loshchilov and Hutter <span class="citation" title="Loshchilov, I. &amp; Hutter, F. (2019). Decoupled Weight Decay Regularization. ICLR 2019.">(Loshchilov &amp; Hutter, 2019)</span>. The W stands for weight decay.</p>
+
+    <p>Weight decay is a regularisation technique: you add a small penalty to large weights during training, nudging the model toward smaller, simpler parameters. In standard Adam, weight decay is implemented as L2 regularisation &mdash; it is added to the gradient before the adaptive scaling step. This means the effective penalty changes depending on how the second moment scales each parameter. Large-gradient parameters receive a smaller weight decay penalty after scaling, which is not the intended behaviour.</p>
+
+    <p>AdamW decouples weight decay from the gradient update entirely. The weight decay term is applied directly to the parameter at a fixed rate, independent of the adaptive scaling. The gradient update and the regularisation term operate separately.</p>
+
+    <pre><code># AdamW: weight decay applied directly, not through gradient
+# (Adam update as above, then:)
+theta = theta - lr * (m_hat / (sqrt(v_hat) + epsilon) + weight_decay * theta)</code></pre>
+
+    <p>In practice, AdamW trains more effectively than Adam on large models, especially with high learning rates. When you call <code>torch.optim.AdamW</code>, this decoupled weight decay is what you are getting.</p>
+
+    <h2>When to Use SGD with Momentum Instead</h2>
+
+    <p>Adam is not always the right choice. SGD with momentum has a well-documented advantage in computer vision tasks &mdash; particularly image classification with convolutional networks. Several papers have shown that SGD with momentum achieves better final test accuracy than Adam on CIFAR and ImageNet benchmarks, even though Adam converges faster early in training <span class="citation" title="Wilson, A.C. et al. (2017). The Marginal Value of Momentum for Small Learning Rate SGD. ICLR 2018.">(Wilson et al., 2017)</span>.</p>
+
+    <p>The intuition is that Adam's adaptive learning rates can over-specialise to the training data. By scaling down updates in directions where gradients are large and consistent, Adam may be implicitly reducing the update signal for the most important features. SGD with momentum does not make this adjustment and can generalise better in some settings.</p>
+
+    <div class="callout callout-why">
+      <div class="callout-label">Practical Rule of Thumb</div>
+      <p>Default to AdamW for language models, transformers, and any setting where you are unsure. Use SGD with momentum when training convolutional networks for vision tasks where you have the compute budget to tune a learning rate schedule carefully. If your training budget is tight and you cannot afford a long hyperparameter search, Adam is the safer default because it is less sensitive to learning rate choice.</p>
+    </div>
+
+    <h2>Learning Rate Schedules: The Missing Piece</h2>
+
+    <p>No optimiser specification is complete without a learning rate schedule. The learning rate in the update rules above is not a fixed constant in practice &mdash; it decays over training.</p>
+
+    <p>The most common schedule for transformer training is cosine annealing: the learning rate starts high, then follows a cosine curve down to near zero by the end of training. The intuition is that large steps early in training help the network escape poor regions of the loss landscape quickly, while small steps late in training allow fine-grained convergence to a better local minimum.</p>
+
+    <pre><code">import torch
+model = ...  # your neural network
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.01)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
+
+for epoch in range(num_epochs):
+    train_one_epoch(model, optimizer)
+    scheduler.step()  # decay the learning rate</code></pre>
+
+    <p>Warmup is another common addition: the learning rate starts from near zero, increases linearly for the first few thousand steps, and then follows the cosine decay. This prevents large early updates from pushing the model into a bad region before the gradient estimates have stabilised.</p>
+
+    <h2>Comparing the Optimisers Side by Side</h2>
+
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-sgd">SGD</button>
+        <button class="tab-btn" data-tab="tab-momentum">Momentum</button>
+        <button class="tab-btn" data-tab="tab-rmsprop">RMSprop</button>
+        <button class="tab-btn" data-tab="tab-adam">Adam / AdamW</button>
+      </div>
+      <div class="tab-panel active" id="tab-sgd">
+        <p><strong>Update rule:</strong> <code>theta = theta - lr * g</code></p>
+        <p><strong>Memory:</strong> None. Each step depends only on the current gradient.</p>
+        <p><strong>Fixes:</strong> Nothing beyond basic gradient descent.</p>
+        <p><strong>Failure modes:</strong> Oscillation in ravines; uniform learning rate across all parameters.</p>
+        <p><strong>When to use:</strong> Almost never without momentum. Useful as a teaching baseline.</p>
+      </div>
+      <div class="tab-panel" id="tab-momentum">
+        <p><strong>Update rule:</strong> <code>v = beta * v + (1 - beta) * g; theta = theta - lr * v</code></p>
+        <p><strong>Memory:</strong> One running average per parameter (velocity).</p>
+        <p><strong>Fixes:</strong> Oscillation in ravines by averaging out noisy gradient directions.</p>
+        <p><strong>Failure modes:</strong> Still uses a uniform learning rate across all parameters.</p>
+        <p><strong>When to use:</strong> As part of SGD with momentum for convolutional vision networks; rarely on its own for language tasks.</p>
+      </div>
+      <div class="tab-panel" id="tab-rmsprop">
+        <p><strong>Update rule:</strong> <code>s = beta * s + (1 - beta) * g**2; theta = theta - lr * g / (sqrt(s) + eps)</code></p>
+        <p><strong>Memory:</strong> One running average per parameter (squared gradients).</p>
+        <p><strong>Fixes:</strong> Uniform learning rate by scaling updates per parameter based on gradient history.</p>
+        <p><strong>Failure modes:</strong> No momentum; can still oscillate in ravines.</p>
+        <p><strong>When to use:</strong> Recurrent networks (RNNs/LSTMs) where gradient magnitudes vary sharply; less common now that Adam is available.</p>
+      </div>
+      <div class="tab-panel" id="tab-adam">
+        <p><strong>Update rule:</strong> First moment (velocity) + second moment (adaptive scale) + bias correction.</p>
+        <p><strong>Memory:</strong> Two running averages per parameter: gradient direction and squared gradient magnitude.</p>
+        <p><strong>Fixes:</strong> Both oscillation (via first moment) and uniform learning rate (via second moment).</p>
+        <p><strong>Failure modes:</strong> Can generalise worse than SGD with momentum on some vision benchmarks; Adam's weight decay is subtly incorrect (use AdamW).</p>
+        <p><strong>When to use:</strong> Default for transformers, language models, and most modern architectures. Use AdamW, not plain Adam.</p>
+      </div>
+    </div>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You are training a transformer language model and loss is dropping quickly in the first 1,000 steps, then plateauing. Which optimiser and schedule combination is most likely to help?</div>
+      <button class="quiz-option" data-letter="A">Plain SGD with no schedule &mdash; lower learning rate reduces early oscillation.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">AdamW with a warmup + cosine annealing schedule &mdash; adaptive rates help heterogeneous parameters, and the schedule prevents premature convergence.</button>
+      <button class="quiz-option" data-letter="C">RMSprop with a fixed learning rate &mdash; adaptive scaling handles the plateau without needing momentum.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The plateau after fast early progress is a classic sign that a fixed learning rate is too large to converge finely but too small to escape the current local region. A cosine decay schedule addresses this directly, and AdamW's adaptive rates help the heterogeneous parameters in a transformer train more uniformly."
+           data-incorrect="Think about what a plateau after fast early progress usually indicates. It is not a sign of oscillation in the early phase &mdash; the loss was dropping. The problem is late-stage convergence. Which optimiser and schedule pair specifically addresses late-stage behaviour?"></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why does AdamW apply weight decay directly to the parameters rather than adding it to the gradient before the update?</div>
+      <button class="quiz-option" data-letter="A">It is computationally cheaper &mdash; fewer gradient operations per step.</button>
+      <button class="quiz-option" data-letter="B">To prevent weight decay from being biased by the first moment estimate.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Because Adam's adaptive scaling would change the effective weight decay per parameter unevenly &mdash; decoupling keeps the regularisation strength consistent across all parameters.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. When weight decay is added to the gradient, Adam's second moment scaling changes the effective penalty per parameter. Parameters with large gradient history get a smaller effective weight decay than intended. Decoupling ensures every parameter receives the same regularisation pressure regardless of its gradient history."
+           data-incorrect="The issue is about the interaction between adaptive scaling and regularisation. Think about what the second moment does to the gradient: it scales it down. If weight decay is part of the gradient, it gets scaled down too &mdash; by different amounts for different parameters."></div>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>Adam is not one clever idea &mdash; it is two targeted fixes combined. Momentum fixes oscillation by averaging gradient directions over time. RMSprop fixes uneven parameter treatment by normalising updates by gradient magnitude history. Adam runs both simultaneously, maintaining two running averages per parameter. AdamW then separates weight decay from the gradient to fix a subtle regularisation bug. Understanding each step in this chain means you can diagnose which fix you need when Adam itself is misbehaving.</p>
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What problem does momentum solve that plain SGD cannot? Describe the failure mode momentum addresses using the canyon analogy, then explain why averaging past gradients fixes it.</li>
+        <li>Why does Adam use two running averages rather than one? Name what each average tracks, what algorithm each one came from, and what would break if you removed either one.</li>
+        <li>When would you choose SGD with momentum over Adam? Give at least one concrete scenario, explain why Adam under-performs in that scenario, and identify which of Adam's design choices causes the gap.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAVIGATION FOOTER -->
+  <div class="page-nav" data-prev="n05-optimisers" data-next="n05-optimisers">
+    <a href="#prev" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">N04 &mdash; Previous Gap</span>
+    </a>
+    <a href="#next" class="next">
+      <span class="nav-direction">Next &rarr;</span>
+      <span class="nav-title">N06 &mdash; Next Gap</span>
+    </a>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n05-optimisers');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrolled = window.scrollY;
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (total > 0 ? (scrolled / total) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Toggle-reveal panels
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      var isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      var arrow = header.querySelector('span:last-child');
+      if (arrow) arrow.textContent = isOpen ? '+' : '−';
+    });
+  });
+
+  // Quiz interactions
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.style.background = '';
+          b.style.color = '';
+        });
+        btn.style.background = correct ? 'var(--green-dim)' : 'var(--red-dim)';
+        btn.style.color = correct ? 'var(--green)' : 'var(--red)';
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.padding = '1rem 1.25rem';
+          feedback.style.fontSize = '0.88rem';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--text-muted)';
+          feedback.style.borderTop = '1px solid var(--border)';
+        }
+      });
+    });
+  });
+
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var targetId = btn.dataset.tab;
+      var tabBar = btn.closest('.tabs');
+      tabBar.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      tabBar.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = tabBar.querySelector('#' + targetId);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var isOpen = verHeader.classList.contains('open');
+      verHeader.classList.toggle('open', !isOpen);
+      verHeader.setAttribute('aria-expanded', String(!isOpen));
+      var body = document.querySelector('.verification-body');
+      if (body) body.classList.toggle('open', !isOpen);
+    });
+    verHeader.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verHeader.click(); }
+    });
+  }
+
+  // Mobile nav toggle
+  var navToggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (navToggle && overlay && sidebar) {
+    navToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('visible');
+    });
+  }
+}());
+</script>
+
+</body>
+</html>

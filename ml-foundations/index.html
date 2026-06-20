@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ML Foundations — Course Overview</title>
+<link rel="stylesheet" href="../src/css/style.css">
+<meta property="og:title" content="ML Foundations — The Algebra-Only On-Ramp">
+<meta property="og:description" content="From what a model is to how neural networks learn — no calculus required.">
+<meta property="og:type" content="website">
+<link rel="icon" href="../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+  <div style="padding:1rem 0 0.5rem;">
+    <a href="../launch.html" style="color:var(--text-muted);font-size:0.85rem;text-decoration:none;">&larr; All Courses</a>
+  </div>
+
+  <div class="index-hero">
+    <h1>ML Foundations</h1>
+    <p class="subtitle">The algebra-only on-ramp — from what a model is to how neural networks learn</p>
+    <div class="index-stats">
+      <div class="stat">
+        <div class="stat-number">9</div>
+        <div class="stat-label">Concepts</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number">2</div>
+        <div class="stat-label">Modules</div>
+      </div>
+      <div class="stat">
+        <div class="stat-number" id="progress-count">0</div>
+        <div class="stat-label">Completed</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="module-cards">
+    <!-- Rendered by JS -->
+  </div>
+
+  <div class="how-to-use">
+    <h2>How to Use This Course</h2>
+    <ul>
+      <li>Follow the <strong>learning path</strong> in order — each concept builds on the ones before it.</li>
+      <li>Use the <strong>Previous / Next</strong> links at the bottom of each page to stay on track.</li>
+      <li>Your progress is saved automatically in your browser. Green dots = completed.</li>
+      <li>Every page has <strong>verification questions</strong> at the bottom — test yourself before moving on.</li>
+      <li>Blue chips at the top of each page link to <strong>prerequisites</strong> if you need a refresher.</li>
+    </ul>
+  </div>
+
+  <div class="cta-container">
+    <a href="" id="start-link" class="cta-button">Start Learning &rarr;</a>
+  </div>
+</main>
+
+<script src="./js/nav.js"></script>
+<script>
+  LLMNav.init(null);
+
+  document.getElementById('progress-count').textContent = LLMNav.getVisitedCount();
+
+  const cardsContainer = document.getElementById('module-cards');
+  const progress = LLMNav.getProgress();
+
+  const descs = [
+    'What a model is, how it learns, and the mechanics that turn data into predictions.',
+    'The data that feeds models, the metrics that judge them, and the neural architecture that scales them.'
+  ];
+
+  LLMNav.MODULES.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'module-card';
+
+    let gapsHtml = m.gaps.map(g => {
+      const visited = progress[g.slug] ? 'visited' : '';
+      return `<a href="module-${m.id}/${g.slug}.html" class="gap-link ${visited}">${g.id}</a>`;
+    }).join('');
+
+    card.innerHTML = `
+      <h2>Module ${m.id}: ${m.title}</h2>
+      <p class="module-desc">${descs[m.id - 1]}</p>
+      <div class="gap-list">${gapsHtml}</div>
+    `;
+    cardsContainer.appendChild(card);
+  });
+
+  // Set start link to first unvisited gap, or first gap if all visited
+  const firstUnvisited = LLMNav.LEARNING_PATH.find(slug => !progress[slug]) || LLMNav.LEARNING_PATH[0];
+  const targetModule = LLMNav.getModuleForSlug(firstUnvisited);
+  document.getElementById('start-link').href = `module-${targetModule.id}/${firstUnvisited}.html`;
+
+  const visited = LLMNav.getVisitedCount();
+  if (visited > 0 && visited < LLMNav.LEARNING_PATH.length) {
+    document.getElementById('start-link').textContent = 'Continue Learning →';
+  } else if (visited >= LLMNav.LEARNING_PATH.length) {
+    document.getElementById('start-link').textContent = 'Review From Start →';
+  }
+</script>
+</body>
+</html>

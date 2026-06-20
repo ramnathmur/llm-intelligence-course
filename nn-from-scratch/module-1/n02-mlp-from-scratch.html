@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N02 &mdash; MLP From Scratch &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N02 &mdash; MLP From Scratch">
+<meta property="og:description" content="Wiring together matrix multiplications and a loss to build the first trainable network.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/n01-autograd.html">Module 1: Foundations</a>
+    <span class="sep">&#8250;</span>
+    MLP From Scratch
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">N02 &middot; Module 1</div>
+    <h1>MLP From Scratch</h1>
+    <p class="one-liner">Wiring together matrix multiplications and a loss to build the first trainable network.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Building a spreadsheet model before learning Excel formulas. You understand what each formula does because you have done it by hand.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Building an MLP from raw arrays &mdash; no framework magic &mdash; forces every abstraction to be explicit. After this, framework APIs become transparent rather than mysterious.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    How to build a trainable neural network without framework abstractions and what each component does.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/n01-autograd.html" class="prereq-chip">N01 &mdash; Autograd &mdash; How Gradients Flow</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Picture a new analyst at a consulting firm. Their manager hands them a financial model and says "update the revenue projection." The analyst opens the spreadsheet, sees rows of formulas, and &mdash; crucially &mdash; has no idea what any cell is doing. They cannot trust the output because they do not understand the machine beneath it.</p>
+
+    <p>Now picture the same analyst who built that model from scratch in a blank spreadsheet: typed each formula, linked each cell, debugged each circular reference. They can read the output. They know exactly which assumption drives which number. They can catch errors the first analyst would never see.</p>
+
+    <p>That is the point of this page. We are going to build a <strong>multi-layer perceptron</strong> (MLP) from blank NumPy arrays &mdash; no PyTorch, no Keras, no <code>model.fit()</code>. When we are done, you will know what a "layer" is because you wrote one. You will know what a "loss" is because you computed it. You will know what "training" is because you did it, line by line.</p>
+
+    <p>After that, every framework becomes a shortcut you understand, not a magic wand you trust blindly.</p>
+
+    <h2>What an MLP actually is</h2>
+
+    <p>An MLP is the simplest neural network worth calling a network. It is a chain of <strong>linear transformations</strong> with <strong>non-linear activations</strong> sandwiched between them. Each stage takes a vector of numbers, mixes them together into a new vector, then squashes each number through a non-linearity. Stack enough of these stages and the network can learn to approximate almost any function &mdash; a result known as the Universal Approximation Theorem <span class="citation" title="Hornik, K., Stinchcombe, M., &amp; White, H. (1989). Multilayer feedforward networks are universal approximators. Neural Networks, 2(5), 359&ndash;366.">(Hornik et al., 1989)</span>.</p>
+
+    <p>In business terms: imagine a chain of department heads, each of whom takes a report from the previous department, re-weights the information according to what they care about, then passes a new summary to the next department. The CEO at the end makes a decision. Training the network means adjusting what each department head cares about &mdash; their weights &mdash; until the CEO consistently makes the right call.</p>
+
+    <h3>The three components</h3>
+
+    <p>Every MLP has exactly three kinds of things:</p>
+
+    <p><strong>1. Layers.</strong> Each layer is a weight matrix <code>W</code> and a bias vector <code>b</code>. Given input <code>x</code>, a layer computes <code>W @ x + b</code>. That is a matrix multiply followed by an addition &mdash; a linear transformation. Nothing more mysterious than a spreadsheet <code>SUMPRODUCT</code>.</p>
+
+    <p><strong>2. Activations.</strong> After each linear layer, we apply a non-linear function element-wise. Without activations, stacking ten linear layers is exactly the same as having one &mdash; because a product of linear transformations is still linear. The activation is what makes depth useful. The simplest modern activation is <strong>ReLU</strong>: <code>max(0, x)</code>. Every negative number becomes zero. Every positive number passes through unchanged. That is the whole thing.</p>
+
+    <p><strong>3. A loss function.</strong> The loss measures how wrong the network's output is. For a classification task, <strong>cross-entropy loss</strong> is standard <span class="citation" title="Bishop, C. M. (1995). Neural Networks for Pattern Recognition. Oxford University Press.">(Bishop, 1995)</span>. For a regression task, <strong>mean squared error</strong> works. The loss is a single number. Training means making that number smaller.</p>
+
+    <h2>Building the forward pass</h2>
+
+    <p>Let us build a network that classifies a toy problem: given a 2D point, predict which of two classes it belongs to. The network will have one hidden layer with 4 neurons.</p>
+
+    <p>Start with the data. We will work with a mini-batch of 8 examples at a time. Each example has 2 features (the x and y coordinates of the point).</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Represent data as a matrix</h4>
+        <p>Stack the 8 examples into a matrix <code>X</code> with shape <code>(8, 2)</code>. Each row is one example. Labels go into a vector <code>y</code> of shape <code>(8,)</code> with values 0 or 1. This is the first design choice: process a <strong>batch</strong> of examples together, not one at a time.</p>
+        <pre><code>import numpy as np
+
+np.random.seed(42)
+X = np.random.randn(8, 2)   # shape (8, 2)
+y = (X[:, 0] + X[:, 1] &gt; 0).astype(int)  # label: 1 if above diagonal</code></pre>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Initialise the weight matrices</h4>
+        <p>Layer 1 maps from 2 inputs to 4 hidden neurons. Its weight matrix <code>W1</code> has shape <code>(2, 4)</code> and bias <code>b1</code> has shape <code>(4,)</code>. Layer 2 maps from 4 hidden neurons to 2 output logits. Its weight matrix <code>W2</code> has shape <code>(4, 2)</code>.</p>
+        <p>We scale by <code>0.01</code> to keep the initial values small. You will see exactly why this matters below.</p>
+        <pre><code>W1 = np.random.randn(2, 4) * 0.01
+b1 = np.zeros(4)
+W2 = np.random.randn(4, 2) * 0.01
+b2 = np.zeros(2)</code></pre>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Run the forward pass</h4>
+        <p>Matrix multiply, add bias, apply ReLU, repeat, then compute logits. All four operations in 4 lines.</p>
+        <pre><code># Layer 1
+z1 = X @ W1 + b1       # shape (8, 4)
+a1 = np.maximum(0, z1) # ReLU activation
+
+# Layer 2 (output logits)
+z2 = a1 @ W2 + b2      # shape (8, 2)</code></pre>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Compute the loss</h4>
+        <p>Convert logits to probabilities with <strong>softmax</strong>, then measure cross-entropy loss against the true labels.</p>
+        <pre><code># Softmax: stable version (subtract max for numerical safety)
+e = np.exp(z2 - z2.max(axis=1, keepdims=True))
+probs = e / e.sum(axis=1, keepdims=True)  # shape (8, 2)
+
+# Cross-entropy loss (mean over the batch)
+correct_logprobs = -np.log(probs[np.arange(8), y])
+loss = correct_logprobs.mean()</code></pre>
+      </div>
+    </div>
+
+    <p>That is the complete forward pass. It is 10 lines of NumPy. The network has gone from raw inputs to a single loss number. Nothing hidden, nothing automatic. Every intermediate tensor has a name and a shape you can inspect.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A neural network forward pass is a sequence of matrix multiplications and element-wise functions. Each operation has an explicit input shape, output shape, and parameterization. No operation is mysterious. "Deep learning" means chaining more of these &mdash; the depth of the chain is what changes, not the kind of operation.</p>
+    </div>
+
+    <h2>The backward pass: propagating gradients by hand</h2>
+
+    <p>On the previous page, <a href="../module-1/n01-autograd.html">N01 &mdash; Autograd</a>, you saw how gradients flow backwards through a computation graph. Now we apply that understanding to the MLP. We need the gradient of the loss with respect to every weight and bias so we can adjust them.</p>
+
+    <p>Think of it like a post-project debrief. The final outcome (loss) was bad. We work backwards: which department's output made the final decision go wrong? And which inputs into that department caused that bad output? We trace accountability back to the root decisions &mdash; the weights.</p>
+
+    <h3>Gradient of the loss with respect to the output logits</h3>
+
+    <p>For cross-entropy loss with softmax, the gradient with respect to <code>z2</code> (the output logits) has a beautifully clean form. For each example, the gradient is: the softmax probability minus 1 for the correct class, and the softmax probability unchanged for every other class.</p>
+
+    <pre><code># Backward pass
+dz2 = probs.copy()
+dz2[np.arange(8), y] -= 1
+dz2 /= 8  # divide by batch size (derivative of the mean)</code></pre>
+
+    <p>If the correct class had probability 0.9, the gradient is &minus;0.1 (you were close, small adjustment). If it had probability 0.1, the gradient is &minus;0.9 (you were badly wrong, large adjustment). The math automatically scales the update by how wrong we were.</p>
+
+    <h3>Gradients for the second layer</h3>
+
+    <p>The second layer computed <code>z2 = a1 @ W2 + b2</code>. By the chain rule <span class="citation" title="Rumelhart, D. E., Hinton, G. E., &amp; Williams, R. J. (1986). Learning representations by back-propagating errors. Nature, 323, 533&ndash;536.">(Rumelhart et al., 1986)</span>:</p>
+
+    <pre><code>dW2 = a1.T @ dz2         # shape (4, 2)
+db2 = dz2.sum(axis=0)    # shape (2,)
+da1 = dz2 @ W2.T         # shape (8, 4)</code></pre>
+
+    <p>Notice the transpose pattern. When a forward pass does <code>a1 @ W2</code>, the backward pass does <code>dz2 @ W2.T</code>. This is always the case for matrix multiplication: the gradient flows through the transpose. It is the same rule every time &mdash; you just need to keep the shapes consistent.</p>
+
+    <h3>Gradient through the ReLU</h3>
+
+    <p>ReLU set negative values to zero in the forward pass. In the backward pass, it simply blocks the gradient for those positions: wherever <code>z1 &lt; 0</code>, the gradient is zero; elsewhere, it passes through unchanged.</p>
+
+    <pre><code>dz1 = da1 * (z1 &gt; 0)    # ReLU backward: gate the gradient</code></pre>
+
+    <h3>Gradients for the first layer</h3>
+
+    <pre><code>dW1 = X.T @ dz1          # shape (2, 4)
+db1 = dz1.sum(axis=0)    # shape (4,)</code></pre>
+
+    <p>That is the entire backward pass. 6 lines. We now have gradients for all four parameter arrays: <code>dW1</code>, <code>db1</code>, <code>dW2</code>, <code>db2</code>. Each gradient has the same shape as its corresponding parameter, which is always true by definition.</p>
+
+    <h2>The parameter update: gradient descent</h2>
+
+    <p>Now we use the gradients to update the weights. The update rule for vanilla gradient descent with learning rate <code>lr</code> is:</p>
+
+    <pre><code>lr = 0.1
+
+W1 -= lr * dW1
+b1 -= lr * db1
+W2 -= lr * dW2
+b2 -= lr * db2</code></pre>
+
+    <p>We are moving each parameter in the direction that reduces the loss. The learning rate controls how big a step we take. Too large and we overshoot. Too small and training crawls. Choosing a learning rate is one of the core practical decisions in deep learning &mdash; a subject we return to in later modules.</p>
+
+    <p>Wrap this in a loop and you have a training run:</p>
+
+    <pre><code>for epoch in range(1000):
+    # Forward pass
+    z1 = X @ W1 + b1
+    a1 = np.maximum(0, z1)
+    z2 = a1 @ W2 + b2
+
+    # Loss
+    e = np.exp(z2 - z2.max(axis=1, keepdims=True))
+    probs = e / e.sum(axis=1, keepdims=True)
+    correct_logprobs = -np.log(probs[np.arange(8), y])
+    loss = correct_logprobs.mean()
+
+    # Backward pass
+    dz2 = probs.copy(); dz2[np.arange(8), y] -= 1; dz2 /= 8
+    dW2 = a1.T @ dz2; db2 = dz2.sum(0)
+    da1 = dz2 @ W2.T
+    dz1 = da1 * (z1 &gt; 0)
+    dW1 = X.T @ dz1; db1 = dz1.sum(0)
+
+    # Update
+    W1 -= lr * dW1; b1 -= lr * db1
+    W2 -= lr * dW2; b2 -= lr * db2
+
+    if epoch % 100 == 0:
+        print(f"Epoch {epoch}, Loss: {loss:.4f}")</code></pre>
+
+    <p>The loss falls with each epoch. That is the entire learning algorithm.</p>
+
+    <!-- INTERACTIVE ELEMENT: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check: Mini-batches</div>
+      <div class="quiz-question">Why does training on a mini-batch of 8 examples produce better gradient estimates than training on a single example at a time?</div>
+      <button class="quiz-option" data-letter="A">Because 8 examples are always sufficient to cover all possible inputs the network will ever see.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Because averaging the gradient over multiple examples cancels out noise, giving a more stable direction of descent that generalises across the training data.</button>
+      <button class="quiz-option" data-letter="C">Because the matrix multiplications are impossible to compute for a single example and require at least one full batch.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. A single example may be atypical &mdash; its gradient points in an idiosyncratic direction. Averaging across 8 examples cancels individual quirks and produces an estimate of the true gradient direction over the data distribution. This is why mini-batch training converges more reliably than single-example (stochastic) gradient descent."
+           data-incorrect="Not quite. A single example is technically sufficient for a matrix multiply, and no batch perfectly covers all inputs. The real reason is statistical: averaging cancels noise and produces a more reliable gradient direction. See the explanation above."></div>
+    </div>
+
+    <h2>Now: the three questions you must be able to answer</h2>
+
+    <p>Three concepts underpin everything you just built. Each one has a non-obvious reason that frameworks hide from you.</p>
+
+    <h3>Why small random weights, not zeros?</h3>
+
+    <p>Initialise all weights to zero and every neuron in a layer computes exactly the same value. Every neuron has the same gradient. Every neuron gets the same update. After a thousand epochs, they are still identical &mdash; the layer has collapsed to a single neuron pretending to be four. This is the <strong>symmetry problem</strong>: neurons with identical weights can never specialise, because they receive identical gradients and make identical updates forever <span class="citation" title="Glorot, X. &amp; Bengio, Y. (2010). Understanding the difficulty of training deep feedforward neural networks. AISTATS.">(Glorot &amp; Bengio, 2010)</span>.</p>
+
+    <p>Small random values break symmetry. Each neuron starts at a different position in weight space. Each computes a slightly different value. Each receives a slightly different gradient. They diverge and specialise. The "small" part matters too: large random values produce large activations, which can saturate activation functions or cause exploding gradients. We scale by <code>0.01</code> as a safe starting point.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if two neurons start with identical weights, what happens after the first update?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Both neurons compute the same output. The loss is the same regardless of which neuron produced each contribution. The gradient for both is identical. The update is identical. After the first update, they are still identical &mdash; just shifted by the same amount. The symmetry is never broken. The network behaves as if it only has one neuron in that layer for the entire training run. Zero initialisation wastes all but one neuron in every layer.</p>
+      </div>
+    </div>
+
+    <h3>Why mini-batches produce better gradient estimates</h3>
+
+    <p>A single training example is like reading one customer review before deciding whether to stock a product. The review might be atypical. The customer might have been having a bad day. A decision based on one data point is noisy.</p>
+
+    <p>A gradient computed from a single example is the same thing: it points in the right direction on average, but has high variance. One outlier example can send the update in a misleading direction.</p>
+
+    <p>A mini-batch averages the gradient over multiple examples. Individual noise cancels. The estimate of the "true" gradient direction &mdash; the gradient you would get if you could use the entire dataset at once &mdash; becomes more reliable. In practice, mini-batches of 32 to 256 examples balance noise reduction against computational efficiency. The code above uses 8 to keep the arithmetic visible.</p>
+
+    <p>There is a second, subtler benefit: the noise in stochastic gradient descent actually helps escape shallow local minima. Pure full-batch gradient descent can get trapped; the randomness of smaller batches keeps the optimiser exploring. This is one reason deep networks often train better with mini-batches than with the full dataset at once <span class="citation" title="Keskar, N. S., Mudigere, D., Nocedal, J., Smelyanskiy, M., &amp; Tang, P. T. P. (2017). On large-batch training for deep learning. ICLR.">(Keskar et al., 2017)</span>.</p>
+
+    <h3>Why vectorisation beats a Python for-loop</h3>
+
+    <p>Imagine computing the gradient update for each of the 8 examples with a Python <code>for</code> loop: compute the forward pass for example 1, then example 2, and so on. That loop calls Python bytecode for every iteration. Python is interpreted; each loop step carries overhead.</p>
+
+    <p>NumPy's matrix multiply (<code>@</code>) sends the computation to a highly optimised BLAS library written in C. All 8 examples are processed in a single call, using SIMD instructions that operate on multiple numbers simultaneously. On modern hardware, the matrix multiply is typically 10&ndash;100x faster than the equivalent Python loop &mdash; and the gap widens to 1000x or more when you move to a GPU <span class="citation" title="Nvidia. (2020). CUDA C++ Best Practices Guide. https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/">(Nvidia, 2020)</span>.</p>
+
+    <p>This is why machine learning practitioners speak about vectorisation almost reverentially. It is not a micro-optimisation. It is the difference between a training run that takes an hour and one that takes a week. Every framework operation you call in PyTorch or JAX is, under the hood, a vectorised kernel. When you write a Python loop where a matrix operation would do, you forfeit that entire acceleration.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">For-loop (slow)</div>
+        <p>For each of N examples: compute z1, a1, z2 separately. Python overhead per step. Cannot parallelise across examples. On a GPU, you are wasting 99% of the hardware.</p>
+        <pre><code>for i in range(N):
+    z1_i = X[i] @ W1 + b1
+    a1_i = np.maximum(0, z1_i)
+    z2_i = a1_i @ W2 + b2</code></pre>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Vectorised (fast)</div>
+        <p>All N examples in one call. NumPy dispatches to BLAS. On a GPU, thousands of matrix cells update in parallel. Same mathematical result, 10&ndash;1000x faster.</p>
+        <pre><code>z1 = X @ W1 + b1       # (N, 4)
+a1 = np.maximum(0, z1) # (N, 4)
+z2 = a1 @ W2 + b2      # (N, 2)</code></pre>
+      </div>
+    </div>
+
+    <h2>What you have actually built</h2>
+
+    <p>Let us take stock. In around 30 lines of Python, you built:</p>
+
+    <p><strong>A forward pass</strong> that maps raw inputs through two learned transformations to a probability distribution over classes. Every intermediate value &mdash; <code>z1</code>, <code>a1</code>, <code>z2</code>, <code>probs</code> &mdash; has a name and a shape. Nothing is invisible.</p>
+
+    <p><strong>A loss function</strong> that converts the network's output into a single number measuring how wrong it is. The number is differentiable with respect to every parameter &mdash; which is the entire reason we chose these functions rather than, say, accuracy.</p>
+
+    <p><strong>A backward pass</strong> that computes gradients using the chain rule. No automatic differentiation engine &mdash; you applied the calculus yourself, which means you can debug any gradient that goes to zero or infinity instead of staring at a framework error message.</p>
+
+    <p><strong>A training loop</strong> that iterates forward, backward, and update until the loss falls. That loop is the same loop PyTorch's <code>model.fit()</code> runs internally &mdash; except now it is not hidden from you.</p>
+
+    <p>Everything a modern deep learning framework does is an acceleration and an abstraction of this loop. Automatic differentiation (autograd) automates the backward pass. GPU kernels accelerate the matrix multiplies. The optimizer object (SGD, Adam) replaces the weight update line with something more sophisticated. But none of those additions changes the fundamental structure: forward, loss, backward, update, repeat.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>This MLP has one hidden layer. What changes if you add a second? Map out: what new weight matrices are needed, what new lines appear in the forward pass, what new gradient calculations appear in the backward pass. Try writing it out before looking at a framework implementation.</p>
+    </div>
+
+    <p>On the next page, we extend this MLP into the full training machinery: learning rate schedules, validation tracking, and the first signs of overfitting. But the skeleton you built here never changes. Every network you will ever train is this loop, made larger.</p>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is a mini-batch and why does it produce better gradient estimates than a single example?</li>
+        <li>Why do we initialise weights with small random values rather than zeros?</li>
+        <li>What does vectorisation buy you over a Python for-loop?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav" data-prev="n01-autograd" data-next="n03-training-loop"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>if (window.LLMNav) LLMNav.init('n02-mlp-from-scratch');</script>
+</body>
+</html>

@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N08 &mdash; GPT From Scratch &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N08 &mdash; GPT From Scratch">
+<meta property="og:description" content="Assembling self-attention, feed-forward layers, and positional encoding into the full transformer block">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="n08-gpt-from-scratch.html">Module 3: Transformers From Scratch</a>
+    <span class="sep">&#8250;</span>
+    GPT From Scratch
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">N08 &middot; Module 3</div>
+    <h1>GPT From Scratch</h1>
+    <p class="one-liner">Assembling self-attention, feed-forward layers, and positional encoding into the full transformer block</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Think of assembling a car. Attention heads are the steering mechanism &mdash; they dynamically route information to where it is needed. Feed-forward layers are the engine &mdash; they do the heavy processing. Positional encoding is the GPS &mdash; without it, the car has no sense of where it is on the road. Each component is necessary. Remove any one and the vehicle does not work.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>Building a working GPT from scratch is the clearest possible demonstration that language models are not magic &mdash; they are specific engineering choices stacked together. When you build the architecture yourself, every design decision becomes visible. You see exactly why causal masking is necessary, why positional encoding cannot be skipped, and what role the feed-forward layer plays that attention alone cannot fill. This understanding transfers directly to reading research papers, debugging model behavior, and making architectural decisions in practice.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>What each component of a GPT block does and why it is necessary, assembled into a working mental model of the full architecture. You can explain the role of the feed-forward sublayer, why causal masking is required for language generation, and what positional embeddings prevent from going wrong.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-3/n07-attention-mechanism.html" class="prereq-chip">N07 &mdash; Building Attention From Scratch</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>The Problem Attention Alone Cannot Solve</h2>
+
+    <p>Attention is powerful, but it has a narrow job. It routes information &mdash; it decides which tokens should influence each other and how strongly. What it does not do is process that information once it has been routed.</p>
+
+    <p>Think of a management consulting team. Attention is the partner who decides which analysts need to talk to which client stakeholders. The right conversations are connected. But conversations alone do not produce a deliverable. Someone still needs to sit down and do the analysis, write the slides, draw the conclusions. That work happens after the routing.</p>
+
+    <p>In a GPT block, the feed-forward layer is the analysis work. After attention routes information from relevant tokens into each position, the feed-forward layer processes it &mdash; applying a learned nonlinear transformation that extracts patterns, compresses signals, and prepares the representation for the next layer.</p>
+
+    <p>This division of labor is deliberate. Attention operates across positions: it mixes information from the whole sequence. The feed-forward layer operates independently at each position: it takes what attention assembled and transforms it without looking at other positions. Together they form a complete processing unit.</p>
+
+    <h2>The Full GPT Block: Four Operations in Order</h2>
+
+    <p>A single GPT block contains exactly four operations. They stack in a fixed order, and each subsequent block repeats the same four operations. GPT-2 uses 12 of these blocks. GPT-3 uses 96. The stack is always the same pattern &mdash; only the depth and the width change <span class="citation" title="Brown et al. (2020). Language Models are Few-Shot Learners. NeurIPS.">(Brown et al., 2020)</span>.</p>
+
+    <p>The four operations, in order:</p>
+
+    <ol>
+      <li><strong>Layer normalization</strong> before attention</li>
+      <li><strong>Causal multi-head attention</strong></li>
+      <li><strong>Layer normalization</strong> before the feed-forward layer</li>
+      <li><strong>Feed-forward network</strong> with a nonlinear activation</li>
+    </ol>
+
+    <p>Both attention and the feed-forward sublayer sit inside a residual connection &mdash; the block adds its output to its input rather than replacing it. The input flows through the block, accumulates modifications, and continues to the next block carrying both the original signal and the newly computed additions.</p>
+
+    <h3>Why Residual Connections?</h3>
+
+    <p>Residual connections solve a training problem that plagued deep networks before they were invented <span class="citation" title="He et al. (2016). Deep Residual Learning for Image Recognition. CVPR.">(He et al., 2016)</span>. When you stack many layers, gradients must flow backward through all of them. In a deep network without residual connections, the gradient signal degrades as it flows back &mdash; multiplied by many small numbers at each layer, it can vanish to near zero before reaching the early layers. Those early layers stop learning.</p>
+
+    <p>A residual connection provides a direct highway for the gradient. The shortcut path from the output of the block back to its input means the gradient can bypass all the internal computations and flow back cleanly. The block still learns its contribution, but the gradient for earlier layers no longer depends on the block cooperating.</p>
+
+    <p>In PyTorch:</p>
+
+    <pre><code># Residual connection pattern
+x = x + self.attention(self.norm1(x))   # attention sublayer
+x = x + self.feed_forward(self.norm2(x))  # feed-forward sublayer</code></pre>
+
+    <p>Notice that normalization happens before each sublayer (pre-norm). This is the convention GPT-2 and later models use, and it produces more stable training than normalizing after the sublayer <span class="citation" title="Radford et al. (2019). Language Models are Unsupervised Multitask Learners. OpenAI Blog.">(Radford et al., 2019)</span>.</p>
+
+    <h2>Causal Masking: The Key to Language Generation</h2>
+
+    <p>Attention, as you built it in N07, lets every token see every other token. That works for tasks like translation, where you see the full source sentence before generating any output. It does not work for language generation, where you must predict the next token using only the tokens that came before.</p>
+
+    <p>If you are generating the fifth word of a sentence and the attention mechanism lets that position look ahead at the sixth, seventh, and eighth words, the model has access to the answer before it needs to produce it. During training it would learn to cheat. At inference time, those future tokens simply do not exist yet &mdash; so the cheat collapses and the model fails.</p>
+
+    <p>Causal masking prevents this. Before computing the softmax in attention, you apply a mask that forces every position to ignore positions that come after it in the sequence. The mask is a triangular matrix: position 0 sees only position 0, position 1 sees positions 0 and 1, position 2 sees positions 0, 1, and 2, and so on.</p>
+
+    <pre><code>import torch
+
+def causal_mask(seq_len):
+    # Upper triangle (future positions) set to -infinity
+    # Lower triangle (past positions) set to 0
+    mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1)
+    mask = mask.masked_fill(mask == 1, float('-inf'))
+    return mask  # Shape: (seq_len, seq_len)
+
+# In attention, add the mask to scores before softmax
+scores = scores + causal_mask(seq_len)
+attn_weights = torch.softmax(scores, dim=-1)</code></pre>
+
+    <p>When softmax receives a very large negative value, it outputs a value extremely close to zero. So positions after the current one contribute nothing to the weighted sum &mdash; they are effectively invisible.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: Why use &minus;infinity in the mask rather than simply setting those attention weights to zero directly?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Because the mask is applied to the raw attention scores, before the softmax. Softmax is a normalization operation &mdash; it converts a vector of scores into a probability distribution that sums to 1. If you set some weights to zero after softmax, you break the normalization: the remaining weights still sum to 1, but the computation that produced them included the now-zeroed positions. The model would have distributed attention incorrectly before you zeroed them.</p>
+        <p>Adding &minus;infinity before the softmax means those positions receive near-zero attention after normalization, and the remaining positions receive correctly normalized weights &mdash; as if the masked positions never existed. The softmax remains mathematically sound.</p>
+      </div>
+    </div>
+
+    <h2>Positional Encoding: Teaching the Model Where It Is</h2>
+
+    <p>Here is a feature of the attention mechanism that is easy to overlook: it is permutation-invariant. If you shuffle the tokens in a sentence, the attention scores rearrange accordingly, but the model has no direct knowledge that the order changed. It sees the same set of tokens, related to each other in the same ways, just in a different arrangement.</p>
+
+    <p>This matters because language depends on order. "The dog bit the man" and "The man bit the dog" contain identical tokens. Their meaning is opposite. A model that is blind to position cannot distinguish them.</p>
+
+    <p>Positional encodings inject order information directly into the token representations. Before any attention is computed, each token's embedding is modified by adding a position-dependent signal. Now when the model processes "dog" in position 1 versus position 3, the representation it sees is different &mdash; position is encoded into the very numbers the model operates on.</p>
+
+    <h3>Two Approaches: Learned vs. Fixed</h3>
+
+    <p>GPT models use <em>learned</em> positional embeddings: a second lookup table, exactly like the token embedding table, but indexed by position rather than token ID. Position 0 has a learned vector. Position 1 has a different learned vector. These vectors are parameters trained alongside the rest of the model <span class="citation" title="Radford et al. (2018). Improving Language Understanding by Generative Pre-Training. OpenAI Blog.">(Radford et al., 2018)</span>.</p>
+
+    <p>The original transformer paper used <em>fixed</em> positional encodings based on sine and cosine functions of varying frequencies <span class="citation" title="Vaswani et al. (2017). Attention Is All You Need. NeurIPS.">(Vaswani et al., 2017)</span>. The principle is the same: add a position-dependent signal to each embedding. The difference is whether those signals are designed in advance or learned from data.</p>
+
+    <pre><code>class GPTEmbedding(nn.Module):
+    def __init__(self, vocab_size, context_len, d_model):
+        super().__init__()
+        self.token_emb = nn.Embedding(vocab_size, d_model)
+        self.pos_emb = nn.Embedding(context_len, d_model)
+
+    def forward(self, x):
+        # x: (batch, seq_len) token indices
+        B, T = x.shape
+        positions = torch.arange(T, device=x.device)  # [0, 1, 2, ..., T-1]
+        tok = self.token_emb(x)        # (B, T, d_model)
+        pos = self.pos_emb(positions)  # (T, d_model)
+        return tok + pos               # broadcasts across batch dimension</code></pre>
+
+    <p>The addition is the key operation. Each token's semantic meaning (from the token embedding) and its location in the sequence (from the positional embedding) are combined into a single vector. The model then operates on these combined vectors, with both kinds of information encoded in the same representation.</p>
+
+    <h2>The Feed-Forward Sublayer</h2>
+
+    <p>After attention, each position holds a vector that blends information from relevant parts of the sequence. The feed-forward sublayer transforms this vector independently at each position. No cross-position communication happens here &mdash; each position is processed on its own.</p>
+
+    <p>The architecture is a standard two-layer MLP with a nonlinear activation between them. The hidden dimension is expanded significantly relative to the model dimension, then contracted back. GPT-2 expands by a factor of 4: a model with dimension 768 has a feed-forward hidden size of 3072 <span class="citation" title="Radford et al. (2019). Language Models are Unsupervised Multitask Learners. OpenAI Blog.">(Radford et al., 2019)</span>.</p>
+
+    <pre><code>class FeedForward(nn.Module):
+    def __init__(self, d_model, expansion=4):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(d_model, d_model * expansion),  # expand
+            nn.GELU(),                                 # nonlinearity
+            nn.Linear(d_model * expansion, d_model),  # contract
+        )
+
+    def forward(self, x):
+        return self.net(x)  # applied independently to each position</code></pre>
+
+    <p>Why expand and contract? The expansion creates a larger representational space where the model can separate and process features that are entangled in the original dimension. The nonlinear activation allows the model to learn discontinuous, non-proportional relationships. The contraction compresses the result back to the model's working dimension.</p>
+
+    <p>Research into what these layers do suggests they act as memory stores for factual associations <span class="citation" title="Geva et al. (2021). Transformer Feed-Forward Layers Are Key-Value Memories. EMNLP.">(Geva et al., 2021)</span>. When the model recalls that "Paris is the capital of France," this association is more likely stored in the feed-forward weights than in the attention mechanism. Attention identifies that the question is about Paris; the feed-forward layer retrieves what it knows about Paris.</p>
+
+    <h3>GELU vs. ReLU</h3>
+
+    <p>GPT uses the GELU activation rather than the more common ReLU. ReLU simply sets negative values to zero: values either pass through or are eliminated. GELU smoothly attenuates small values rather than hard-cutting them at zero. In practice, GELU produces slightly better performance on language tasks, likely because the smooth boundary allows more nuanced gradient flow during training <span class="citation" title="Hendrycks and Gimpel (2016). Gaussian Error Linear Units. arXiv.">(Hendrycks &amp; Gimpel, 2016)</span>.</p>
+
+    <h2>Putting the Full Block Together</h2>
+
+    <p>With all components defined, the GPT block is straightforward to assemble:</p>
+
+    <pre><code>import torch
+import torch.nn as nn
+
+class GPTBlock(nn.Module):
+    def __init__(self, d_model, n_heads, context_len):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.attn = CausalMultiHeadAttention(d_model, n_heads, context_len)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.ff = FeedForward(d_model)
+
+    def forward(self, x):
+        # Attention sublayer with residual
+        x = x + self.attn(self.norm1(x))
+        # Feed-forward sublayer with residual
+        x = x + self.ff(self.norm2(x))
+        return x
+
+
+class GPT(nn.Module):
+    def __init__(self, vocab_size, context_len, d_model, n_heads, n_layers):
+        super().__init__()
+        self.embedding = GPTEmbedding(vocab_size, context_len, d_model)
+        self.blocks = nn.Sequential(
+            *[GPTBlock(d_model, n_heads, context_len) for _ in range(n_layers)]
+        )
+        self.norm = nn.LayerNorm(d_model)
+        self.head = nn.Linear(d_model, vocab_size, bias=False)
+
+    def forward(self, x):
+        x = self.embedding(x)       # token + position embeddings
+        x = self.blocks(x)          # n_layers GPT blocks
+        x = self.norm(x)            # final normalization
+        logits = self.head(x)       # project to vocabulary
+        return logits               # (batch, seq_len, vocab_size)</code></pre>
+
+    <p>This is a complete GPT. You can train it with a cross-entropy loss on next-token prediction and it will work &mdash; not as powerfully as GPT-3, because it has far fewer parameters and far less data, but architecturally identical.</p>
+
+    <p>The final <code>nn.Linear</code> layer (called the language model head) projects from the model's internal dimension to a score for every token in the vocabulary. The token with the highest score is the model's prediction for the next token. During training, the correct next token provides the supervision signal. During generation, you sample from these scores (or take the highest) and append the result to the sequence.</p>
+
+    <h2>The Training Loop</h2>
+
+    <p>Training a language model is straightforward once the architecture is in place. You feed in a sequence of tokens, shift the targets by one position, and train the model to predict each next token:</p>
+
+    <pre><code>def train_step(model, optimizer, x, criterion):
+    # x: (batch, seq_len) of token indices
+    inputs = x[:, :-1]    # all tokens except the last
+    targets = x[:, 1:]    # all tokens except the first (shifted by 1)
+
+    optimizer.zero_grad()
+    logits = model(inputs)           # (batch, seq_len-1, vocab_size)
+    loss = criterion(
+        logits.reshape(-1, logits.size(-1)),  # flatten: (batch * seq_len-1, vocab_size)
+        targets.reshape(-1)                   # flatten: (batch * seq_len-1,)
+    )
+    loss.backward()
+    optimizer.step()
+    return loss.item()</code></pre>
+
+    <p>Every position in the sequence simultaneously contributes a training signal. A 512-token sequence provides 511 supervised examples per forward pass &mdash; one per next-token prediction. This is why language modeling is such an efficient use of data: the supervision signal is dense and free.</p>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A GPT model is trained on text but at inference time it generates nonsense &mdash; each new token seems unrelated to the preceding context. You inspect the embeddings and find that all positions produce identical hidden states before the attention layer. What is the most likely cause?</div>
+      <button class="quiz-option" data-letter="A">The causal mask is missing, so all positions attend to all others and average out their differences.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Positional embeddings are missing or not added to the token embeddings, so the model cannot distinguish which position each token occupies.</button>
+      <button class="quiz-option" data-letter="C">The feed-forward layer is using ReLU instead of GELU, causing identical activations.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. Without positional embeddings, every token starts with only its semantic embedding &mdash; which is the same regardless of where in the sequence the token appears. The model has no way to represent order, so representations at different positions become indistinguishable. The causal mask would still differentiate positions during attention, but without positional information already in the representations, the model cannot learn to use position meaningfully."
+           data-incorrect="Not quite. Think about what positional embeddings are responsible for: they are the only information the model receives about where a token is in the sequence. Without them, what would make position 3's representation different from position 7's representation for the same token?"></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You are building a GPT for text generation and you remove the causal mask from the attention layer. What specific problem will this cause during training that will not appear during generation?</div>
+      <button class="quiz-option" data-letter="A">Training will be slower because the model has to process more attention connections.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The model will learn to use future tokens to predict the current token, achieving very low training loss but failing catastrophically at generation when future tokens do not exist.</button>
+      <button class="quiz-option" data-letter="C">The model will be unable to learn long-range dependencies because attention will focus only on nearby tokens.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly right. Without causal masking, each position can attend to all subsequent positions during training. The model learns this shortcut and achieves near-zero training loss &mdash; predicting token 5 is trivial when you can directly inspect token 5. But at inference time, future tokens are generated one by one. The model encounters a situation its training never prepared it for, and the resulting predictions are incoherent."
+           data-incorrect="Think about what information is available during training versus generation. During training you have the complete sequence available. Without the mask, does the model see information it should not have?"></div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A GPT block is a two-phase operation: <em>gather</em> then <em>process</em>. Attention gathers relevant information from across the sequence into each position's representation. The feed-forward layer processes that gathered information at each position independently. These two phases are not interchangeable and cannot replace each other. Stacking them in alternation &mdash; block after block &mdash; creates a network that progressively builds richer, more context-aware representations from the raw token sequence.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>GPT uses a fixed context length set at model creation time &mdash; for example, 2048 tokens for GPT-2. The positional embedding table has exactly that many entries. What happens if you pass a sequence longer than the context length? And how do newer architectures like RoPE (Rotary Position Embedding) attempt to solve the problem of generalizing to longer sequences than seen during training?</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What does the feed-forward layer do that attention alone cannot?</li>
+        <li>Why does GPT use causal (masked) attention rather than full attention?</li>
+        <li>What would happen if you removed positional embeddings from a transformer?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAVIGATION FOOTER -->
+  <div class="page-nav" data-prev="n07-attention-mechanism" data-next="n08-gpt-from-scratch">
+    <a href="../module-3/n07-attention-mechanism.html" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">N07 &mdash; Building Attention From Scratch</span>
+    </a>
+    <div></div>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n08-gpt-from-scratch');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrolled = window.scrollY;
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (total > 0 ? (scrolled / total) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Toggle-reveal panels
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      var isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      var arrow = header.querySelector('span:last-child');
+      if (arrow) arrow.textContent = isOpen ? '+' : '−';
+    });
+  });
+
+  // Quiz interactions
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.style.background = '';
+          b.style.color = '';
+        });
+        btn.style.background = correct ? 'var(--green-dim)' : 'var(--red-dim)';
+        btn.style.color = correct ? 'var(--green)' : 'var(--red)';
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.padding = '1rem 1.25rem';
+          feedback.style.fontSize = '0.88rem';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--text-muted)';
+          feedback.style.borderTop = '1px solid var(--border)';
+        }
+      });
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var isOpen = verHeader.classList.contains('open');
+      verHeader.classList.toggle('open', !isOpen);
+      verHeader.setAttribute('aria-expanded', String(!isOpen));
+      var body = document.querySelector('.verification-body');
+      if (body) body.classList.toggle('open', !isOpen);
+    });
+    verHeader.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verHeader.click(); }
+    });
+  }
+
+  // Mobile nav toggle
+  var navToggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (navToggle && overlay && sidebar) {
+    navToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('visible');
+    });
+  }
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E06 &mdash; Retrieval Failure Modes &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E06 &mdash; Retrieval Failure Modes">
+<meta property="og:description" content="The six ways RAG breaks in production and how to diagnose each one.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/e04-rag-architecture.html">Module 2: Retrieval-Augmented Generation</a>
+    <span class="sep">&#8250;</span>
+    Retrieval Failure Modes
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">E06 &middot; Module 2</div>
+    <h1>Retrieval Failure Modes</h1>
+    <p class="one-liner">The six ways RAG breaks in production and how to diagnose each one.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A search engine that returns ten results but the right answer is on page three. The problem might be indexing, ranking, or relevance &mdash; and each has a completely different fix. Blaming the last step (the answer it gives you) when the fault is in the first step (what it looked up) wastes days of debugging effort.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Most RAG systems that fail in production are not failing because of LLM limitations &mdash; they are failing in the retrieval layer. Knowing the diagnostic taxonomy means you fix the right thing. Spending a week prompt-engineering your way around a vocabulary mismatch problem is the engineering equivalent of adjusting the mirror because the engine is misfiring.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    How to distinguish retrieval failures from generation failures and which diagnostic to run first. You can walk into a post-mortem on a broken RAG system and correctly identify whether the problem is in indexing, chunking, ranking, vocabulary, context assembly, or the model itself &mdash; before anyone has run a single experiment.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-2/e04-rag-architecture.html" class="prereq-chip">E04 &mdash; RAG Architecture</a>
+    <a href="../module-2/e05-vector-databases.html" class="prereq-chip">E05 &mdash; Vector Databases</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>The Diagnostic Problem</h2>
+
+    <p>A RAG system is a pipeline with at least three stages: index the documents, retrieve relevant chunks, generate an answer. When the system gives a wrong or empty answer, the failure could have originated in any of these stages &mdash; or in the handoffs between them. The most common engineering mistake is to treat the symptom (a bad generation) as the disease (a generation problem) and to spend effort tuning the LLM when the root cause is twenty layers upstream.</p>
+
+    <p>Think of it like a hospital discharge summary that a consulting team relies on. If the summary was misfiled (indexing failure), never retrieved (retrieval failure), or truncated before the relevant paragraph (context assembly failure), no amount of coaching the consultant on how to read the summary will fix the problem. The fix lives in the document management system, not in the consultant's training.</p>
+
+    <p>This page gives you a structured taxonomy of the six most common retrieval failure modes. For each one, you will learn what it looks like from the outside, what is actually going wrong on the inside, and how to diagnose and fix it.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      Always isolate the retrieval layer before touching the generation layer. Run your query against the index directly, inspect the top-K chunks, and ask: "If I handed these chunks to a human expert, could they answer the question correctly?" If yes, the problem is in generation. If no, the problem is in retrieval. This one heuristic eliminates most debugging dead-ends.
+    </div>
+
+    <h2>Failure Mode 1: Indexing Gaps</h2>
+
+    <p>The first and most fundamental failure is the simplest: the answer is not in the index at all. The document was never ingested, the ingestion pipeline silently dropped it, or the document format was not supported and produced empty text.</p>
+
+    <p>This is the equivalent of asking a library for a book that is not in the catalogue. The librarian is not at fault for failing to find it.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>The system confidently returns an answer that is not grounded in any retrieved document, or it says it cannot find the information &mdash; even though you know the document exists. When you inspect the retrieved chunks, none of them contain the relevant passage.</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>Run a direct keyword search or exact-phrase search against your document store using text you know appears in the missing document. If the document does not surface, the ingestion pipeline is the problem. Check ingestion logs for errors, verify the document was parsed correctly (especially PDFs with scanned images, which require OCR), and confirm the document is within any date or metadata filters your pipeline applies.</p>
+
+    <h3>The fix</h3>
+
+    <p>Audit your ingestion pipeline. Add a post-ingestion verification step that samples documents and confirms they are retrievable. For PDFs and scanned documents, add an OCR layer. For large document archives, run periodic index health checks that confirm document count and sample retrievability.</p>
+
+    <h2>Failure Mode 2: Chunking Errors</h2>
+
+    <p>Even when a document is correctly indexed, the way it was split into chunks can make the answer unretrievable. If the answer spans a chunk boundary &mdash; the first half is in chunk 47 and the second half is in chunk 48 &mdash; neither chunk alone will satisfy the query, and the retriever will rank both of them low because neither looks like a complete answer.</p>
+
+    <p>The analogy is a project report that has been photocopied and the staple was removed. The critical recommendation is split across two pages, but you only allowed your junior analyst to read one page at a time.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>The retrieved chunks contain relevant vocabulary but miss the key sentence or paragraph. The answer is tantalizingly close in the index but never quite retrieved in one piece. The model hallucinates a plausible-sounding completion for the partial information it received.</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>Find the source document for the question you are testing. Locate the exact passage that answers the question. Then find which chunk or chunks that passage appears in. If it straddles a chunk boundary, or if it requires context from a preceding paragraph that is in a different chunk, you have a chunking problem.</p>
+
+    <h3>The fix</h3>
+
+    <p>Increase chunk overlap so that passages near boundaries appear in two adjacent chunks. Use semantically-aware chunking that splits on paragraph or section boundaries rather than fixed character counts <span class="citation" title="Shi et al. (2023). REPLUG: Retrieval-Augmented Black-Box Language Models. arXiv:2301.12652.">(Shi et al., 2023)</span>. For structured documents (contracts, financial reports, technical manuals), use document-structure-aware parsers that preserve section context.</p>
+
+    <h2>Failure Mode 3: Query-Document Vocabulary Mismatch</h2>
+
+    <p>This is the most subtle and commonly misdiagnosed failure mode. The document uses one set of terms. The user's query uses different but semantically equivalent terms. The vector similarity between the query embedding and the document chunk embedding is low &mdash; not because the answer is absent, but because the language used to describe the same concept differs.</p>
+
+    <p>A medical professional asks "myocardial infarction treatment protocols." The document calls it "heart attack management guidelines." Dense retrieval systems trained on general text may encode these as similar, but sparse systems (BM25, keyword search) will fail completely because there is no lexical overlap.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>The system fails on expert queries from domain specialists but works on casual queries from generalists. Or the reverse: specialist documents retrieved correctly when queried by experts but not by customers using everyday language. The failure is asymmetric and correlates with who wrote the query versus who wrote the document.</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>Take a failing query. Manually find the passage in the source documents that answers it. Extract the exact vocabulary used in that passage. Now compare that vocabulary to the vocabulary in the query. If the overlap is low but the meaning is the same, you have a vocabulary mismatch problem. Confirm by rewriting the query using the document's exact terminology and checking if retrieval succeeds.</p>
+
+    <h3>The fix</h3>
+
+    <p>Hybrid search addresses this directly. Combine a dense retrieval system (vector embeddings that capture semantic similarity) with a sparse retrieval system (BM25 or similar keyword-matching) and merge the results using a reranker or reciprocal rank fusion <span class="citation" title="Karpukhin et al. (2020). Dense Passage Retrieval for Open-Domain Question Answering. EMNLP 2020.">(Karpukhin et al., 2020)</span>. The dense system catches semantic equivalence; the sparse system catches exact matches. Together they cover the vocabulary gap from both sides.</p>
+
+    <p>An alternative is query expansion: use the LLM itself to generate multiple phrasings of the user's question before retrieval, then retrieve on all phrasings and deduplicate <span class="citation" title="Ma et al. (2023). Query Rewriting for Retrieval-Augmented Large Language Models. EMNLP 2023.">(Ma et al., 2023)</span>.</p>
+
+    <!-- INTERACTIVE: DIAGNOSTIC QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A user asks "how do I terminate my subscription?" and gets no useful answer. The word "terminate" never appears in any document — the documents all use "cancel". Which failure mode is this?</div>
+      <button class="quiz-option" data-letter="A">Indexing gap — the document was never ingested</button>
+      <button class="quiz-option" data-letter="B">Chunking error — the answer straddles a chunk boundary</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Vocabulary mismatch — semantically equivalent terms with no lexical overlap</button>
+      <button class="quiz-option" data-letter="D">Context assembly failure — the retrieved chunks are too short</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The document exists and is indexed, the relevant chunk is intact, but &quot;terminate&quot; and &quot;cancel&quot; share no words. Sparse retrieval fails entirely. Hybrid search or query expansion fixes this."
+           data-incorrect="Look for the cause in the language used, not the structure of the index. The document and chunk are fine — the problem is a vocabulary gap between how the user speaks and how the document was written."></div>
+    </div>
+
+    <h2>Failure Mode 4: Ranking Failures</h2>
+
+    <p>Even when the right chunk is in the index and the query vocabulary matches, the retriever may rank irrelevant chunks higher. The correct chunk is retrieved &mdash; it is in the top-20 results &mdash; but it does not make the top-K cutoff that gets passed to the model. The answer exists, is findable, but is edged out by plausible-looking but wrong results.</p>
+
+    <p>Imagine your firm's knowledge management system returns ten results for a query, ranked by document recency. The correct answer is in a three-year-old policy document ranked ninth. The top eight results are recent but irrelevant. The junior analyst reads only the top three. The firm gets bad advice not because the answer does not exist, but because the ranking function chose the wrong criterion.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>Manually inspecting the top-K retrieved chunks reveals that the correct chunk appears at position K+1 or K+2. The system works if you increase K, but this causes other problems (the model sees too much context, including irrelevant content). Performance is inconsistent: some queries retrieve correctly at K=5 while others need K=20.</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>For a set of known-answer test queries, retrieve the top-20 or top-50 results (much larger than your production K). Check at what rank the correct chunk appears. If the mean rank is consistently above your cutoff K, the retriever's scoring function is miscalibrated. Measure Recall@K: what fraction of your test queries have the correct chunk in the top K?</p>
+
+    <h3>The fix</h3>
+
+    <p>Add a reranking step after initial retrieval. Retrieve a larger candidate set (top-50 or top-100) using a fast first-stage retriever, then apply a slower but more accurate cross-encoder reranker to score each (query, chunk) pair jointly <span class="citation" title="Nogueira et al. (2019). Passage Re-ranking with BERT. arXiv:1901.04085.">(Nogueira et al., 2019)</span>. Cross-encoders see the query and chunk together rather than comparing pre-computed embeddings, so they can make finer relevance judgments. This is the standard two-stage retrieval architecture in production systems.</p>
+
+    <h2>Failure Mode 5: Context Window Overflow and Assembly Errors</h2>
+
+    <p>Once the right chunks are retrieved and ranked, they must be assembled into the prompt sent to the model. Two things go wrong at this stage. First, if the total token count of the retrieved chunks exceeds the model's context window, some chunks get truncated or dropped. Second, the order in which chunks appear in the prompt matters: some models exhibit "lost-in-the-middle" behaviour, where they attend poorly to information in the middle of a long context <span class="citation" title="Liu et al. (2023). Lost in the Middle: How Language Models Use Long Contexts. arXiv:2307.03172.">(Liu et al., 2023)</span>.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>The system works for short documents but degrades on long ones. Performance improves dramatically if you reduce the number of retrieved chunks. The model ignores information from chunks that appear in the middle of the assembled context, even when those chunks contain the correct answer.</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>Log the full assembled prompt for failing queries. Count the total tokens. Check whether any chunks were truncated. Then take the correct answer chunk and note its position in the assembled prompt. If it is consistently in the middle third, you may be encountering lost-in-the-middle effects. Test by reordering chunks to place the most relevant ones first and last.</p>
+
+    <h3>The fix</h3>
+
+    <p>Set a hard token budget for retrieved context and trim or summarise chunks to fit. Place the most relevant chunks at the beginning of the context (and if you have budget, at the end). Use a reranker score to determine which chunks are most relevant before assembling. For very long documents, use a summarisation step to compress low-ranked chunks before they enter the prompt.</p>
+
+    <h2>Failure Mode 6: Query Understanding Failures</h2>
+
+    <p>The final failure mode is in translating the user's intent into a retrieval query. This is distinct from vocabulary mismatch: here the problem is not the words but the structure of the query. A question that contains multiple sub-questions, implicit assumptions, or references to prior conversation context may be poorly served by a single retrieval call.</p>
+
+    <p>A user asks: "What was the board's rationale for the 2022 dividend change, and how does that connect to the current debt covenants?" This is two questions with an implied causal link. A single vector query will embed the whole sentence and likely retrieve documents about either dividends or covenants, but not the connective reasoning. The retriever cannot bridge two separate retrieval needs in one call.</p>
+
+    <h3>What it looks like</h3>
+
+    <p>The system handles simple factual queries well but degrades on complex, multi-part, or conversational queries. Performance drops when the user asks follow-up questions that reference earlier turns ("what about the other approach you mentioned?").</p>
+
+    <h3>How to diagnose it</h3>
+
+    <p>Decompose failing queries by hand into their constituent retrieval needs. If you identify two or more distinct retrieval needs that require separate document chunks, you have a query understanding failure. Check whether the system also fails on follow-up queries that require conversation context to resolve correctly.</p>
+
+    <h3>The fix</h3>
+
+    <p>Use query decomposition: have the LLM split complex queries into atomic sub-queries, retrieve independently for each, then synthesise the results before final generation <span class="citation" title="Patel et al. (2022). Is Your Code Generated by ChatGPT Really Correct? Rigorous Evaluation of Large Language Models for Code Generation. NeurIPS 2022.">(Patel et al., 2022)</span>. For conversational settings, add a query rewriting step that resolves coreferences by incorporating conversation history into the query before retrieval.</p>
+
+    <h2>The Diagnostic Decision Tree</h2>
+
+    <p>When a RAG system returns a wrong or empty answer, run this sequence before touching any model code:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Does the answer exist in any document?</h4>
+        <p>Manually search the raw document store for the answer. If you cannot find it anywhere, the question is unanswerable from this corpus &mdash; this is a scope problem, not a system failure. If you find it, continue.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Is the answer in the index?</h4>
+        <p>Run a direct retrieval query using the exact text from the relevant passage. If the chunk does not appear, you have an indexing gap or chunking error. Fix the ingestion pipeline and re-index. If the chunk appears, continue.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Is the correct chunk in the top-K results?</h4>
+        <p>Retrieve the top-20 results for the original user query. Is the correct chunk in there? If not, you have a vocabulary mismatch or ranking failure. Add hybrid search or a reranker. If the chunk is in top-K, continue.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Is the correct chunk present in the assembled prompt?</h4>
+        <p>Log the full prompt sent to the model. Confirm the correct chunk is present and not truncated. If it is absent or truncated, you have a context assembly failure. Reduce chunk count or token budget. If it is present, continue.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Can a human expert answer correctly from only the assembled prompt?</h4>
+        <p>Show the assembled prompt (without the question) to a domain expert and ask them to answer the question. If they can and the model cannot, the problem is in generation. If they also cannot, the retrieval is still incomplete. Now you know where to focus.</p>
+      </div>
+    </div>
+
+    <h2>Hybrid Search: The Most Important Architectural Fix</h2>
+
+    <p>Across failure modes 3 and 4, the single most impactful architectural intervention is hybrid search. The term means combining dense retrieval (embedding similarity) with sparse retrieval (keyword matching) and merging the ranked lists.</p>
+
+    <p>Dense retrieval uses embedding models to encode both the query and each document chunk into a high-dimensional vector. Chunks are ranked by cosine similarity. This system excels at capturing semantic equivalence but can miss cases where exact terminology matters.</p>
+
+    <p>Sparse retrieval uses algorithms like BM25, which score each document based on how often the query terms appear and how rare those terms are in the overall corpus. This system excels at exact matches and domain-specific terminology but fails when the user's vocabulary differs from the document's.</p>
+
+    <div class="comparison-table">
+      <div class="col-header">Dense Retrieval (Embedding)</div>
+      <div class="col-header">Sparse Retrieval (BM25)</div>
+      <div class="col-body">
+        <ul>
+          <li>Captures semantic equivalence ("terminate" = "cancel")</li>
+          <li>Works across paraphrases</li>
+          <li>Sensitive to embedding model quality</li>
+          <li>Can rank plausible-but-wrong chunks high</li>
+        </ul>
+      </div>
+      <div class="col-body">
+        <ul>
+          <li>Exact terminology match (crucial for medical, legal, technical)</li>
+          <li>Fast and interpretable</li>
+          <li>Fails on vocabulary mismatch entirely</li>
+          <li>Does not understand synonyms or paraphrase</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>In production, hybrid search typically uses Reciprocal Rank Fusion (RRF) to combine the ranked lists from both systems. Each chunk receives a fused score based on its rank in each list, and the merged ranking is passed to a reranker for final ordering <span class="citation" title="Cormack et al. (2009). Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods. SIGIR 2009.">(Cormack et al., 2009)</span>. This two-stage pipeline &mdash; broad retrieval followed by precise reranking &mdash; is the current production standard for RAG systems that must perform reliably at scale.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>All six failure modes involve a different layer of the pipeline. But consider a situation where fixing one failure mode reveals another. You fix vocabulary mismatch with hybrid search, and now you can retrieve the right chunks &mdash; but the correct answer spans two chunks that are always split apart. Which failure mode surfaces next, and what does that tell you about the order in which to address them?</p>
+    </div>
+
+    <h2>Generation Failures: How to Tell the Difference</h2>
+
+    <p>A generation failure is when the retrieval is correct &mdash; the right chunks are in the prompt &mdash; but the model produces a wrong answer anyway. This happens for distinct reasons that require distinct fixes.</p>
+
+    <p>Common generation failures include: the model ignores the retrieved context and answers from its parametric memory instead (faithfulness failure); the model answers a slightly different question than the one asked (relevance failure); or the model correctly reports what the retrieved document says but the document itself was outdated (temporal failure).</p>
+
+    <p>The diagnostic test is the human expert test from step 5 of the decision tree above. If a human expert, given the assembled prompt, would answer correctly, the model is failing at generation. If the human expert also cannot answer, retrieval is still incomplete. This single test prevents the most common debugging mistake: tuning generation when retrieval is broken.</p>
+
+    <div class="callout callout-callback">
+      <div class="callout-label">Connecting Back</div>
+      <p>The distinction between retrieval failures and generation failures maps directly onto the RAG architecture you studied in <a href="../module-2/e04-rag-architecture.html">E04 &mdash; RAG Architecture</a>. The indexing, retrieval, and generation components each fail independently. The diagnostic tree above is simply the RAG architecture pipeline read backwards from symptom to cause.</p>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The most common production failure is not the most complex. Vocabulary mismatch and chunking errors together account for the majority of RAG performance gaps in real deployments. Before investing in rerankers, query decomposition, or larger context windows, confirm that your chunking strategy preserves complete passages and that your retrieval system uses hybrid search. Those two changes fix most systems.</p>
+    </div>
+
+    <h2>A Note on Evaluation</h2>
+
+    <p>You cannot diagnose retrieval failures systematically without an evaluation harness. Build a small golden dataset: twenty to fifty questions where you know the correct answer and the exact source passage. For each question, log the top-K retrieved chunks, note whether the correct chunk is present, and record the final model answer. Run this harness every time you change the pipeline.</p>
+
+    <p>Retrieval-specific metrics to track: Recall@K (is the correct chunk in the top K?), Mean Reciprocal Rank (what is the average rank of the correct chunk?), and Context Precision (of the chunks that were retrieved, what fraction were actually relevant?). These metrics attribute failures to the retrieval layer and give you the signal you need to iterate <span class="citation" title="Es et al. (2023). RAGAS: Automated Evaluation of Retrieval Augmented Generation. arXiv:2309.15217.">(Es et al., 2023)</span>.</p>
+
+    <!-- TOGGLE REVEAL -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: What does it mean for hybrid search to address vocabulary mismatch but not chunking errors?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Hybrid search merges dense (semantic) and sparse (keyword) retrieval. It improves which chunks surface at the top of the ranked list by handling cases where the query and document use different words for the same concept. But it cannot fix a case where the answer is split across two chunks, because neither chunk alone is semantically complete regardless of which retrieval method you use. Chunking errors need to be fixed at the indexing stage, not the retrieval stage. Hybrid search and chunking fixes are complementary, not substitutes: they live at different points in the pipeline.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the difference between a retrieval failure (wrong chunk retrieved) and a generation failure (right chunk, wrong answer)? How does the diagnostic decision tree distinguish between them?</li>
+        <li>How does query-document vocabulary mismatch cause retrieval to fail even when the answer exists and is correctly indexed?</li>
+        <li>What is hybrid search and which failure mode does it address? Why does it not address all six failure modes?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e05-vector-databases" data-next="e07-evaluation-harness">
+    <a href="e05-vector-databases.html" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">E05 &mdash; Vector Databases</span>
+    </a>
+    <a href="e07-evaluation-harness.html" class="next">
+      <span class="nav-direction">Next &rarr;</span>
+      <span class="nav-title">E07 &mdash; Building an Evaluation Harness</span>
+    </a>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e06-retrieval-failure-modes');</script>
+<script>AIEngNav.init('e06-retrieval-failure-modes');</script>
+<script>
+(function () {
+  // Toggle-reveal behaviour (same pattern as LLM Intelligence pages)
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = this.nextElementSibling;
+      var icon = this.querySelector('span:last-child');
+      body.classList.toggle('open');
+      if (icon) icon.textContent = body.classList.contains('open') ? '−' : '+';
+    });
+  });
+
+  // Verification section toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var body = document.querySelector('.verification-body');
+      var icon = this.querySelector('.toggle-icon');
+      var isOpen = body && body.classList.contains('open');
+      if (body) body.classList.toggle('open');
+      if (icon) icon.style.transform = isOpen ? '' : 'rotate(180deg)';
+      this.setAttribute('aria-expanded', String(!isOpen));
+    });
+  }
+
+  // Self-check quiz behaviour
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (quiz.dataset.answered) return;
+        quiz.dataset.answered = 'true';
+        var isCorrect = this.dataset.correct === 'true';
+        options.forEach(function (o) {
+          o.disabled = true;
+          if (o.dataset.correct === 'true') o.classList.add('correct');
+        });
+        if (!isCorrect) this.classList.add('incorrect');
+        if (feedback) {
+          feedback.textContent = isCorrect ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.classList.add('show');
+          feedback.classList.add(isCorrect ? 'correct-feedback' : 'incorrect-feedback');
+        }
+      });
+    });
+  });
+
+  // Scroll progress bar
+  var progressBar = document.querySelector('.scroll-progress');
+  if (progressBar) {
+    window.addEventListener('scroll', function () {
+      var scrollTop = window.scrollY;
+      var docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      var pct = docHeight > 0 ? (scrollTop / docHeight) * 100 : 0;
+      progressBar.style.width = pct.toFixed(1) + '%';
+    });
+  }
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N04 &mdash; BatchNorm and Weight Initialisation &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N04 &mdash; BatchNorm and Weight Initialisation">
+<meta property="og:description" content="Why random weights explode and how normalisation keeps training stable.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/n04-batchnorm-init.html">Module 2: Going Deeper</a>
+    <span class="sep">&#8250;</span>
+    BatchNorm and Weight Initialisation
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">N04 &middot; Module 2</div>
+    <h1>BatchNorm and Weight Initialisation</h1>
+    <p class="one-liner">Why random weights explode and how normalisation keeps training stable.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A relay race where each runner's speed doubles the previous runner's. The last runner moves at 1024&times; the starting speed and falls over. Normalisation resets each runner to a consistent pace before handing the baton.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Deep networks trained with naive weight initialisation diverge before they learn anything. BatchNorm and careful initialisation made training networks beyond 10 layers practical, unlocking modern architectures like ResNet and Transformer.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why weight initialisation matters, what BatchNorm does during training and inference, and why these two techniques are necessary for deep networks to train at all.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/n02-mlp-from-scratch.html" class="prereq-chip">N02 &mdash; MLP From Scratch</a>
+    <a href="../module-1/n03-activation-functions.html" class="prereq-chip">N03 &mdash; Activation Functions</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>When a consulting firm takes on a new engagement, the partner does not hand every analyst a blank mandate and say &ldquo;do what feels right.&rdquo; The work has a structure: the team starts from a clear framing, each workstream has a scope, and deliverables flow through a defined review chain. Without that structure, analysts duplicate effort, go in circles, or produce outputs that cannot be combined.</p>
+
+    <p>Training a deep neural network has the same problem. The network starts with random weights &mdash; its own &ldquo;blank mandate&rdquo; &mdash; and if those weights are set carelessly, the signal flowing through the layers either explodes to infinity or collapses to zero before a single gradient is computed. The network learns nothing because there is nothing useful to learn from.</p>
+
+    <p>This page covers the two techniques that solved this problem. <strong>Weight initialisation</strong> gives the network a structured starting point so that signals can flow cleanly from the first layer to the last. <strong>Batch Normalisation (BatchNorm)</strong> acts like a quality-control checkpoint at each layer, resetting the signal distribution before it can drift into a regime where learning breaks down. Together they made deep networks trainable &mdash; not just in theory, but in practice.</p>
+
+    <h2>The exploding and vanishing gradient problem</h2>
+
+    <p>To understand why initialisation matters, you need to trace what happens to a signal as it passes through a deep network. Each layer applies a transformation: multiply by a weight matrix, add a bias, pass through an activation function. Repeat twenty, fifty, or a hundred times.</p>
+
+    <p>Think of the relay race in the analogy above. If each runner hands the baton to the next runner moving twice as fast, after ten runners the pace is 1,024&times; the original. The last runner cannot possibly finish the race &mdash; they crash. If instead each runner slows to half the pace, after ten runners the baton has nearly stopped moving. Nothing reaches the end.</p>
+
+    <p>In a neural network, the &ldquo;pace&rdquo; is the magnitude of the activations. During the forward pass, activations can grow exponentially layer by layer (exploding) or shrink exponentially (vanishing). During the backward pass, the same thing happens to gradients: they either explode &mdash; making weight updates so large the training diverges &mdash; or vanish &mdash; making weight updates so small the early layers never learn <span class="citation" title="Bengio, Y., Simard, P., &amp; Frasconi, P. (1994). Learning long-term dependencies with gradient descent is difficult. IEEE Transactions on Neural Networks, 5(2), 157&ndash;166.">(Bengio et al., 1994)</span>.</p>
+
+    <p>With a network of two or three layers, this is a manageable nuisance. With twenty layers &mdash; the scale where deep learning becomes powerful &mdash; it makes training completely impractical without a deliberate solution.</p>
+
+    <h3>Why random initialisation without care fails</h3>
+
+    <p>Suppose you initialise every weight by drawing a number from a standard normal distribution: mean zero, standard deviation one. What happens in the forward pass?</p>
+
+    <p>Each layer takes an input vector and multiplies it by a weight matrix. If the weight matrix has 1,000 inputs per neuron, the output of each neuron is roughly the sum of 1,000 random draws. By the Central Limit Theorem, that sum has a standard deviation of approximately &radic;1,000 &asymp; 32. After the second layer the standard deviation is roughly 32&times;32 = 1,024. By the tenth layer you have activations in the millions. The network cannot compute useful outputs, and gradients flowing back through these large values become unstable.</p>
+
+    <p>The fix is simple once you see it: scale the initial weights so that the variance of the output of each layer matches the variance of its input. This keeps the &ldquo;pace&rdquo; of the relay race consistent across layers.</p>
+
+    <h2>Xavier and He initialisation</h2>
+
+    <p>Two initialisation schemes dominate modern practice. They address the same problem for different activation functions.</p>
+
+    <h3>Xavier (Glorot) initialisation</h3>
+
+    <p>Proposed by Glorot and Bengio in 2010, Xavier initialisation targets networks using <strong>tanh</strong> or <strong>sigmoid</strong> activations <span class="citation" title="Glorot, X., &amp; Bengio, Y. (2010). Understanding the difficulty of training deep feedforward neural networks. Proceedings of AISTATS.">(Glorot &amp; Bengio, 2010)</span>. The idea is to choose the weight scale so that the variance of the output equals the variance of the input, on average.</p>
+
+    <p>The formula is: initialise weights by drawing from a uniform distribution over &plusmn;&radic;(6 / (fan_in + fan_out)), where <code>fan_in</code> is the number of inputs to the layer and <code>fan_out</code> is the number of outputs. In NumPy:</p>
+
+    <pre><code>limit = np.sqrt(6 / (fan_in + fan_out))
+W = np.random.uniform(-limit, limit, size=(fan_in, fan_out))</code></pre>
+
+    <p>The derivation behind this formula is a piece of calculus: if you want the variance of the input to a layer and the variance of the gradients flowing back through it to both remain stable, you need this specific scaling. You do not need to re-derive it &mdash; but knowing <em>why</em> the formula has both fan_in and fan_out matters. It is trying to make the network equally well-conditioned in both the forward and backward direction.</p>
+
+    <h3>He (Kaiming) initialisation</h3>
+
+    <p>Xavier works for activations that are symmetric around zero, like tanh. ReLU breaks that assumption: it zeroes out half of its inputs, which effectively halves the variance that passes through each layer. If you use Xavier initialisation with ReLU, you get the vanishing problem in the forward pass because ReLU kills half the signal at every step.</p>
+
+    <p>He initialisation corrects for this <span class="citation" title="He, K., Zhang, X., Ren, S., &amp; Sun, J. (2015). Delving deep into rectifiers: Surpassing human-level performance on ImageNet classification. ICCV.">(He et al., 2015)</span>. It uses a larger initial scale to compensate for the variance that ReLU discards:</p>
+
+    <pre><code>std = np.sqrt(2 / fan_in)
+W = np.random.normal(0, std, size=(fan_in, fan_out))</code></pre>
+
+    <p>The factor of 2 accounts for the fact that ReLU passes through only roughly half the variance of its input (the positive half). With He initialisation, a deep ReLU network maintains a stable activation magnitude across many layers, which is precisely what made ResNets with 50, 101, and 152 layers trainable in practice.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The activation function you choose and the initialisation scheme are a matched pair. ReLU &rarr; He initialisation. Tanh or sigmoid &rarr; Xavier initialisation. Using the wrong pair is like printing a financial model in the wrong currency &mdash; the numbers look plausible but the conclusions are wrong.</p>
+    </div>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: What problem does He initialisation solve that Xavier does not?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>ReLU sets all negative activations to zero, which discards roughly half the signal variance at each layer. Xavier's scaling was derived assuming activations are symmetric around zero &mdash; which tanh and sigmoid roughly satisfy, but ReLU does not. He initialisation compensates by doubling the variance of the initial weights (the factor of 2 / fan_in), so that after ReLU kills half the signal, the remaining half still has the correct magnitude. Without this correction, a deep ReLU network trained with Xavier initialisation develops vanishing activations in the forward pass and vanishing gradients in the backward pass, and learning stalls.</p>
+      </div>
+    </div>
+
+    <h2>Batch Normalisation</h2>
+
+    <p>Even with correct initialisation, weights shift during training. After a few hundred gradient steps, the distribution of activations at each layer has drifted from where it started. Early layers are learning, which changes the statistics of what later layers receive as input. Later layers then have to chase a moving target &mdash; the input distribution is not stable. This is called <strong>internal covariate shift</strong>, and it makes training slow and unstable <span class="citation" title="Ioffe, S., &amp; Szegedy, C. (2015). Batch normalization: Accelerating deep network training by reducing internal covariate shift. ICML.">(Ioffe &amp; Szegedy, 2015)</span>.</p>
+
+    <p>Think of what happens in a large consulting project when a senior partner keeps revising the problem framing. Each analyst has to redo their section from scratch every time the framing changes. No one can build on stable prior work because the foundation keeps shifting. Batch Normalisation is the equivalent of locking the framing at each workstream boundary &mdash; it fixes the distribution of the signal before passing it to the next stage, so each layer can learn independently of what the layers before it are doing.</p>
+
+    <h3>What BatchNorm does, step by step</h3>
+
+    <p>BatchNorm is applied between the linear transformation and the activation function of each layer. For a mini-batch of training examples, it does four things:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Compute the mini-batch mean</h4>
+        <p>For each feature (each neuron's pre-activation value), compute the mean across all examples in the mini-batch. Call this &mu;. This gives a per-feature centre for the current batch.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Compute the mini-batch variance</h4>
+        <p>For each feature, compute the variance across the mini-batch. Call this &sigma;&sup2;. A small constant &epsilon; (typically 1e&minus;5) is added to prevent division by zero when variance is near zero.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Normalise</h4>
+        <p>Subtract the mean and divide by the standard deviation: <code>x_hat = (x - &mu;) / sqrt(&sigma;&sup2; + &epsilon;)</code>. After this step, the activations have mean zero and variance one across the batch. The relay runner is reset to a consistent starting pace.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Scale and shift with learnable parameters</h4>
+        <p>Apply <code>y = &gamma; &times; x_hat + &beta;</code>, where &gamma; (gamma) and &beta; (beta) are <em>learnable parameters</em> initialised to 1 and 0 respectively. The network can now learn to restore any distribution it finds useful, including the original un-normalised one if that is optimal. Normalisation is the default, but the network can undo it.</p>
+      </div>
+    </div>
+
+    <p>The result: each layer receives activations with a stable, near-standard-normal distribution at the start of every mini-batch, regardless of what the earlier layers are doing. The moving-target problem disappears. Layers can learn faster, and you can use a higher learning rate without the training diverging.</p>
+
+    <h3>Why gamma and beta are necessary</h3>
+
+    <p>You might wonder: if normalisation is good, why allow the network to undo it? The answer is that normalisation to mean zero, variance one is not always the right distribution for learning. A sigmoid activation, for example, operates in a nearly linear regime when its input is near zero &mdash; which means BatchNorm at the input to a sigmoid layer would suppress the non-linearity that makes the network expressive.</p>
+
+    <p>By adding learnable scale (&gamma;) and shift (&beta;), BatchNorm says: &ldquo;start normalised, and then learn whatever transformation is optimal.&rdquo; If the best transformation happens to be the identity (no change), the network will learn &gamma; = 1 and &beta; = 0. If a different scale or offset is useful, the network will find it. The learnable parameters give the layer the flexibility to use normalisation as a starting point rather than a hard constraint.</p>
+
+    <h3>Training vs. inference: a critical difference</h3>
+
+    <p>During <strong>training</strong>, BatchNorm uses the mean and variance of the current mini-batch. Each mini-batch provides a fresh estimate of the distribution statistics. This is what enables the normalisation to adapt as the weights change.</p>
+
+    <p>During <strong>inference</strong>, there is typically only a single example &mdash; or a small batch &mdash; and you cannot compute meaningful batch statistics from one data point. BatchNorm solves this by maintaining <strong>running estimates</strong> of the mean and variance during training. Specifically, it keeps a moving average of the batch means and batch variances seen during training. At inference time, it uses those running averages instead of computing statistics from the current batch.</p>
+
+    <p>In PyTorch, this is the distinction between <code>model.train()</code> and <code>model.eval()</code>. When you call <code>model.eval()</code>, all BatchNorm layers switch from using batch statistics to using the stored running statistics. Forgetting to call <code>model.eval()</code> before running inference is a common source of subtle bugs &mdash; the model produces different (and usually worse) outputs because it is normalising each test example using the statistics of whatever other examples happen to be in the batch alongside it.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Training mode (model.train())</div>
+        <p>BatchNorm computes mean &mu; and variance &sigma;&sup2; from the current mini-batch. Updates the running mean and running variance. Uses batch statistics for normalisation. Output varies slightly across batches.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Inference mode (model.eval())</div>
+        <p>BatchNorm uses the stored running mean and running variance accumulated during training. Does <em>not</em> update those estimates. Output is deterministic: the same input always produces the same output. Results are consistent across any batch size, including batch size 1.</p>
+      </div>
+    </div>
+
+    <h2>BatchNorm in code</h2>
+
+    <p>Here is a minimal BatchNorm layer written from scratch in NumPy, following the same approach as the MLP you built in <a href="../module-1/n02-mlp-from-scratch.html">N02 &mdash; MLP From Scratch</a>:</p>
+
+    <pre><code>class BatchNorm:
+    def __init__(self, num_features, eps=1e-5, momentum=0.1):
+        # Learnable parameters
+        self.gamma = np.ones(num_features)
+        self.beta = np.zeros(num_features)
+
+        # Running statistics (used at inference)
+        self.running_mean = np.zeros(num_features)
+        self.running_var = np.ones(num_features)
+
+        self.eps = eps
+        self.momentum = momentum
+        self.training = True
+
+    def forward(self, x):
+        if self.training:
+            # Compute batch statistics
+            mu = x.mean(axis=0)                    # shape: (num_features,)
+            var = x.var(axis=0)                    # shape: (num_features,)
+
+            # Update running statistics
+            self.running_mean = (
+                (1 - self.momentum) * self.running_mean + self.momentum * mu
+            )
+            self.running_var = (
+                (1 - self.momentum) * self.running_var + self.momentum * var
+            )
+
+            # Normalise using batch statistics
+            x_hat = (x - mu) / np.sqrt(var + self.eps)
+        else:
+            # Use stored running statistics
+            x_hat = (x - self.running_mean) / np.sqrt(self.running_var + self.eps)
+
+        # Scale and shift
+        return self.gamma * x_hat + self.beta</code></pre>
+
+    <p>Read each line and map it back to the four-step walkthrough above. The code is not magic &mdash; it is arithmetic. The <code>momentum</code> parameter controls how quickly the running statistics respond to new batches: a value of 0.1 means each new batch contributes 10% of the update, and the stored estimate carries 90% of the weight. A smaller momentum makes the running estimate more stable; a larger one makes it more responsive to recent batches.</p>
+
+    <h2>The interaction between initialisation and BatchNorm</h2>
+
+    <p>A reasonable question: if BatchNorm normalises activations at every layer, why does initialisation still matter? Cannot BatchNorm correct any bad starting point?</p>
+
+    <p>The answer is: partially, but not entirely. In the very first training step, before any gradients have updated the running statistics, the network still needs to propagate a signal from input to output. If the initial weights cause activations to explode to NaN or collapse to zero before BatchNorm has been applied, the very first forward pass fails. BatchNorm corrects distributions within the batch, but it cannot fix NaN values or exact zeros.</p>
+
+    <p>More practically: good initialisation makes the early training steps stable and efficient. BatchNorm maintains that stability as training proceeds and weights drift. They are complementary, not redundant. The initialisation handles the first steps; BatchNorm handles the long run.</p>
+
+    <p>In modern deep learning practice, you will almost always see both used together: He initialisation for ReLU networks, Xavier for others, and BatchNorm after each linear layer. Networks without BatchNorm (such as Transformers, which use Layer Normalisation instead) require especially careful initialisation and often benefit from lower learning rates early in training.</p>
+
+    <h2>Layer Normalisation: BatchNorm's cousin</h2>
+
+    <p>BatchNorm has a known weakness: it requires a sufficiently large batch size to estimate stable statistics. With a batch of one or two examples, the mean and variance are too noisy to be useful. This is a problem for recurrent networks processing variable-length sequences, and for large models trained with small per-device batch sizes.</p>
+
+    <p><strong>Layer Normalisation</strong> addresses this by computing the mean and variance across <em>features</em> within a single example, rather than across examples within a batch <span class="citation" title="Ba, J. L., Kiros, J. R., &amp; Hinton, G. E. (2016). Layer normalization. arXiv:1607.06450.">(Ba et al., 2016)</span>. The normalisation is computed per-example, so it works identically in training and inference &mdash; there are no running statistics to track and no train/eval distinction for the normalisation itself.</p>
+
+    <p>Layer Normalisation is the standard choice in Transformers. Batch Normalisation remains dominant in convolutional networks for computer vision. The choice depends on architecture and batch size, not on which is universally better.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Consider what happens to BatchNorm during distributed training, where a batch of 512 examples is split across 8 GPUs with 64 examples per device. Each GPU computes its own batch statistics from its local 64 examples. Is that the same as computing batch statistics from all 512 examples? How might this affect training stability, and what would you do to address it? (This is a real engineering problem: look up &ldquo;SyncBN&rdquo; or &ldquo;Cross-Replica BatchNorm.&rdquo;)</p>
+    </div>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A colleague is training a deep network with ReLU activations and notices that activations collapse to near-zero by the fifth layer, even before training begins. Which initialisation scheme should they switch to?</div>
+      <button class="quiz-option" data-letter="A">Xavier (Glorot) initialisation, which balances fan_in and fan_out.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">He (Kaiming) initialisation, which scales weights by &radic;(2 / fan_in) to compensate for ReLU's variance reduction.</button>
+      <button class="quiz-option" data-letter="C">Standard normal initialisation (mean 0, std 1) across all layers.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. ReLU zeros out roughly half its inputs, which halves the variance passing through each layer. Xavier initialisation was not designed for this. He initialisation compensates with the factor of 2, keeping activation variance stable across depth."
+           data-incorrect="Xavier was designed for symmetric activations like tanh and sigmoid. Standard normal initialisation causes exponential variance growth. For ReLU networks, He initialisation is the correct match."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You are deploying a model to production. You call model.predict(single_example) and notice the output is different each time you call it, even with the same input. The most likely cause is:</div>
+      <button class="quiz-option" data-letter="A">Floating-point rounding errors in the weight matrices.</button>
+      <button class="quiz-option" data-letter="B">The learning rate scheduler is still active during inference.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">BatchNorm layers are in training mode, computing statistics from a batch that varies depending on what other examples are present.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. In training mode, BatchNorm computes normalisation statistics from the current batch. If you pass different batches alongside your input example, the statistics &mdash; and therefore the output &mdash; change. Calling model.eval() switches BatchNorm to use the fixed running statistics, making inference deterministic."
+           data-incorrect="Floating-point and scheduler effects are not batch-dependent. The tell-tale sign that it is BatchNorm is that the output varies based on what other examples are in the batch. The fix is model.eval()."></div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>BatchNorm has a split personality: during training it normalises using live batch statistics and updates a running average; during inference it uses that stored average and behaves deterministically. Forgetting to switch modes (&ldquo;forgot to call model.eval()&rdquo;) is one of the most common sources of silent bugs in deployed models. Always verify that inference outputs are deterministic before shipping.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What problem does He initialisation solve for ReLU networks that Xavier initialisation does not?</li>
+        <li>Why does BatchNorm have learnable parameters gamma (&gamma;) and beta (&beta;), rather than simply normalising to zero mean and unit variance?</li>
+        <li>What is the difference between BatchNorm behaviour at training time versus inference time, and what can go wrong if you confuse the two?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav" data-prev="n03-activation-functions" data-next="n05-optimisers"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>if (window.LLMNav) LLMNav.init('n04-batchnorm-init');</script>
+</body>
+</html>

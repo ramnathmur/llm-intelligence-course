@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F07 &mdash; Neural Networks as Stacked Functions &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F07 &mdash; Neural Networks as Stacked Functions">
+<meta property="og:description" content="A neural network is a chain of linear transformations with nonlinear gates between them.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/f05-features-and-data.html">Module 2: Data &amp; Features</a>
+    <span class="sep">&#8250;</span>
+    Neural Networks as Stacked Functions
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">F07 &middot; Module 2</div>
+    <h1>Neural Networks as Stacked Functions</h1>
+    <p class="one-liner">A neural network is a chain of linear transformations with nonlinear gates between them.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A series of consultants each transforming a client brief &mdash; each one takes the previous consultant's output, applies their specialist lens, and passes a transformed document forward. The final consultant hands you a recommendation, not a summary of the original brief.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    The neural framing is a historical accident. Thinking of a neural network as stacked matrix multiplications with activation functions is both more accurate and more useful &mdash; it makes the architecture legible. Once you see a neural network as a composed function rather than a brain metaphor, you can reason about what each layer does, why depth matters, and what goes wrong when a network fails to learn.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    What a neural network is mechanically, why nonlinearity is essential, and what depth adds that width alone cannot provide. You will also be able to explain why stacking linear layers without activation functions is equivalent to a single linear layer, and why that makes the "neural" name something of a misnomer.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f03-gradient-descent.html" class="prereq-chip">F03 &mdash; Gradient Descent</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>The name "neural network" conjures images of a simulated brain: neurons firing, synaptic connections, biological inspiration. That framing is more hindrance than help. It suggests something organic, mysterious, and hard to reason about.</p>
+
+    <p>Strip the metaphor away and what you have is a function. A composed function, built by chaining simpler functions together. Each stage in the chain takes a set of numbers, applies a learnable transformation, and passes the result to the next stage. The final stage produces the prediction. Everything else is detail.</p>
+
+    <p>This page builds the mechanical picture from scratch. By the end, "neural network" will mean something precise to you &mdash; not an analogy to biology, but a specific class of mathematical object with known properties and known limitations.</p>
+
+    <h2>Start with a single layer: the linear transformation</h2>
+
+    <p>The fundamental operation in a neural network is a <strong>linear transformation</strong>. You give it a list of input numbers. It multiplies each input by a learned weight, sums everything together, and adds a learned offset called a bias. The output is a single number &mdash; or, if the layer has multiple outputs, a list of numbers produced by running this operation once for each output.</p>
+
+    <p>The consulting analogy makes this concrete. A junior analyst receives a client brief that contains fifty data points &mdash; revenue, headcount, market share, churn rate, and so on. Their job is to synthesise those fifty numbers into five strategic signals: growth momentum, cost efficiency, competitive position, customer health, and execution risk. They apply a learned weighting: revenue matters more for growth momentum; churn rate matters more for customer health. The result is five synthesised scores from fifty inputs.</p>
+
+    <p>That is a linear layer. Fifty inputs, five outputs, learned weights, one bias per output. In code it is often written as a matrix multiplication: the weight matrix transforms the input vector into the output vector <span class="citation" title="Goodfellow, I., Bengio, Y., &amp; Courville, A. (2016). Deep Learning. MIT Press.">(Goodfellow et al., 2016)</span>.</p>
+
+    <p>A linear layer is learnable &mdash; training adjusts the weights. But on its own it has a severe limitation: it can only represent <em>linear</em> relationships. If you double the inputs, the outputs double. If you add two inputs together before passing them in, the output changes additively. The whole world of curves, thresholds, interactions, and non-proportional relationships is invisible to a single linear layer.</p>
+
+    <h2>The nonlinearity problem: why linear alone is not enough</h2>
+
+    <p>Here is the critical mathematical fact: if you stack multiple linear transformations on top of each other without putting anything between them, the composition is still a linear transformation. It does not matter how many layers you add. The result is always equivalent to a single matrix multiplication with different numbers.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Think first: why does stacking two linear layers collapse to one?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>A linear transformation is defined by a matrix. Composing two linear transformations means multiplying their matrices together. Matrix multiplication produces another matrix &mdash; and that resulting matrix <em>is</em> a linear transformation in its own right. No matter how many matrices you multiply, the product is always a matrix. So ten stacked linear layers with no activation functions in between are mathematically identical to a single linear layer with a different set of weights. You have added parameters but not added any representational power. This is why depth without nonlinearity is a fiction: you are not building a deeper model, you are just parameterising a single linear map in a roundabout way.</p>
+      </div>
+    </div>
+
+    <p>This collapse means a network of any depth with only linear operations can only draw straight-line (or flat-plane) decision boundaries. It can learn that sales correlates linearly with marketing spend. It cannot learn that the relationship is strong at low spend levels, saturates at medium spend, and reverses at very high spend (ad fatigue). Curves, kinks, and interactions are permanently out of reach.</p>
+
+    <p>Most interesting problems in the world involve exactly those non-linear patterns.</p>
+
+    <h2>The fix: activation functions as nonlinear gates</h2>
+
+    <p>The solution is simple and elegant: after each linear layer, apply a nonlinear function to the outputs before passing them to the next layer. This function is called an <strong>activation function</strong>.</p>
+
+    <p>The activation function takes each output number from the linear layer and applies a fixed mathematical operation to it, independently, without involving the other outputs. It introduces a bend into the otherwise straight-line path from input to output. And that bend is what lets the network learn curves.</p>
+
+    <p>The most popular modern activation function is the <strong>ReLU</strong> (Rectified Linear Unit) <span class="citation" title="Nair, V., &amp; Hinton, G. E. (2010). Rectified linear units improve restricted Boltzmann machines. ICML 2010.">(Nair &amp; Hinton, 2010)</span>. Its rule is almost embarrassingly simple: if the input is negative, output zero; if the input is positive, output the input unchanged.</p>
+
+    <p>In the consulting analogy: after the junior analyst produces their five strategic scores, a senior reviewer applies a threshold. Any signal that comes in below a certain level is treated as "not material" and zeroed out. Only signals above the threshold are passed forward with their full magnitude. The threshold is fixed; the weighting happens before and after it. But that threshold &mdash; that gate &mdash; is what makes the whole chain non-linear.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 560 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ReLU activation function: flat at zero for negative inputs, rising linearly for positive inputs">
+        <!-- Axes -->
+        <line x1="80" y1="220" x2="500" y2="220" stroke="var(--surface3)" stroke-width="1.5"/>
+        <line x1="280" y1="40" x2="280" y2="240" stroke="var(--surface3)" stroke-width="1.5"/>
+
+        <!-- Axis labels -->
+        <text x="510" y="224" fill="var(--text-dim)" font-size="11">input x</text>
+        <text x="284" y="36" fill="var(--text-dim)" font-size="11">output</text>
+        <text x="185" y="216" fill="var(--text-dim)" font-size="10" text-anchor="middle">negative territory</text>
+        <text x="385" y="216" fill="var(--text-dim)" font-size="10" text-anchor="middle">positive territory</text>
+
+        <!-- ReLU curve: flat at 0 for x < 0, linear for x > 0 -->
+        <!-- Negative side: flat at y=220 (zero output) -->
+        <line x1="85" y1="220" x2="280" y2="220" stroke="var(--cyan)" stroke-width="3"/>
+        <!-- Positive side: rising from (280,220) to (490,30) -->
+        <line x1="280" y1="220" x2="490" y2="30" stroke="var(--cyan)" stroke-width="3"/>
+
+        <!-- Corner dot -->
+        <circle cx="280" cy="220" r="5" fill="var(--cyan)"/>
+
+        <!-- Labels -->
+        <text x="140" y="205" fill="var(--text-muted)" font-size="11" text-anchor="middle">ReLU = 0</text>
+        <text x="140" y="218" fill="var(--text-muted)" font-size="11" text-anchor="middle">(signal killed)</text>
+        <text x="420" y="80" fill="var(--green)" font-size="11" text-anchor="middle">ReLU = x</text>
+        <text x="420" y="93" fill="var(--green)" font-size="11" text-anchor="middle">(signal passes)</text>
+
+        <!-- The kink annotation -->
+        <text x="280" y="250" fill="var(--amber)" font-size="10" text-anchor="middle">The kink here</text>
+        <text x="280" y="263" fill="var(--amber)" font-size="10" text-anchor="middle">is the nonlinearity</text>
+
+        <!-- Title -->
+        <text x="280" y="20" fill="var(--text)" font-size="12" text-anchor="middle" font-weight="600">ReLU Activation Function</text>
+      </svg>
+      <p class="diagram-caption">ReLU is a gate with a kink at zero. Negative inputs are zeroed out; positive inputs pass through unchanged. That single kink is enough to break the linear collapse &mdash; compose enough layers with ReLU gates and the network can approximate arbitrarily complex functions.</p>
+    </div>
+
+    <p>Other activation functions exist. The sigmoid function squashes any input into the range (0, 1), which made it popular in the early days for producing probability-like outputs. The tanh function squashes into (&minus;1, 1). The GELU function, used in modern language models, is a smooth approximation to ReLU with slightly better empirical properties <span class="citation" title="Hendrycks, D., &amp; Gimpel, K. (2016). Gaussian Error Linear Units (GELUs). arXiv:1606.08415.">(Hendrycks &amp; Gimpel, 2016)</span>. But the logic is always the same: introduce a bend so the linear collapse cannot happen.</p>
+
+    <h2>Stacking layers: what depth actually does</h2>
+
+    <p>Now you have the two ingredients: a linear transformation that mixes inputs into outputs via learned weights, and a nonlinear activation that introduces a bend. Stack these alternating layers and you have a deep neural network.</p>
+
+    <p>Each pair of (linear layer + activation) is called a <strong>hidden layer</strong>. "Hidden" just means it is between the input and the output &mdash; not directly observed by the user, but doing real work internally.</p>
+
+    <p>Why stack multiple layers rather than just one? The key insight is that each layer builds on what the previous layer learned.</p>
+
+    <p>Return to the consulting chain. The junior analyst synthesises fifty raw data points into five strategic signals. A mid-level consultant takes those five signals and synthesises them into two higher-order judgements: "structural health" and "strategic momentum." A senior partner takes those two and produces a single recommendation: "acquire" or "restructure." At each level, the human is working with abstractions built by the level below. The raw data never reaches the senior partner; they work with processed signals that carry more meaning than any individual number.</p>
+
+    <p>Neural network layers work the same way. Early layers learn to detect simple patterns in the input: in image recognition, they detect edges and colour gradients. Middle layers combine those simple patterns into more complex ones: textures, object parts. Later layers combine those intermediate representations into high-level concepts: "this is a dog," "this is a face." The hierarchy is not specified by the engineer &mdash; it emerges from training, because hierarchical representations happen to be what minimises the loss <span class="citation" title="LeCun, Y., Bengio, Y., &amp; Hinton, G. (2015). Deep learning. Nature, 521, 436-444.">(LeCun et al., 2015)</span>.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Without Depth (Single Layer)</div>
+        <p>One linear layer plus activation. The network can learn which input features matter, but it can only combine them in a single step. Complex interactions &mdash; where the importance of feature A depends on the value of feature B &mdash; are hard to represent. The decision boundary is simple.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">With Depth (Multiple Layers)</div>
+        <p>Each layer reprocesses the outputs of the previous layer. Interactions among features are captured in intermediate representations that no individual input carries. The network can represent exponentially more complex functions with the same total number of parameters. The decision boundary can be arbitrarily complex.</p>
+      </div>
+    </div>
+
+    <h2>What depth buys that width cannot</h2>
+
+    <p>You might ask: instead of adding more layers, why not just make each layer wider &mdash; more outputs per layer, more parameters? This is the depth-versus-width question, and the answer is non-obvious but important.</p>
+
+    <p>Width helps a network approximate complex functions by sheer brute force. Given enough neurons in a single hidden layer, a network can theoretically approximate any continuous function to arbitrary precision &mdash; this is the universal approximation theorem <span class="citation" title="Hornik, K. (1991). Approximation capabilities of multilayer feedforward networks. Neural Networks, 4(2), 251-257.">(Hornik, 1991)</span>. But "theoretically" and "practically" are different things.</p>
+
+    <p>In practice, depth is far more parameter-efficient for the kinds of structured patterns that appear in natural data. Here is why: depth allows <em>reuse of computations</em>. A pattern recognised in layer two can be used by both layer three and layer four simultaneously. A wide single layer must re-learn every combination of features from scratch, with no sharing.</p>
+
+    <p>Think of a consulting firm's knowledge management system. A shallow but very wide system would require every consultant to independently re-derive every insight from raw data. A deep system (a hierarchy of analysts, consultants, and partners) lets higher levels reuse and build on the work of lower levels. The deep hierarchy achieves the same outcome with far fewer total work-hours because knowledge compounds up the chain rather than being rebuilt at every step.</p>
+
+    <p>Depth also makes it easier for gradient descent to find good solutions. Hierarchical structure provides a natural scaffold: each layer has a more tractable sub-problem than the overall function, and solving each sub-problem contributes to solving the whole. Very wide shallow networks have flat, less structured loss landscapes that are harder to optimise.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Width lets a network represent complex patterns by having enough neurons. Depth lets a network build complex patterns by composing simpler ones. The same representational power achieved with depth requires exponentially more neurons with width. This is the practical reason deep networks outperform wide shallow ones on structured problems in the real world.</p>
+    </div>
+
+    <h2>The full picture: a network is a composed function</h2>
+
+    <p>Let us make the mechanical picture explicit. A three-layer neural network applies the following chain of operations to its inputs:</p>
+
+    <p><strong>Layer 1:</strong> multiply inputs by weight matrix W<sub>1</sub>, add bias b<sub>1</sub>, apply activation &rarr; hidden representation h<sub>1</sub></p>
+    <p><strong>Layer 2:</strong> multiply h<sub>1</sub> by W<sub>2</sub>, add bias b<sub>2</sub>, apply activation &rarr; hidden representation h<sub>2</sub></p>
+    <p><strong>Layer 3 (output):</strong> multiply h<sub>2</sub> by W<sub>3</sub>, add bias b<sub>3</sub> &rarr; prediction</p>
+
+    <p>The output layer often omits the activation (for regression tasks where you want the raw number) or applies a specific output activation such as softmax (which converts raw scores into a probability distribution over classes).</p>
+
+    <p>All the W and b values are parameters. Training adjusts them to minimise prediction error on the training data, via gradient descent (see <a href="../module-1/f03-gradient-descent.html">F03 &mdash; Gradient Descent</a>). The architecture &mdash; how many layers, how wide each layer, which activation functions &mdash; is a design choice the engineer makes before training begins.</p>
+
+    <p>That is it. No biological neurons. No firing thresholds. No synaptic plasticity. Just a composed function with learnable parameters and nonlinear gates between layers.</p>
+
+    <h2>Why the "neural" name persists despite being misleading</h2>
+
+    <p>The biological framing came from the field's origin in the 1940s, when McCulloch and Pitts proposed a mathematical model of a neuron <span class="citation" title="McCulloch, W. S., &amp; Pitts, W. (1943). A logical calculus of the ideas immanent in nervous activity. The Bulletin of Mathematical Biophysics, 5(4), 115-133.">(McCulloch &amp; Pitts, 1943)</span>. The term "neural" stuck through decades of subsequent work. By the time practitioners recognised that the biological analogy was doing more harm than good, the vocabulary was too entrenched to change.</p>
+
+    <p>The harm is real: when people think "simulated brain," they attribute properties to neural networks that they do not have (self-awareness, understanding, genuine intelligence) and miss properties they do have (systematic approximation of functions, compositional representations, sensitivity to training distribution).</p>
+
+    <p>When a practitioner says "neural network," hear "composed function with learnable linear layers and nonlinear activations." The architecture diagrams with circles and arrows are just visual shorthand for matrix multiplications. The weights are just numbers. The training is just gradient descent minimising a loss.</p>
+
+    <h2>Reading an architecture diagram</h2>
+
+    <p>Architecture diagrams draw each layer as a column of circles (nodes) and each weight as an arrow between circles. When you see this, the translation is:</p>
+
+    <p>Each circle is one output value from a layer. The arrows from all circles in the previous layer to one circle in the current layer represent one row of the weight matrix &mdash; the weights that combine all previous outputs to produce one current output. The activation function is applied after all the multiplication-and-summing happens, before the circle's value is passed to the next layer.</p>
+
+    <p>A "fully connected" or "dense" layer means every circle in layer N connects to every circle in layer N+1. The weight matrix has one parameter for every such connection. If layer N has 512 nodes and layer N+1 has 256 nodes, the weight matrix has 512 &times; 256 = 131,072 parameters for that one layer alone.</p>
+
+    <p>Modern networks have billions of parameters because they are deep (many layers) and wide (many nodes per layer). A large language model might have hundreds of layers, each processing thousands of values simultaneously. The core operation at each layer is always the same: a linear transformation, then a nonlinearity. Scale that operation up, repeat it many times, and you have a frontier model.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Not all layers in modern networks are fully connected. Convolutional layers apply the same small weight matrix to every patch of an image, dramatically reducing the number of parameters while exploiting the spatial structure of images. Attention layers, used in transformers, compute a different kind of mixing where the weight matrix itself depends on the input. You will encounter both when you study transformer architecture. The core principle &mdash; linear transformation plus nonlinearity &mdash; remains, but the structure of the weight matrix changes to match the structure of the data.</p>
+    </div>
+
+    <h2>Practical implications for practitioners</h2>
+
+    <p>Understanding neural networks as stacked functions gives you specific diagnostic tools when something goes wrong.</p>
+
+    <p>If your network trains but never improves, and you suspect the activation function is the issue, you may be encountering the <strong>vanishing gradient problem</strong>: in deep networks with certain activations (particularly sigmoid and tanh), the gradient signal that propagates back through many layers can shrink to near-zero, making the early layers unable to learn. ReLU was widely adopted partly because it does not have this property for positive inputs &mdash; the gradient through a ReLU for positive inputs is simply 1, unchanged by the layer's presence.</p>
+
+    <p>If your network learns training data perfectly but fails to generalise, depth is probably not the issue &mdash; overfitting is (see <a href="../module-2/f06-overfitting.html">F06 &mdash; Overfitting and Regularisation</a>). Adding more layers typically makes overfitting worse, not better, by increasing model capacity.</p>
+
+    <p>If you need to choose between a wider or deeper network for a task, prefer depth when the data has hierarchical structure (images, text, audio, time series). Prefer width when the task requires combining many independent signals at a single level of abstraction (tabular data with many features that matter roughly equally).</p>
+
+    <p>If you are told that a model uses a "two-layer network" or a "five-layer network," check the convention being used. Some practitioners count only the hidden layers; others count input and output layers too. A "two-layer network" in one paper might mean one hidden layer; in another it might mean two hidden layers plus an output layer. Always check the architecture diagram rather than relying on the count.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A colleague proposes building a deeper model by adding five more layers to an existing network but accidentally omits the activation functions between the new layers. What is the practical effect?</div>
+      <button class="quiz-option" data-letter="A">The model will be five times more powerful because it has five additional transformations.</button>
+      <button class="quiz-option" data-letter="B">The model will be slower to train but should perform better if trained long enough.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">The five new layers collapse to a single linear transformation, adding no representational power beyond one additional layer with different weights.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly right. Without activation functions, stacked linear layers are mathematically equivalent to a single linear layer. The five new layers contribute no additional capacity to represent non-linear patterns. This is precisely why activation functions are not optional &mdash; they are what makes depth meaningful."
+           data-incorrect="Think about what happens when you compose linear transformations without any nonlinearity between them. Composing two matrices gives you a single matrix. Composing five matrices still gives you a single matrix. The chain of linear layers collapses into one equivalent linear layer, regardless of how many layers you stack."></div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A neural network is a function composed of alternating linear layers and nonlinear activations. The linear layers learn to mix and weight inputs. The activations introduce the bends that allow the composed function to represent curves, thresholds, and interactions. Remove the activations and the whole stack collapses to a single linear transformation. The architecture is legible once you see it this way: adding a layer adds one more level of abstraction, and each activation keeps those abstractions nonlinearly expressive.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why are nonlinear activation functions necessary between linear layers?</li>
+        <li>What would happen if you stacked 10 linear layers with no activation?</li>
+        <li>What does depth buy you that width alone cannot?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>
+if (typeof LLMNav !== 'undefined') {
+  LLMNav.init('f07-neural-networks');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E04 &mdash; RAG Architecture &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E04 &mdash; RAG Architecture">
+<meta property="og:description" content="Chunking, embedding, retrieval, and reranking &mdash; the pipeline that gives LLMs access to external knowledge.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/e04-rag-architecture.html">Module 2: Building with LLMs</a>
+    <span class="sep">&#8250;</span>
+    RAG Architecture
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">E04 &middot; Module 2</div>
+    <h1>RAG Architecture</h1>
+    <p class="one-liner">Chunking, embedding, retrieval, and reranking &mdash; the pipeline that gives LLMs access to external knowledge.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      An open-book exam vs a memorisation exam. Fine-tuning is the memorisation exam &mdash; knowledge is baked in but frozen at training time. RAG is the open-book exam &mdash; you retrieve the right pages at exam time, and your answer reflects today's facts, not last year's cramming.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Fine-tuning a model on your documents is expensive and the model forgets what it knew before. RAG keeps knowledge outside the model and retrieves it at inference time &mdash; the architectural choice that powers most enterprise LLM deployments. Getting RAG right means understanding four distinct failure modes, each tied to a different stage of the pipeline.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    How the full RAG pipeline works end-to-end, why chunk size is a design choice with real tradeoffs, why cosine similarity retrieval is necessary but not sufficient, and what a reranker adds that vector search cannot provide on its own.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e02-context-engineering.html" class="prereq-chip">E02 &mdash; Context Engineering</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Picture a senior consultant walking into a client meeting. She did not memorise the entire company knowledge base before walking through the door. That would take months and go stale the moment someone updated a spreadsheet. Instead, she arrived with access: her laptop, a search tool, and the discipline to pull the right documents before she answers any question. She retrieves, then responds.</p>
+
+    <p>That is Retrieval-Augmented Generation in one sentence. The model does not memorise your documents. It retrieves relevant fragments at the moment a question arrives, slots them into its context window, and generates an answer that is grounded in your actual content rather than its training-time approximation of the world.</p>
+
+    <p>This page walks the full RAG pipeline: how documents get prepared for retrieval, how a query finds the right fragments, and why the naive version of that search is often not good enough. Each stage has its own failure mode, and knowing the architecture means knowing where to look when things go wrong.</p>
+
+    <h2>Why not just fine-tune?</h2>
+
+    <p>Before diving into the pipeline, the question worth answering first is: why bother with a retrieval system at all? Can you not just train the model on your documents and be done with it?</p>
+
+    <p>You can, and sometimes you should. But fine-tuning is the memorisation exam. Knowledge baked in during training is frozen as of that training run. Update a policy document, publish a new product spec, or change a pricing table &mdash; and your fine-tuned model knows nothing about it until you run another expensive training job. For knowledge that changes frequently, fine-tuning is an architectural mismatch.</p>
+
+    <p>Fine-tuning also has a subtler problem. When you train a model on domain-specific content, you risk degrading its general capabilities &mdash; a phenomenon researchers call <strong>catastrophic forgetting</strong> <span class="citation" title="McCloskey &amp; Cohen (1989). Catastrophic Interference in Connectionist Networks. Psychology of Learning and Motivation.">(McCloskey &amp; Cohen, 1989)</span>. The model trades away what it knew for what you taught it. RAG sidesteps this entirely. The base model never changes. Its broad reasoning ability stays intact. The external knowledge base handles the freshness problem.</p>
+
+    <p>There is also an auditability argument that matters in enterprise settings. When a RAG system produces an answer, you can see exactly which chunks it retrieved to produce it. You can log the sources, inspect them, flag hallucinations against the retrieved content, and build citation trails. A fine-tuned model cannot tell you which training document a fact came from, because the fact was compressed into weights during training. RAG gives you a paper trail. Fine-tuning gives you a black box with a specialised flavour.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      The fundamental division is this: fine-tuning changes what the model <em>knows</em>; RAG changes what the model <em>can see</em> at inference time. Use fine-tuning for style, tone, and task format. Use RAG for facts, documents, and freshness.
+    </div>
+
+    <h2>The four stages of a RAG pipeline</h2>
+
+    <p>A RAG system has two distinct phases. The <strong>indexing phase</strong> happens once (or on a schedule), and it prepares your documents for fast retrieval. The <strong>query phase</strong> happens on every user request, and it retrieves the right content and passes it to the model. The four stages split across these phases.</p>
+
+    <h3>Stage 1: Chunking</h3>
+
+    <p>You cannot put an entire 200-page contract into a context window as a single block and ask the model to find the relevant section. Even if the context window were large enough, you would be giving the model more noise than signal &mdash; and retrieval requires comparing the user's query against stored text, which means you need manageable, comparable units.</p>
+
+    <p>Chunking is the act of splitting source documents into pieces. It sounds simple. It is not, because chunk size is a genuine design choice with genuine tradeoffs, not a parameter you tune until the tests pass.</p>
+
+    <p><strong>Small chunks</strong> (100&ndash;200 tokens) are precise. Each chunk covers one narrow idea, so if that idea matches the query, the retrieval is clean. But small chunks lose context. A sentence pulled out of a paragraph can be ambiguous or misleading without its surrounding sentences. Small chunks also mean a larger index to maintain and more chunks to retrieve for broad questions.</p>
+
+    <p><strong>Large chunks</strong> (500&ndash;1,000 tokens) preserve context and coherence. But they dilute signal. A chunk that covers three topics will match queries about any of them, even weakly &mdash; which means you might retrieve a chunk where only 20% of the text is relevant to the question. The remaining 80% consumes context window space and potentially confuses the model.</p>
+
+    <p>The practitioner's heuristic is to match chunk size to the granularity of the questions you expect. A customer-support bot answering narrow product questions benefits from small chunks. A legal research assistant synthesising multi-clause arguments benefits from larger ones. In both cases, chunks should respect natural boundaries: paragraph breaks, section headings, list items &mdash; rather than cutting mid-sentence at an arbitrary character count.</p>
+
+    <p>One pattern that has gained traction is <strong>hierarchical chunking</strong> <span class="citation" title="Sarthi et al. (2024). RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval. ICLR.">(Sarthi et al., 2024)</span>: store small chunks for retrieval precision, but when a small chunk is retrieved, return it with its parent paragraph or section for context. The small chunk wins the search; the parent chunk provides the meaning. This is structurally similar to how a good index works in a book &mdash; the index entry is narrow and precise, but it points you to a full paragraph, not a single word.</p>
+
+    <h3>Stage 2: Embedding</h3>
+
+    <p>Once your document is chunked, each chunk needs to be converted into a form that supports fast similarity search. That form is a <strong>vector</strong> &mdash; a list of numbers, typically 768 to 3,072 of them, produced by an embedding model.</p>
+
+    <p>The embedding model reads a chunk of text and compresses it into a single vector that captures its semantic meaning. Two chunks about similar topics &mdash; "How do I reset my password?" and "Steps to recover account access" &mdash; get vectors that point in similar directions through the high-dimensional space. Two chunks about unrelated topics get vectors that point in very different directions.</p>
+
+    <p>This compression is lossy by design. The embedding discards spelling, formatting, and exact phrasing in favour of semantic position. That trade-off is precisely what makes retrieval work: you can compare a user's query to thousands of document chunks by comparing a single vector to thousands of stored vectors, rather than by reading every document word by word.</p>
+
+    <p>The embedding model used at indexing time <em>must be the same model</em> used to embed the user's query at retrieval time. If you switch embedding models, you must re-embed the entire corpus. The vectors from different models live in different spaces and cannot be meaningfully compared. This is not a quirk to work around &mdash; it is the fundamental constraint that makes embedding model selection a consequential early decision.</p>
+
+    <p>Vectors are stored in a <strong>vector database</strong> &mdash; a system purpose-built for fast approximate nearest-neighbour search. Tools like Pinecone, Weaviate, Chroma, and pgvector (a PostgreSQL extension) all serve this role. Each chunk's vector is stored alongside its metadata: source document, page number, original text, and any labels you want to filter by later.</p>
+
+    <!-- INTERACTIVE: Toggle-reveal on chunk size tradeoffs -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: If larger chunks preserve more context, why not just use the largest chunks possible?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Because the retrieval step retrieves by similarity, and a very large chunk may discuss multiple topics. If a 1,500-token chunk covers password reset, billing questions, and account deletion, it will be retrieved for any of those queries &mdash; but 66% of its content will be irrelevant noise in the model's context window. Large chunks dilute the signal-to-noise ratio of what gets passed to the model. They also make it harder to attribute which part of the chunk supported which part of the answer. The best chunk size is the smallest size at which each chunk is still independently meaningful &mdash; which is usually a paragraph, not a sentence, and not a whole section.</p>
+      </div>
+    </div>
+
+    <h3>Stage 3: Retrieval</h3>
+
+    <p>When a user submits a query, the system embeds that query using the same embedding model, then searches the vector database for the stored chunks whose vectors are closest to the query vector. Closeness is measured by <strong>cosine similarity</strong> &mdash; a geometric measure of the angle between two vectors. Vectors pointing in the same direction (regardless of length) score near 1.0; vectors pointing in opposite directions score near &minus;1.0.</p>
+
+    <p>The system retrieves the top K chunks by cosine similarity &mdash; typically K = 5 to 20, depending on how much context window budget you have and how many chunks you expect to be relevant. These K chunks are then assembled into the context passed to the LLM alongside the original query.</p>
+
+    <p>This works remarkably well for straightforward factual questions. But cosine similarity has structural limits that matter in practice.</p>
+
+    <p>The first limit is <strong>lexical mismatch</strong>. Embeddings capture semantics, but they can miss exact terminology. A legal document that uses "indemnification" may not retrieve well for a query phrased as "who is responsible for losses" unless the embedding model has been trained to associate those phrases. Domain-specific jargon, proper nouns, and product-specific terminology are frequent culprits. Hybrid retrieval &mdash; combining vector similarity with keyword search (BM25) &mdash; addresses this by running both searches and merging the results <span class="citation" title="Robertson &amp; Zaragoza (2009). The Probabilistic Relevance Framework: BM25 and Beyond. Foundations and Trends in IR.">(Robertson &amp; Zaragoza, 2009)</span>.</p>
+
+    <p>The second limit is <strong>false positives from surface similarity</strong>. Two texts can have similar semantic fingerprints without one being useful for the other's question. "What is the refund policy for premium subscribers?" and "What is the refund policy for annual plans?" might retrieve each other's answers even when the policies differ &mdash; because the embedding captures the topic (refund policy) more strongly than the distinction (subscriber type vs. billing cycle). Surface similarity without semantic precision is the most common failure mode in naive RAG deployments.</p>
+
+    <p>The third limit is <strong>query-document asymmetry</strong>. A user query is short, conversational, and colloquial. A document chunk is long, formal, and dense. Embedding models trained on symmetric pairs (sentence &harr; sentence) can underperform on asymmetric pairs (short query &harr; long paragraph). Models fine-tuned specifically for retrieval tasks &mdash; such as those from the BGE or E5 families &mdash; are trained on asymmetric pairs and typically outperform general-purpose embedding models on retrieval benchmarks <span class="citation" title="Wang et al. (2022). Text Embeddings by Weakly-Supervised Contrastive Pre-training. arXiv.">(Wang et al., 2022)</span>.</p>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Quick Check</div>
+      <div class="quiz-question">A RAG system retrieves the top-5 chunks by cosine similarity for the query "What is our severance policy for remote employees?" but the most relevant chunk &mdash; which discusses remote-employee severance specifically &mdash; only appears as result #7. What is the most likely explanation?</div>
+      <button class="quiz-option" data-letter="A">The embedding model is broken and should be replaced.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The retrieved chunks match the topic (severance policy) but lack the specific distinction (remote employees), while the truly relevant chunk's vector angle is slightly less similar due to additional context around remote-work terms.</button>
+      <button class="quiz-option" data-letter="C">K = 5 is too small and increasing it to 50 will fix the ranking problem.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. This is the false-positive surface similarity problem. Cosine similarity ranks by overall semantic closeness, not by the presence of specific distinguishing terms. The top-5 chunks are all about severance policy, but they don't capture the remote-employee distinction precisely enough. A reranker, or hybrid retrieval with BM25 keyword weighting on 'remote employees', would push the right chunk higher."
+           data-incorrect="Think about what cosine similarity actually measures. It captures overall semantic direction, not specific clause-level distinctions. Increasing K would surface the right chunk eventually, but it doesn't fix the ranking &mdash; you'd still need to filter 50 chunks to find the one that matters. The real issue is retrieval precision, not retrieval recall."></div>
+    </div>
+
+    <h3>Stage 4: Reranking</h3>
+
+    <p>The fourth stage is where many production RAG systems earn their quality improvement: <strong>reranking</strong>. A reranker takes the top-K chunks returned by vector retrieval and re-scores them using a more powerful, slower model before passing them to the LLM.</p>
+
+    <p>The key distinction is in what the reranker reads. Vector retrieval compares two embeddings that were computed <em>independently</em> &mdash; the query vector was built without seeing the document chunks, and the chunk vectors were built without seeing the query. A reranker reads the query and each candidate chunk <em>together</em>, in one pass, and produces a relevance score that accounts for the interaction between them.</p>
+
+    <p>This is the same difference as searching for a job posting versus reading the job posting and your CV side by side to decide if you're a fit. Vector similarity is the keyword search that finds plausible postings. The reranker is the 10-minute review where a recruiter reads both documents together and decides whether they actually match.</p>
+
+    <p>Rerankers are typically <strong>cross-encoder models</strong> <span class="citation" title="Nogueira &amp; Cho (2019). Passage Re-ranking with BERT. arXiv.">(Nogueira &amp; Cho, 2019)</span> &mdash; transformer-based classifiers fine-tuned to predict whether a document passage is relevant to a query. They see both query and document concatenated, which lets the attention mechanism compare them at the token level. This token-level interaction catches distinctions that embedding similarity misses: the presence of specific clauses, the match between specific numerical values, or the distinguishing adjective that separates the right chunk from a near-miss.</p>
+
+    <p>The cost is latency and compute. You cannot run a cross-encoder over your entire corpus at search time &mdash; that is why vector retrieval still does the first-pass filtering. The standard pattern is <strong>retrieve-then-rerank</strong>: retrieve top-50 by cosine similarity (fast), rerank those 50 with a cross-encoder (slower but on a small set), then pass the top-5 reranked results to the LLM. The vector database handles scale; the reranker handles precision.</p>
+
+    <p>Providers like Cohere, Jina AI, and BGE offer hosted reranking APIs. For on-premises deployments, cross-encoder models from the Sentence Transformers library are a practical starting point.</p>
+
+    <h2>Putting the pipeline together</h2>
+
+    <p>The complete pipeline has a clean before-and-after structure. During indexing: split documents into chunks, embed each chunk, store vectors and metadata in a vector database. During querying: embed the user's query, retrieve top-K chunks by cosine similarity, rerank those candidates, assemble the top results into the context window alongside the query, and call the LLM.</p>
+
+    <!-- ANNOTATED SVG PIPELINE DIAGRAM -->
+    <div class="diagram-container">
+      <p class="diagram-caption">The full RAG pipeline. Indexing (top row) happens offline; querying (bottom row) happens at inference time on every request.</p>
+      <svg viewBox="0 0 760 340" width="100%" role="img" aria-label="RAG pipeline diagram showing indexing and querying phases">
+        <!-- Background -->
+        <rect x="0" y="0" width="760" height="340" rx="12" fill="none" stroke="var(--border)" stroke-width="1"/>
+
+        <!-- INDEXING PHASE LABEL -->
+        <text x="20" y="28" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.1em" text-transform="uppercase">INDEXING PHASE</text>
+
+        <!-- Indexing boxes -->
+        <!-- Documents -->
+        <rect x="20" y="40" width="120" height="54" rx="8" fill="var(--surface2)" stroke="var(--border)" stroke-width="1"/>
+        <text x="80" y="62" fill="var(--cyan)" font-size="12" font-weight="600" text-anchor="middle">Documents</text>
+        <text x="80" y="80" fill="var(--text-muted)" font-size="10" text-anchor="middle">PDFs, docs, wikis</text>
+
+        <!-- Arrow 1 -->
+        <line x1="140" y1="67" x2="175" y2="67" stroke="var(--text-dim)" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <!-- Chunking -->
+        <rect x="175" y="40" width="120" height="54" rx="8" fill="var(--surface2)" stroke="var(--amber)" stroke-width="1"/>
+        <text x="235" y="62" fill="var(--amber)" font-size="12" font-weight="600" text-anchor="middle">Chunking</text>
+        <text x="235" y="80" fill="var(--text-muted)" font-size="10" text-anchor="middle">Split into passages</text>
+
+        <!-- Arrow 2 -->
+        <line x1="295" y1="67" x2="330" y2="67" stroke="var(--text-dim)" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <!-- Embedding Model -->
+        <rect x="330" y="40" width="130" height="54" rx="8" fill="var(--surface2)" stroke="var(--purple)" stroke-width="1"/>
+        <text x="395" y="62" fill="var(--purple)" font-size="12" font-weight="600" text-anchor="middle">Embedding</text>
+        <text x="395" y="80" fill="var(--text-muted)" font-size="10" text-anchor="middle">Text &rarr; vectors</text>
+
+        <!-- Arrow 3 -->
+        <line x1="460" y1="67" x2="495" y2="67" stroke="var(--text-dim)" stroke-width="1.5" marker-end="url(#arr)"/>
+
+        <!-- Vector DB -->
+        <rect x="495" y="40" width="120" height="54" rx="8" fill="var(--surface2)" stroke="var(--green)" stroke-width="1"/>
+        <text x="555" y="62" fill="var(--green)" font-size="12" font-weight="600" text-anchor="middle">Vector DB</text>
+        <text x="555" y="80" fill="var(--text-muted)" font-size="10" text-anchor="middle">Stored + indexed</text>
+
+        <!-- Arrow definition -->
+        <defs>
+          <marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill="var(--text-dim)"/>
+          </marker>
+          <marker id="arr2" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L6,3 z" fill="var(--cyan)"/>
+          </marker>
+        </defs>
+
+        <!-- Divider -->
+        <line x1="20" y1="120" x2="740" y2="120" stroke="var(--border)" stroke-width="1" stroke-dasharray="6 4"/>
+
+        <!-- QUERYING PHASE LABEL -->
+        <text x="20" y="148" fill="var(--text-muted)" font-size="11" font-weight="700" letter-spacing="0.1em">QUERY PHASE</text>
+
+        <!-- Query -->
+        <rect x="20" y="158" width="100" height="54" rx="8" fill="var(--surface2)" stroke="var(--cyan)" stroke-width="1.5"/>
+        <text x="70" y="180" fill="var(--cyan)" font-size="12" font-weight="600" text-anchor="middle">User Query</text>
+        <text x="70" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Natural language</text>
+
+        <!-- Arrow q1 -->
+        <line x1="120" y1="185" x2="155" y2="185" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- Embed query -->
+        <rect x="155" y="158" width="110" height="54" rx="8" fill="var(--surface2)" stroke="var(--purple)" stroke-width="1"/>
+        <text x="210" y="180" fill="var(--purple)" font-size="12" font-weight="600" text-anchor="middle">Embed Query</text>
+        <text x="210" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Same model</text>
+
+        <!-- Arrow q2 -->
+        <line x1="265" y1="185" x2="300" y2="185" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- Vector search -->
+        <rect x="300" y="158" width="110" height="54" rx="8" fill="var(--surface2)" stroke="var(--green)" stroke-width="1"/>
+        <text x="355" y="180" fill="var(--green)" font-size="12" font-weight="600" text-anchor="middle">Cosine Search</text>
+        <text x="355" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Top-K chunks</text>
+
+        <!-- Arrow q3 -->
+        <line x1="410" y1="185" x2="445" y2="185" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- Reranker -->
+        <rect x="445" y="158" width="100" height="54" rx="8" fill="var(--surface2)" stroke="var(--amber)" stroke-width="1.5"/>
+        <text x="495" y="180" fill="var(--amber)" font-size="12" font-weight="600" text-anchor="middle">Reranker</text>
+        <text x="495" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Re-score top-K</text>
+
+        <!-- Arrow q4 -->
+        <line x1="545" y1="185" x2="580" y2="185" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- LLM -->
+        <rect x="580" y="158" width="80" height="54" rx="8" fill="var(--surface2)" stroke="var(--red)" stroke-width="1.5"/>
+        <text x="620" y="180" fill="var(--red)" font-size="12" font-weight="600" text-anchor="middle">LLM</text>
+        <text x="620" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Generate</text>
+
+        <!-- Arrow q5 -->
+        <line x1="660" y1="185" x2="695" y2="185" stroke="var(--cyan)" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+        <!-- Answer -->
+        <rect x="695" y="158" width="55" height="54" rx="8" fill="var(--surface3)" stroke="var(--cyan)" stroke-width="1"/>
+        <text x="722" y="180" fill="var(--cyan)" font-size="11" font-weight="600" text-anchor="middle">Answer</text>
+        <text x="722" y="198" fill="var(--text-muted)" font-size="10" text-anchor="middle">Grounded</text>
+
+        <!-- Vector DB feeds into Cosine Search -->
+        <line x1="555" y1="94" x2="555" y2="145" stroke="var(--text-dim)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <line x1="555" y1="145" x2="355" y2="158" stroke="var(--text-dim)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+        <!-- Stage labels below query row -->
+        <text x="70" y="232" fill="var(--text-dim)" font-size="10" text-anchor="middle">1. Query</text>
+        <text x="210" y="232" fill="var(--text-dim)" font-size="10" text-anchor="middle">2. Embed</text>
+        <text x="355" y="232" fill="var(--text-dim)" font-size="10" text-anchor="middle">3. Retrieve</text>
+        <text x="495" y="232" fill="var(--text-dim)" font-size="10" text-anchor="middle">4. Rerank</text>
+        <text x="620" y="232" fill="var(--text-dim)" font-size="10" text-anchor="middle">5. Generate</text>
+
+        <!-- Failure mode callouts -->
+        <text x="235" y="275" fill="var(--amber)" font-size="9.5" text-anchor="middle">Chunk size tradeoff</text>
+        <text x="395" y="275" fill="var(--green)" font-size="9.5" text-anchor="middle">Model must match indexing</text>
+        <text x="555" y="275" fill="var(--amber)" font-size="9.5" text-anchor="middle">False positives common here</text>
+        <text x="555" y="290" fill="var(--amber)" font-size="9.5" text-anchor="middle">Reranker corrects precision</text>
+      </svg>
+    </div>
+
+    <h2>What the model actually sees</h2>
+
+    <p>After retrieval and reranking, the system assembles a prompt. The structure is typically:</p>
+
+    <ul>
+      <li>A system instruction telling the model to answer based on the provided context.</li>
+      <li>The retrieved chunks, formatted as context blocks, often with source labels.</li>
+      <li>The user's original query.</li>
+    </ul>
+
+    <p>This is context engineering applied to retrieval &mdash; which connects back to what you covered in <a href="../module-1/e02-context-engineering.html">E02 &mdash; Context Engineering</a>. The retrieved chunks are not magic. They are text placed into the context window, and the model reads them the same way it reads anything else in context. That means all the context engineering principles apply: chunk order matters, explicit instructions to cite sources matter, and telling the model "if the answer is not in the provided context, say so" matters considerably.</p>
+
+    <p>A common mistake is assuming that better retrieval automatically produces better answers. The model can still confabulate even when the right chunk is present, if the prompt does not instruct it to stay grounded. And if the right chunk is not present &mdash; because of a chunking error, an embedding mismatch, or a reranking failure &mdash; the model will attempt to answer from its weights anyway, and you will not know the difference without logging and evaluation.</p>
+
+    <h2>The three failure modes to know</h2>
+
+    <p>RAG pipelines fail in predictable places. Knowing the taxonomy saves diagnostic time.</p>
+
+    <p><strong>Retrieval failure:</strong> The right chunk is not returned at all. Causes: chunk size too coarse (right content mixed with irrelevant content), embedding model misaligned with your domain, or the relevant document was never indexed. Fix: improve chunking strategy, switch to a domain-appropriate embedding model, or add hybrid retrieval (BM25 + vector).</p>
+
+    <p><strong>Ranking failure:</strong> The right chunk is retrieved but ranked outside the top-K that get passed to the LLM. Causes: cosine similarity surface-matches on topic without capturing the specific distinction the query requires. Fix: add a reranker, or reduce K while increasing retrieval recall first.</p>
+
+    <p><strong>Generation failure:</strong> The right chunk is retrieved and ranked, but the model produces an incorrect or unsupported answer anyway. Causes: the model over-trusts its parametric knowledge over the provided context, the prompt does not instruct grounding strongly enough, or the model combines the right chunk with incorrect prior knowledge. Fix: prompt engineering (explicit grounding instructions, citation requirements), model selection (smaller models often follow grounding instructions more strictly), or output evaluation against the retrieved chunks.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      Each RAG failure mode has a distinct diagnosis and a distinct fix. Retrieval failure is an indexing or embedding problem. Ranking failure is a precision problem that reranking solves. Generation failure is a prompt engineering problem. Treating all three as one problem &mdash; "RAG isn't working" &mdash; is the single most common mistake in RAG deployments. Instrument each stage separately so you know where in the pipeline the failure occurred.
+    </div>
+
+    <h2>Advanced patterns: when basic RAG is not enough</h2>
+
+    <p>Basic RAG &mdash; chunk, embed, retrieve, rerank, generate &mdash; handles the majority of enterprise knowledge-retrieval use cases. But two extensions are worth knowing.</p>
+
+    <p><strong>HyDE (Hypothetical Document Embeddings)</strong> <span class="citation" title="Gao et al. (2022). Precise Zero-Shot Dense Retrieval without Relevance Labels. arXiv.">(Gao et al., 2022)</span> addresses the query-document asymmetry problem directly. Instead of embedding the user's raw query, you ask the LLM to write a hypothetical answer first &mdash; what a good answer to this question might look like &mdash; and then embed that hypothetical answer. The hypothetical answer is long, formal, and dense, just like your document chunks. Comparing dense text to dense text produces better similarity signals than comparing a short colloquial question to a dense paragraph.</p>
+
+    <p><strong>Query decomposition</strong> handles multi-hop questions &mdash; questions that require retrieving multiple non-adjacent facts and combining them. "What is the difference between our refund policy and our exchange policy for enterprise customers?" requires two retrievals, possibly from different document sections. A simple RAG system retrieves a single set of chunks and may blend the two policies incorrectly. Decomposing the query into sub-queries, retrieving separately for each, and then synthesising the answer reduces this conflation error significantly.</p>
+
+    <p>Both extensions add latency and complexity. Apply them when basic RAG is demonstrably failing on your evaluation set, not as default architecture choices from the start.</p>
+
+  </div>
+
+  <!-- VERIFICATION -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What determines the right chunk size for a RAG system and what are the tradeoffs?</li>
+        <li>Why does retrieving top-K chunks by cosine similarity not always return the most relevant chunks?</li>
+        <li>What does a reranker add that vector retrieval cannot provide on its own?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e04-rag-architecture');</script>
+<script>AIEngNav.init('e04-rag-architecture');</script>
+<script>
+(function() {
+  // Toggle-reveal interactivity
+  document.querySelectorAll('.toggle-reveal-header').forEach(function(header) {
+    header.addEventListener('click', function() {
+      var body = this.nextElementSibling;
+      var icon = this.querySelector('span:last-child');
+      var isOpen = body.style.display === 'block';
+      body.style.display = isOpen ? 'none' : 'block';
+      if (icon) icon.textContent = isOpen ? '+' : '&minus;';
+      // Use innerHTML for minus sign
+      if (icon) icon.innerHTML = isOpen ? '+' : '&minus;';
+    });
+  });
+
+  // Quiz interactivity
+  document.querySelectorAll('.quiz').forEach(function(quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        options.forEach(function(b) { b.classList.remove('selected', 'correct', 'incorrect'); });
+        var isCorrect = this.dataset.correct === 'true';
+        this.classList.add('selected', isCorrect ? 'correct' : 'incorrect');
+        if (feedback) {
+          feedback.textContent = isCorrect ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+        }
+      });
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

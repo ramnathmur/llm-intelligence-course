@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E09 &mdash; Fine-Tuning in Practice &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E09 &mdash; Fine-Tuning in Practice">
+<meta property="og:description" content="LoRA, QLoRA, when NOT to fine-tune, and how to build a training dataset that actually improves the model.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="e09-fine-tuning-practice.html">Module 3: Adapting and Deploying Models</a>
+    <span class="sep">&#8250;</span>
+    Fine-Tuning in Practice
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">E09 &middot; Module 3</div>
+    <h1>Fine-Tuning in Practice</h1>
+    <p class="one-liner">LoRA, QLoRA, when NOT to fine-tune, and how to build a training dataset that actually improves the model.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Training a new hire vs. writing a better brief. For most tasks, a clearer brief (better prompt) is faster and cheaper than a formal training programme. Fine-tuning is reserved for when the task requires internalised knowledge that cannot be conveyed in a prompt &mdash; the same way you only invest in a training programme when the required skill cannot be written into a job description.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Fine-tuning is expensive and often unnecessary. The decision to fine-tune vs. prompt is a real architectural choice with cost and maintenance implications. When fine-tuning is the right call, dataset quality matters more than any hyperparameter. Practitioners who understand this distinction avoid wasting weeks of compute on a problem that a better system prompt would have solved in an afternoon.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    When fine-tuning is the right choice, how LoRA works and why it reduces trainable parameters dramatically, what makes a training dataset high-quality, and what catastrophic forgetting is and which approach resists it best.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e01-prompt-engineering.html" class="prereq-chip">E01 &mdash; Prompt Engineering as a System</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Fine-tuning is one of those techniques that attracts more enthusiasm than it deserves &mdash; and that enthusiasm causes real damage. Teams spend weeks curating datasets, configuring training runs, and managing compute costs to solve a problem that a revised system prompt would have fixed in an hour. The first skill this page teaches is the decision: when fine-tuning is genuinely the right tool and when it is not.</p>
+
+    <p>The second skill is execution. When fine-tuning is warranted, the practitioners who succeed are not the ones who find the best hyperparameters. They are the ones who build the cleanest dataset. The technique called LoRA has made fine-tuning accessible on consumer-grade hardware, but accessible does not mean automatic. This page covers both the mechanics of LoRA and the data discipline that makes it work.</p>
+
+    <h2>The core question: prompt or train?</h2>
+
+    <p>A well-designed base model (GPT-4, Claude 3, Llama 3) already knows how to write, reason, summarise, classify, and code. What it does not know is your specific vocabulary, your house style, your proprietary formats, or how you handle the edge cases that are specific to your domain. The question is always: can the gap between what the model does by default and what you need be closed with instructions, or does it require the model to change?</p>
+
+    <p>Instructions are cheap, fast, and reversible. A change to a system prompt takes seconds to deploy. Training requires compute, data curation, a training run, evaluation, and a new model artifact to manage. Training also creates a maintenance burden: every time the base model provider releases a new version, you face a decision about whether to re-fine-tune on the new base or stay on the old one.</p>
+
+    <h3>When prompting is almost always enough</h3>
+
+    <p>If your task involves following a specific output format, reasoning about documents you provide at runtime, responding in a particular persona, or avoiding certain topics &mdash; these are prompt problems. They do not require training. A system prompt that specifies the format, a few well-chosen examples embedded in the prompt (few-shot), and a clear constraint about persona or topic coverage will solve all of these. The model already has the underlying capability; it just needs direction about how to apply it.</p>
+
+    <p>The telltale sign that you are solving a prompt problem with training is when your "training dataset" is just a list of (prompt, ideal output) pairs where the ideal output is something the base model could produce if you had given it better instructions. Researchers have shown that models fine-tuned on such datasets do not generalise significantly better than the same base model with a well-engineered prompt <span class="citation" title="Sanh et al. (2022). Multitask Prompted Training Enables Zero-Shot Task Generalization. ICLR.">(Sanh et al., 2022)</span>.</p>
+
+    <h3>When fine-tuning is genuinely warranted</h3>
+
+    <p>There are four legitimate reasons to fine-tune:</p>
+
+    <ol>
+      <li><strong>The knowledge cannot fit in context.</strong> If the information that defines good output requires more tokens than any context window can hold &mdash; a company's full internal style guide, ten years of precedent documents, an entire domain lexicon &mdash; you cannot inject it at runtime. The model must internalise it during training.</li>
+      <li><strong>The latency budget does not allow a long prompt.</strong> A system prompt with twenty few-shot examples adds several hundred tokens to every call. In real-time applications where latency is measured in milliseconds, that cost matters. A fine-tuned model can produce the same behaviour without the prompt overhead.</li>
+      <li><strong>The task has a very specific output distribution.</strong> Some tasks require the model to produce outputs that deviate substantially from what any base model would produce by default. Medical coding in ICD-11 format, legal citation in jurisdiction-specific styles, or proprietary financial modelling syntax are all examples. A model that has seen many correct examples of these during training will outperform one prompted to produce them.</li>
+      <li><strong>Cost at scale.</strong> A fine-tuned smaller model can match the performance of a larger prompted model on a narrow task at a fraction of the inference cost. If you are running millions of calls per day on a well-defined task, this arithmetic matters.</li>
+    </ol>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Fine-tuning changes what the model knows. Prompting changes what the model does with what it already knows. If the capability exists in the base model, prompting is the right tool. If the capability genuinely does not exist in any reachable base model, training is warranted.</p>
+    </div>
+
+    <h2>How LoRA works</h2>
+
+    <p>Full fine-tuning means updating every parameter in the model. A model with 7 billion parameters has 7 billion numbers to adjust. Even at 16-bit precision, that requires roughly 14 GB of GPU memory just to hold the weights &mdash; before you account for the gradients, the optimiser state, and the activations computed during the forward pass. In practice, full fine-tuning of a 7B model requires 40&ndash;80 GB of GPU memory, which means multiple high-end GPUs. This is not accessible to most practitioners.</p>
+
+    <p>LoRA (Low-Rank Adaptation) solves this by observing that the <em>change</em> needed to adapt a pre-trained model to a new task is low-rank <span class="citation" title="Hu et al. (2022). LoRA: Low-Rank Adaptation of Large Language Models. ICLR.">(Hu et al., 2022)</span>. To understand what this means, it helps to think about what "rank" means in practice.</p>
+
+    <h3>The low-rank decomposition</h3>
+
+    <p>Imagine a weight matrix in one of the model's attention layers. It might be 4096 rows by 4096 columns &mdash; over 16 million numbers. Full fine-tuning would update all 16 million numbers. LoRA instead freezes this matrix and adds a small bypass: two thin matrices, A and B, whose product approximates the change needed.</p>
+
+    <p>If the original matrix is 4096 &times; 4096, and the chosen rank is 16, then matrix A is 4096 &times; 16 and matrix B is 16 &times; 4096. Together they have only 2 &times; 4096 &times; 16 = 131,072 parameters &mdash; less than 1% of the original. At inference time, the model computes the original weight matrix plus the product of A and B. This product is the "adaptation" &mdash; the delta that represents what the model has learned from your fine-tuning data.</p>
+
+    <p>The mathematical intuition is that real-world adaptations &mdash; learning a new style, learning a new domain's vocabulary, learning a specific output format &mdash; tend to vary along a small number of meaningful dimensions, even if the full weight space has millions of dimensions. The low-rank decomposition captures those meaningful dimensions without touching everything else.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: Why does low rank make sense for fine-tuning but not for pre-training?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Pre-training requires the model to learn essentially everything &mdash; grammar, facts, reasoning patterns, coding syntax, and countless other capabilities simultaneously. That is a high-dimensional problem. The change is spread across essentially all directions in weight space, which means a low-rank approximation would lose too much information.</p>
+        <p>Fine-tuning, by contrast, is a targeted adaptation. You already have a model that can reason, write, and code. You are asking it to apply those abilities slightly differently &mdash; in a new style, or to a new set of entities, or in a specific format. That change is narrow, even if the model is large. The adaptation lives in a small number of directions relative to the full weight space, which is exactly the setting where low-rank decomposition works well. The empirical evidence supports this: LoRA with rank 16 or 64 often matches or closely approaches full fine-tuning performance on domain adaptation tasks <span class="citation" title="Hu et al. (2022). LoRA: Low-Rank Adaptation of Large Language Models. ICLR.">(Hu et al., 2022)</span>.</p>
+      </div>
+    </div>
+
+    <h3>QLoRA: fine-tuning on consumer hardware</h3>
+
+    <p>QLoRA extends LoRA with quantisation <span class="citation" title="Dettmers et al. (2023). QLoRA: Efficient Finetuning of Quantized LLMs. NeurIPS.">(Dettmers et al., 2023)</span>. The frozen base model weights are stored in 4-bit precision (NF4 format) rather than the usual 16-bit. This reduces the memory footprint of the base model by roughly 4x. Only the LoRA adapter matrices (A and B) are stored and updated in full 16-bit precision, since they are the only thing being trained.</p>
+
+    <p>The practical effect is significant. A 7B-parameter model that would require 40 GB of GPU memory for full fine-tuning can be fine-tuned with QLoRA on a single 24 GB GPU &mdash; hardware that is commercially available for under $1,000. A 13B model becomes feasible on the same hardware. This is not a minor convenience: it is what made fine-tuning accessible to practitioners who do not control data centre infrastructure.</p>
+
+    <p>The cost of quantisation is a small quality degradation. In practice, for most domain adaptation tasks, QLoRA matches LoRA performance closely enough that the memory savings outweigh the quality delta. Where full-precision LoRA is available and the hardware supports it, it remains preferable for quality-sensitive applications.</p>
+
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-full">Full Fine-Tuning</button>
+        <button class="tab-btn" data-tab="tab-lora">LoRA</button>
+        <button class="tab-btn" data-tab="tab-qlora">QLoRA</button>
+      </div>
+      <div class="tab-panel active" id="tab-full">
+        <p><strong>All parameters updated.</strong> Every weight in the model is adjusted by the training process. Requires 40&ndash;80 GB GPU memory for a 7B model. Produces maximum quality but risks catastrophic forgetting if training set is small or narrow. Results in a complete new model artifact that must be deployed and maintained separately from the base.</p>
+      </div>
+      <div class="tab-panel" id="tab-lora">
+        <p><strong>Only adapter matrices trained.</strong> Base model frozen. Small A and B matrices (rank 4&ndash;128) added alongside frozen weights. Requires roughly 50% less GPU memory than full fine-tuning. Adapter is tiny (a few hundred MB vs. the full model's tens of GB), can be swapped in and out at runtime. Essentially no catastrophic forgetting risk because base weights are not modified.</p>
+      </div>
+      <div class="tab-panel" id="tab-qlora">
+        <p><strong>LoRA with quantised base.</strong> Base model stored in 4-bit NF4 format. Adapter matrices trained in 16-bit. Memory requirement drops to 10&ndash;24 GB for a 7B model &mdash; feasible on a single consumer GPU. Small quality trade-off vs. full-precision LoRA. The method that made fine-tuning genuinely accessible outside well-funded engineering teams.</p>
+      </div>
+    </div>
+
+    <h2>Catastrophic forgetting</h2>
+
+    <p>Catastrophic forgetting is a failure mode specific to full fine-tuning. When a model's weights are updated on a narrow dataset, those updates can overwrite the broad knowledge acquired during pre-training. A medical language model fine-tuned heavily on clinical notes may produce coherent radiology reports but struggle to answer basic questions it would have handled easily before fine-tuning.</p>
+
+    <p>The phenomenon happens because neural networks do not store knowledge in neat, isolated locations. General language ability, world knowledge, and task-specific patterns are all represented in the same weight space. When gradient updates push weights in the direction of your fine-tuning objective, they can displace the representations that encoded general capabilities.</p>
+
+    <p>LoRA is the most practical defence against catastrophic forgetting, and the reason is structural rather than coincidental. Because LoRA never modifies the base weights, the base model's general knowledge is fully preserved. The adaptation lives entirely in the additive adapter matrices. If the adapter turns out to be unhelpful, you can remove it and recover the base model exactly. Full fine-tuning offers no such recourse.</p>
+
+    <p>A secondary defence, used in full fine-tuning when LoRA is not suitable, is to include a sample of general-domain data in the training set. Mixing a few percent of general instruction-following data from the original pre-training distribution into your fine-tuning dataset prevents the gradient updates from specialising too narrowly. This technique is sometimes called "data mixing" or "continual pre-training" <span class="citation" title="Gururangan et al. (2020). Don't Stop Pretraining: Adapt Language Models to Domains and Tasks. ACL.">(Gururangan et al., 2020)</span>.</p>
+
+    <h2>Dataset quality: the real determinant of success</h2>
+
+    <p>Practitioners who are new to fine-tuning often focus on hyperparameters: learning rate, number of epochs, LoRA rank, batch size. These matter at the margin. They do not determine whether fine-tuning succeeds. Dataset quality does.</p>
+
+    <p>The model will learn exactly what your data teaches it. If your examples have inconsistent formatting, the model will learn to produce inconsistent formatting. If your examples contain subtle factual errors, the model will learn those errors. If your examples are high-quality outputs for easy inputs and mediocre outputs for hard inputs, the model will handle easy inputs well and hard inputs poorly &mdash; the opposite of what you want.</p>
+
+    <h3>What high-quality training data looks like</h3>
+
+    <p>Good fine-tuning data has four properties:</p>
+
+    <ol>
+      <li><strong>The output is consistently excellent, not just acceptable.</strong> Fine-tuning a model on "good enough" outputs produces a model that generates "good enough" outputs. If you want reliably excellent performance, every example in the training set should represent the best possible output for that input. This often means human review of every example, not just spot-checking.</li>
+      <li><strong>The examples are representative of the actual input distribution.</strong> Training data that overrepresents easy cases produces a model that handles easy cases well and difficult ones poorly. Deliberately sample from the edges of your input distribution &mdash; ambiguous inputs, unusual formats, domain edge cases &mdash; and ensure these are covered in proportion to how often they appear in production.</li>
+      <li><strong>The format is consistent throughout.</strong> Every training example must follow exactly the same structure: the same prompt format, the same way of presenting context, the same output structure. A single inconsistent example creates noise in the learning signal. At small dataset sizes (under 1,000 examples), a few inconsistent examples can meaningfully degrade performance.</li>
+      <li><strong>The dataset is large enough for the task complexity.</strong> Simple style adaptation can succeed with 50&ndash;200 examples. Reliable extraction of a specific entity type from noisy text may need 500&ndash;2,000. Internalising complex domain reasoning may need 5,000 or more. There is no universal number; you discover the right scale through evaluation. Start small, measure, and scale up only if the evaluation shows continued improvement.</li>
+    </ol>
+
+    <h3>Where fine-tuning data comes from</h3>
+
+    <p>There are three practical sources for fine-tuning data, and they vary significantly in quality and cost.</p>
+
+    <p><strong>Human-authored examples.</strong> Domain experts write inputs and produce ideal outputs manually. This is the highest-quality source and the most expensive. For specialised tasks &mdash; legal document review, medical coding, bespoke financial modelling &mdash; there is often no substitute. Budget accordingly: if each example takes a qualified expert fifteen minutes to produce, a 500-example dataset costs 125 person-hours of expert time before any quality review.</p>
+
+    <p><strong>LLM-generated examples, human-reviewed.</strong> Use a capable model (typically a larger, more expensive one than the model you will fine-tune) to generate candidate training examples. Human reviewers check and correct them before they enter the training set. This is significantly faster than fully human-authored data, typically 3&ndash;5x faster per example, with quality that is acceptable when the review process is rigorous <span class="citation" title="Taori et al. (2023). Alpaca: A Strong, Replicable Instruction-Following Model. Stanford CRFM.">(Taori et al., 2023)</span>.</p>
+
+    <p><strong>Existing records or logs.</strong> If your organisation has historical records of the task being performed well &mdash; past analyst reports, previous support ticket resolutions, historical code review outputs &mdash; these can form training data after cleaning and formatting. The trap here is that historical records often contain quality variation: the excellent examples and the mediocre ones are not labelled. Including mediocre examples trains the model to produce mediocre outputs. Quality filtering before inclusion in the training set is not optional.</p>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A team wants to fine-tune a model to write customer emails in their brand voice. They have 200 approved emails from the past year. Which approach is most likely to succeed?</div>
+      <button class="quiz-option" data-letter="A">Use all 200 emails as training data without modification.</button>
+      <button class="quiz-option" data-letter="B">Discard the emails and instead write a detailed persona description in the system prompt.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Quality-filter the emails to keep only the best 100&ndash;150, reformat them as (input context, ideal email output) pairs, and validate format consistency before training.</button>
+      <button class="quiz-option" data-letter="D">Collect more data first; 200 examples is always too few for fine-tuning.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The dataset is small enough that quality-filtering and format consistency matter more than volume. Using all 200 without review risks including mediocre examples that teach the model mediocre output. For a style adaptation task at this scale, 100&ndash;150 high-quality, consistently formatted examples will outperform 200 mixed-quality examples. Option B is worth trying first and may well be sufficient, but the question asks about the fine-tuning path specifically."
+           data-incorrect="Think about what the model is actually learning from. It learns to imitate the examples. If those examples vary in quality, the model learns a distribution of quality. The right answer ensures that the training distribution represents the best possible outputs, and that every example follows the same structural format."></div>
+    </div>
+
+    <h2>Practical hyperparameter guidance</h2>
+
+    <p>Once the data is ready, the training run requires a handful of decisions. These are not the primary determinant of success, but making clearly wrong choices will undermine good data. Here are the defaults that work for most domain adaptation tasks.</p>
+
+    <p><strong>LoRA rank.</strong> Values between 8 and 64 are the practical range. Rank 16 is a sensible starting point for most tasks. Higher rank captures more of the adaptation but uses more memory and risks overfitting on small datasets. Rank 4 is appropriate for very simple style adaptation; rank 128 is appropriate for complex reasoning tasks with large, diverse datasets.</p>
+
+    <p><strong>Learning rate.</strong> LoRA adapters are typically trained with learning rates between 1e-4 and 3e-4. These are higher than full fine-tuning learning rates because only the small adapter matrices are being updated, not the full model. Starting at 2e-4 with a cosine decay schedule is a reliable default.</p>
+
+    <p><strong>Number of epochs.</strong> Fine-tuning on small datasets (under 1,000 examples) typically runs for 3&ndash;5 epochs. More epochs risk overfitting &mdash; the model memorises the training examples rather than generalising from them. Monitor evaluation loss across epochs; if it plateaus or increases while training loss continues to decrease, you are overfitting.</p>
+
+    <p><strong>Batch size.</strong> Constrained by GPU memory. For QLoRA on a 24 GB GPU, an effective batch size of 16&ndash;32 (using gradient accumulation to simulate a larger batch with fewer actual GPU memory slots) is typical. Smaller effective batch sizes introduce more noise in each gradient update, which can help generalisation on very small datasets but hurts stability on larger ones.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      There is ongoing research into the right evaluation methodology for fine-tuned models. Automated metrics (ROUGE, BLEU, perplexity on a held-out set) correlate imperfectly with human judgement of output quality. Many practitioners report that a model that achieves lower perplexity on the held-out set sometimes produces outputs that human evaluators prefer less. The most reliable evaluation remains human preference ratings on a held-out sample of real task inputs &mdash; but this is expensive and difficult to scale. Do not rely on a single automated metric as the sole signal that fine-tuning has succeeded.
+    </div>
+
+    <h2>When to stop: evaluation and iteration</h2>
+
+    <p>Fine-tuning is not a one-shot process. The workflow is: train a version, evaluate against a held-out set of real inputs, identify where the model fails, and decide whether the fix is more data, different data, or a different hyperparameter configuration.</p>
+
+    <p>The held-out evaluation set must be drawn from the same distribution as production inputs, and it must include examples that the team considers genuinely difficult. A held-out set composed only of clean, easy examples will show high performance numbers that do not translate to production. A held-out set that includes the inputs where even expert humans occasionally disagree on the best output will give you a more realistic picture of what the model has actually learned.</p>
+
+    <p>The most common finding from rigorous evaluation is that the model handles the easy cases in the training distribution well and struggles on inputs that are slightly outside it. This is the first signal to add more diverse data rather than to tune hyperparameters. The second most common finding is that performance on a specific class of inputs is poor because that class was underrepresented in the training set. Both findings point to the same conclusion: data improvement, not architectural change.</p>
+
+    <h2>The maintenance obligation</h2>
+
+    <p>Fine-tuning creates a maintenance obligation that prompting does not. A prompted model can be upgraded to a new base model version by simply updating the API call &mdash; the system prompt transfers, the model gets better, and deployment takes minutes. A fine-tuned model is tied to a specific base model checkpoint. When the provider releases a new base model version, the fine-tuned adapter does not automatically benefit from it. You face a choice: re-fine-tune on the new base (another training run, another evaluation cycle, another deployment), or stay on the old base and accept that you are falling behind the capability frontier.</p>
+
+    <p>This is not a reason to avoid fine-tuning when it is genuinely warranted. But it is a cost that should be included in the decision. A fine-tuned model is not a one-time investment; it is an artifact you will need to maintain, retrain, and re-evaluate over the life of the application.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Consider the full lifecycle cost. If your fine-tuning pipeline requires three weeks of data curation, one week of training, and one week of evaluation before each model update, and the base model provider releases major updates quarterly, you are spending six weeks per quarter in maintenance overhead just to stay current. Compare that to the cost of making the system prompt robust enough to work on each new base model without retraining. The right answer will vary by application, but the calculation is worth doing explicitly before committing to fine-tuning.</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>The fine-tune vs. prompt decision is primarily a question of whether the required capability exists in the base model. If it does, prompt engineering will surface it faster and cheaper. If it genuinely does not, fine-tuning is the right tool &mdash; and when you fine-tune, the quality of your training data determines the outcome far more than your choice of rank, learning rate, or number of epochs. LoRA keeps the base weights frozen and eliminates catastrophic forgetting; QLoRA makes this accessible on consumer hardware. Both are means to the same end: targeted adaptation without destroying the general capability the base model spent weeks of compute acquiring.</p>
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the LoRA low-rank decomposition and why does it reduce trainable parameters dramatically?</li>
+        <li>When does fine-tuning outperform few-shot prompting and when does it not?</li>
+        <li>What is catastrophic forgetting and which fine-tuning approach is most resistant to it?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e09-fine-tuning-practice" data-next="e09-fine-tuning-practice"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e09-fine-tuning-practice');</script>
+<script>AIEngNav.init('e09-fine-tuning-practice');</script>
+
+</body>
+</html>

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F08 &mdash; Embeddings &mdash; Dense Vectors &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F08 &mdash; Embeddings &mdash; Dense Vectors">
+<meta property="og:description" content="Why meaning cannot live in a single number, and how dense vectors make similarity computable.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/f05-features-and-data.html">Module 2: Data &amp; Features</a>
+    <span class="sep">&#8250;</span>
+    Embeddings &mdash; Dense Vectors
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">F08 &middot; Module 2</div>
+    <h1>Embeddings &mdash; Dense Vectors</h1>
+    <p class="one-liner">Why meaning cannot live in a single number, and how dense vectors make similarity computable.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A map coordinate system for concepts. Two cities close on a map share geography. Two words close in embedding space share meaning. The distance is the similarity.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Embeddings are the bridge between symbolic meaning and the numerical world models operate in. Every modern AI system uses them &mdash; this is the foundational concept for understanding LLMs, recommendation engines, semantic search, and agents with long-term memory.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why dense vectors encode meaning, what embedding training optimises, and how distance captures semantic similarity. You can also explain why the famous &ldquo;king &minus; man + woman &asymp; queen&rdquo; equation works without relying on magic.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-2/f07-neural-networks.html" class="prereq-chip">F07 &mdash; Neural Networks as Stacked Functions</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Imagine you are a property analyst and your team has built a database of every city in South Asia. Each city gets a code number &mdash; Mumbai is 1, Kolkata is 2, Chennai is 3, and so on. A junior analyst accidentally sends the database to a logistics company, which tries to use those numbers to estimate delivery distances. They calculate that Chennai (3) is three times further from the reference point than Mumbai (1). The answer is nonsense. The code numbers were arbitrary labels. They carry no positional information whatsoever.</p>
+
+    <p>That is the problem in miniature. The moment you try to represent anything meaningful &mdash; a city, a word, a product, a medical diagnosis &mdash; as a single arbitrary number, you throw away almost everything that matters. The number tells you nothing about similarity, distance, or relationship. Two products with codes 47 and 48 are not necessarily similar. A patient with disease code 200 is not twice as sick as a patient with disease code 100.</p>
+
+    <p>Embeddings are the solution. Instead of one arbitrary number, each concept gets a <strong>vector</strong> &mdash; a list of dozens, hundreds, or thousands of numbers, each capturing a different facet of meaning. A city becomes a set of coordinates in a high-dimensional space. Products near each other in that space are genuinely similar. Words whose vectors point in similar directions are used in similar contexts. The distance between two vectors measures their semantic relationship, not an accident of alphabetical ordering or database insertion sequence.</p>
+
+    <p>This page explains why single numbers fail, how embedding vectors fix the problem, what training teaches them, and what the geometry reveals. By the end you will understand why every modern AI system &mdash; from language models to Netflix recommendations to hospital triage tools &mdash; passes its inputs through an embedding layer before anything else happens.</p>
+
+    <h2>The failure of one-hot encoding</h2>
+
+    <p>Before embeddings, the standard engineering response to the &ldquo;arbitrary code number&rdquo; problem was <strong>one-hot encoding</strong>. You saw this briefly in the Features and Data page. The idea is elegant in its simplicity. If you have ten possible categories, make a vector of ten slots. For each item, fill its slot with 1 and leave all others at 0.</p>
+
+    <p>For a vocabulary of five words &mdash; cat, dog, bird, fish, snake &mdash; one-hot encoding looks like this:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>cat</h4>
+        <p><code>[1, 0, 0, 0, 0]</code> &mdash; the first slot is active. Every other slot is silent.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>dog</h4>
+        <p><code>[0, 1, 0, 0, 0]</code> &mdash; second slot active. No numerical relationship to cat or bird implied.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>bird</h4>
+        <p><code>[0, 0, 1, 0, 0]</code> &mdash; third slot active. Equally distant from cat and from snake.</p>
+      </div>
+    </div>
+
+    <p>One-hot solves the false-ordering problem. Cat is not numerically &ldquo;half of dog.&rdquo; Every pair of words is equidistant from every other pair (the mathematical distance between any two different one-hot vectors is always exactly &radic;2). No spurious arithmetic is implied. This is why one-hot is the right default for nominal categories in classical machine learning.</p>
+
+    <p>But for language &mdash; and for any domain where <em>similarity matters</em> &mdash; one-hot hits a second, deeper wall. Every pair of words is identically distant. Cat and dog are as far apart as cat and refrigerator. German and Bavarian are as different as German and Swahili. The encoding has no concept of nearness. Meaning, relationships, analogies &mdash; all invisible.</p>
+
+    <p>There is also a scale problem. A typical language model vocabulary contains 30,000 to 100,000 tokens. A one-hot vector for each token would have 50,000 slots, almost all zeros. Multiplying these sparse, enormous vectors through a model is computationally wasteful. And the model can never generalise from &ldquo;dog&rdquo; to &ldquo;puppy&rdquo; because their vectors share no structure whatsoever.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>One-hot encoding answers the wrong problem. It removes false ordering between categories but replaces it with universal equidistance. Every concept sits precisely as far from every other concept. In a domain where &ldquo;dog&rdquo; and &ldquo;cat&rdquo; should be near each other and far from &ldquo;refrigerator,&rdquo; that equidistance is a fundamental failure of representation.</p>
+    </div>
+
+    <h2>What a dense vector actually is</h2>
+
+    <p>An embedding replaces the one-hot vector with a <strong>dense vector</strong>: a list of numbers (typically 64 to 4,096 of them) where <em>most or all values are non-zero</em>. Each position in the vector corresponds to some learned dimension of variation. No single dimension has a clean human-readable label, but together they carve up the space of meaning.</p>
+
+    <p>Think of it with two simplified dimensions first. Suppose dimension 1 captures &ldquo;how living vs. non-living the concept is&rdquo; and dimension 2 captures &ldquo;how large vs. small the concept tends to be.&rdquo; Plotting words in this 2D space might look like:</p>
+
+    <div class="diagram-container">
+      <svg width="520" height="320" viewBox="0 0 520 320" role="img" aria-label="Embedding space diagram: 2D scatter of words by animateness and size axes">
+        <rect x="1" y="1" width="518" height="318" rx="10" fill="none" stroke="var(--border)"></rect>
+
+        <!-- Axes -->
+        <line x1="60" y1="270" x2="480" y2="270" stroke="var(--surface3)" stroke-width="1.5"></line>
+        <line x1="60" y1="270" x2="60" y2="30" stroke="var(--surface3)" stroke-width="1.5"></line>
+
+        <!-- Axis labels -->
+        <text x="270" y="298" fill="var(--text-dim)" font-size="11" text-anchor="middle">Dimension 1: living &rarr; non-living</text>
+        <text x="18" y="155" fill="var(--text-dim)" font-size="11" text-anchor="middle" transform="rotate(-90, 18, 155)">Dimension 2: small &rarr; large</text>
+
+        <!-- Axis arrow tips -->
+        <polygon points="480,265 480,275 490,270" fill="var(--surface3)"></polygon>
+        <polygon points="55,30 65,30 60,20" fill="var(--surface3)"></polygon>
+
+        <!-- Living-small cluster: cat, dog, puppy, kitten -->
+        <circle cx="120" cy="200" r="5" fill="var(--cyan)"></circle>
+        <text x="130" y="204" fill="var(--cyan)" font-size="12">cat</text>
+        <circle cx="145" cy="185" r="5" fill="var(--cyan)"></circle>
+        <text x="155" y="189" fill="var(--cyan)" font-size="12">dog</text>
+        <circle cx="108" cy="215" r="5" fill="var(--cyan)"></circle>
+        <text x="118" y="219" fill="var(--cyan)" font-size="12">kitten</text>
+        <circle cx="160" cy="175" r="5" fill="var(--cyan)"></circle>
+        <text x="170" y="179" fill="var(--cyan)" font-size="12">puppy</text>
+
+        <!-- Living-large cluster: elephant, whale -->
+        <circle cx="130" cy="75" r="5" fill="var(--green)"></circle>
+        <text x="140" y="79" fill="var(--green)" font-size="12">elephant</text>
+        <circle cx="115" cy="58" r="5" fill="var(--green)"></circle>
+        <text x="125" y="62" fill="var(--green)" font-size="12">whale</text>
+
+        <!-- Non-living-small cluster: button, coin, pebble -->
+        <circle cx="370" cy="215" r="5" fill="var(--amber)"></circle>
+        <text x="380" y="219" fill="var(--amber)" font-size="12">button</text>
+        <circle cx="355" cy="230" r="5" fill="var(--amber)"></circle>
+        <text x="365" y="234" fill="var(--amber)" font-size="12">coin</text>
+        <circle cx="390" cy="205" r="5" fill="var(--amber)"></circle>
+        <text x="400" y="209" fill="var(--amber)" font-size="12">pebble</text>
+
+        <!-- Non-living-large cluster: mountain, ship, building -->
+        <circle cx="360" cy="80" r="5" fill="var(--purple)"></circle>
+        <text x="370" y="84" fill="var(--purple)" font-size="12">mountain</text>
+        <circle cx="375" cy="65" r="5" fill="var(--purple)"></circle>
+        <text x="385" y="69" fill="var(--purple)" font-size="12">building</text>
+        <circle cx="342" cy="95" r="5" fill="var(--purple)"></circle>
+        <text x="352" y="99" fill="var(--purple)" font-size="12">ship</text>
+
+        <!-- Cluster labels -->
+        <text x="88" y="240" fill="var(--text-dim)" font-size="10" text-anchor="middle">small &amp; living</text>
+        <text x="88" y="48" fill="var(--text-dim)" font-size="10" text-anchor="middle">large &amp; living</text>
+        <text x="380" y="248" fill="var(--text-dim)" font-size="10" text-anchor="middle">small &amp; non-living</text>
+        <text x="380" y="48" fill="var(--text-dim)" font-size="10" text-anchor="middle">large &amp; non-living</text>
+      </svg>
+      <p class="diagram-caption">A simplified 2D embedding space. Real embeddings have hundreds of dimensions, but the principle is the same: similar concepts cluster together. Distance is semantic, not alphabetical.</p>
+    </div>
+
+    <p>In this simplified view, cat and dog sit close because they are both small living things. Elephant and whale sit in a different corner together. Button and coin cluster away from all animals because they are small non-living objects. And mountain, building, and ship huddle in the large non-living quadrant.</p>
+
+    <p>The critical insight: <em>no human drew these positions</em>. They emerge from training. The model does not know what &ldquo;living&rdquo; or &ldquo;large&rdquo; means in advance. It discovers that grouping certain concepts together reduces its prediction error, and the geometry falls out as a side effect of that discovery.</p>
+
+    <h2>How embeddings are trained</h2>
+
+    <p>The embeddings a model uses are not hand-crafted. They are <em>learned parameters</em> &mdash; initial random numbers that get refined through training until they help the model do its job. Understanding what training optimises helps you understand what the resulting vectors mean.</p>
+
+    <h3>The distributional hypothesis</h3>
+
+    <p>The theoretical foundation comes from linguistics, specifically from J.R. Firth&rsquo;s 1957 observation: &ldquo;You shall know a word by the company it keeps.&rdquo; If &ldquo;dog&rdquo; and &ldquo;cat&rdquo; tend to appear near words like &ldquo;pet,&rdquo; &ldquo;feed,&rdquo; &ldquo;vet,&rdquo; &ldquo;fur,&rdquo; and &ldquo;cuddle,&rdquo; and those two words almost never appear near words like &ldquo;invoice,&rdquo; &ldquo;spreadsheet,&rdquo; or &ldquo;quarterly report,&rdquo; then their contexts encode what they are. <strong>Words that appear in similar contexts have similar meanings.</strong> This is the distributional hypothesis, and it is the engine behind all embedding training.</p>
+
+    <p>The practical consequence: if you train a model to predict which words appear near a given word (or to predict a missing word from its neighbours), the model is forced to build a representation that captures contextual similarity. The vectors that emerge cluster similar words together, not because anyone told the model what &ldquo;similar&rdquo; means, but because that clustering reduces prediction error.</p>
+
+    <h3>Word2Vec: the landmark demonstration</h3>
+
+    <p>The approach was made famous by Mikolov et al. (2013) with <strong>Word2Vec</strong> <span class="citation" title="Mikolov, T., Sutskever, I., Chen, K., Corrado, G. &amp; Dean, J. (2013). Distributed Representations of Words and Phrases and their Compositionality. NeurIPS.">(Mikolov et al., 2013)</span>. The architecture is almost comically simple: a shallow neural network trained to predict a word from its surrounding context (or vice versa). No grammar rules, no dictionaries, no human labels. Just prediction from context.</p>
+
+    <p>After training on billions of words, the resulting 300-dimensional vectors showed something remarkable. The vectors organised themselves so that semantic relationships became geometric directions. There was, roughly, a &ldquo;gender&rdquo; direction in the space &mdash; moving along it turned &ldquo;man&rdquo; into &ldquo;woman,&rdquo; &ldquo;actor&rdquo; into &ldquo;actress,&rdquo; &ldquo;uncle&rdquo; into &ldquo;aunt.&rdquo; There was a &ldquo;royalty&rdquo; direction. There were country-capital directions. The model had not been told about these categories. It discovered them because they structured how words were used.</p>
+
+    <h3>Why &ldquo;king &minus; man + woman &asymp; queen&rdquo; works</h3>
+
+    <p>This is the equation that made embeddings famous, and it sounds like a magic trick until you see the geometry.</p>
+
+    <p>Take the vector for &ldquo;king.&rdquo; Subtract the vector for &ldquo;man.&rdquo; You have now isolated the direction that separates kings from ordinary men &mdash; roughly, the &ldquo;royalty component.&rdquo; Add the vector for &ldquo;woman.&rdquo; You have re-attached femaleness to that royalty. The resulting vector points toward the region of the space where &ldquo;royal + female&rdquo; concepts live. The nearest known word in the vocabulary is &ldquo;queen.&rdquo;</p>
+
+    <p>No one stored the fact that queen is the female version of king. That relationship is encoded as a geometric direction, consistent across many pairs. The direction from &ldquo;man&rdquo; to &ldquo;woman&rdquo; is parallel to the direction from &ldquo;king&rdquo; to &ldquo;queen,&rdquo; from &ldquo;actor&rdquo; to &ldquo;actress,&rdquo; from &ldquo;uncle&rdquo; to &ldquo;aunt.&rdquo; The arithmetic works because <strong>relationships are encoded as consistent directions, not stored as facts.</strong></p>
+
+    <div class="diagram-container">
+      <svg width="520" height="240" viewBox="0 0 520 240" role="img" aria-label="Vector arithmetic diagram showing king minus man plus woman equals queen as parallel arrows">
+        <rect x="1" y="1" width="518" height="238" rx="10" fill="none" stroke="var(--border)"></rect>
+
+        <!-- Axis guides -->
+        <line x1="50" y1="200" x2="480" y2="200" stroke="var(--surface3)" stroke-width="1"></line>
+        <line x1="50" y1="200" x2="50" y2="30" stroke="var(--surface3)" stroke-width="1"></line>
+        <text x="265" y="225" fill="var(--text-dim)" font-size="10" text-anchor="middle">royalty dimension &rarr;</text>
+
+        <!-- man -->
+        <circle cx="120" cy="160" r="6" fill="var(--cyan)"></circle>
+        <text x="120" y="178" fill="var(--cyan)" font-size="12" text-anchor="middle">man</text>
+
+        <!-- king: man + royalty -->
+        <circle cx="120" cy="85" r="6" fill="var(--purple)"></circle>
+        <text x="120" y="73" fill="var(--purple)" font-size="12" text-anchor="middle">king</text>
+
+        <!-- woman: man + gender shift -->
+        <circle cx="310" cy="160" r="6" fill="var(--cyan)"></circle>
+        <text x="310" y="178" fill="var(--cyan)" font-size="12" text-anchor="middle">woman</text>
+
+        <!-- queen: woman + royalty -->
+        <circle cx="310" cy="85" r="6" fill="var(--purple)"></circle>
+        <text x="310" y="73" fill="var(--purple)" font-size="12" text-anchor="middle">queen</text>
+
+        <!-- Royalty arrows (vertical, green) -->
+        <line x1="120" y1="155" x2="120" y2="97" stroke="var(--green)" stroke-width="2.5"></line>
+        <polygon points="115,97 125,97 120,87" fill="var(--green)"></polygon>
+        <text x="136" y="128" fill="var(--green)" font-size="10">+royalty</text>
+
+        <line x1="310" y1="155" x2="310" y2="97" stroke="var(--green)" stroke-width="2.5"></line>
+        <polygon points="305,97 315,97 310,87" fill="var(--green)"></polygon>
+        <text x="326" y="128" fill="var(--green)" font-size="10">+royalty</text>
+
+        <!-- Gender arrows (horizontal, amber, dashed) -->
+        <line x1="130" y1="160" x2="298" y2="160" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 3"></line>
+        <polygon points="298,155 298,165 308,160" fill="var(--amber)"></polygon>
+        <text x="208" y="153" fill="var(--amber)" font-size="10" text-anchor="middle">man &rarr; woman direction</text>
+
+        <line x1="130" y1="85" x2="298" y2="85" stroke="var(--amber)" stroke-width="2" stroke-dasharray="5 3"></line>
+        <polygon points="298,80 298,90 308,85" fill="var(--amber)"></polygon>
+        <text x="208" y="78" fill="var(--amber)" font-size="10" text-anchor="middle">king &rarr; queen direction</text>
+
+        <!-- Parallelism label -->
+        <text x="450" y="130" fill="var(--text-dim)" font-size="10" text-anchor="middle">parallel</text>
+        <text x="450" y="142" fill="var(--text-dim)" font-size="10" text-anchor="middle">arrows =</text>
+        <text x="450" y="154" fill="var(--text-dim)" font-size="10" text-anchor="middle">same shift</text>
+      </svg>
+      <p class="diagram-caption">The gender direction (man &rarr; woman) is parallel to the gender direction in the royalty pair (king &rarr; queen). So subtracting &ldquo;man&rdquo; from &ldquo;king&rdquo; and adding &ldquo;woman&rdquo; traverses the same geometric shift, landing near &ldquo;queen.&rdquo;</p>
+    </div>
+
+    <div class="callout callout-why">
+      <div class="callout-label">A note on the evidence</div>
+      <p>The clean &ldquo;king &minus; man + woman = queen&rdquo; result was most dramatic in early static word-vector models (Word2Vec, GloVe). Modern transformers compute <em>contextual</em> embeddings that shift based on surrounding words, so the analogy arithmetic is more approximate. The underlying principle &mdash; relationships as geometric directions &mdash; holds and is well evidenced; treat the exact equation as an illustrative ideal, not a precise law <span class="citation" title="Ethayarajh, K. et al. (2019). Towards Understanding Linear Word Analogies. ACL.">(Ethayarajh et al., 2019)</span>.</p>
+    </div>
+
+    <h2>Dimensions and what they encode</h2>
+
+    <p>A typical embedding vector might have 768 dimensions (common in BERT-style models) or 4,096 dimensions (common in larger language models). Each dimension is a learned axis of variation. No dimension corresponds to a single human-nameable concept. Instead, concepts scatter their meaning across many dimensions simultaneously.</p>
+
+    <p>Think of it like a spice description in a restaurant kitchen. If a chef had to describe a dish&rsquo;s flavour profile, she might note: heat 7/10, acidity 4/10, sweetness 2/10, earthiness 8/10, umami 6/10, bitterness 1/10. No single number captures the flavour. The full vector does. Two dishes with similar vectors will taste similar. A dish with a very different vector will taste different, and the distance between them can be measured.</p>
+
+    <p>Embedding dimensions work the same way. The vector for &ldquo;London&rdquo; might be high on dimensions that relate to urbanness, high on dimensions that track European geography, high on dimensions activated by historical references, and low on dimensions that activate for natural landscapes or rural contexts. No single dimension says &ldquo;this is European.&rdquo; The pattern across hundreds of dimensions collectively encodes what makes London London.</p>
+
+    <h3>Cosine similarity: how to measure distance in embedding space</h3>
+
+    <p>When practitioners say two embeddings are &ldquo;close&rdquo;, they usually mean one of two things: Euclidean distance (straight-line distance between the vector tips) or cosine similarity (the angle between the two vectors). Cosine similarity is more common for semantic tasks because it ignores the magnitude of the vectors and focuses entirely on direction.</p>
+
+    <p>Cosine similarity ranges from &minus;1 (completely opposite directions) to +1 (identical directions), with 0 meaning no relationship (perpendicular vectors). For practical purposes: two words with cosine similarity above 0.8 are very closely related; below 0.3, they are essentially unrelated. Antonyms sometimes score higher than you might expect, because &ldquo;hot&rdquo; and &ldquo;cold&rdquo; appear in very similar contexts (&ldquo;the soup is ___&rdquo;) &mdash; another reminder that similarity in embedding space means contextual co-occurrence, not necessarily shared meaning in the philosophical sense.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: why might antonyms like &ldquo;hot&rdquo; and &ldquo;cold&rdquo; have similar embeddings?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Because embeddings are trained on context, and antonyms appear in <em>identical contexts</em>. &ldquo;The coffee is hot&rdquo; and &ldquo;The coffee is cold&rdquo; have the same surrounding words. &ldquo;A hot summer day&rdquo; and &ldquo;A cold summer day&rdquo; are structurally identical. The embedding learns that &ldquo;hot&rdquo; and &ldquo;cold&rdquo; fill the same slot in the same sentences &mdash; which makes them contextually similar, even though they mean opposite things. This is a genuine limit of distributional semantics: the direction of meaning (positive/negative on a scale) sometimes gets entangled with the topic of meaning. Later architectures handle this better by using more context, but the fundamental pattern of antonyms clustering together persists.</p>
+      </div>
+    </div>
+
+    <h2>Static vs. contextual embeddings</h2>
+
+    <p>The Word2Vec model produces <strong>static embeddings</strong>: each word has one fixed vector regardless of context. &ldquo;Bank&rdquo; gets one position in the space whether you mean a river bank or a financial bank. This works surprisingly well &mdash; the vector ends up positioned somewhere between the two meanings, close to both &ldquo;finance&rdquo; and &ldquo;river.&rdquo; But it cannot capture the difference.</p>
+
+    <p>Modern language models like BERT and GPT compute <strong>contextual embeddings</strong>. The vector for &ldquo;bank&rdquo; shifts depending on the surrounding words. In &ldquo;She deposited cash at the bank,&rdquo; the vector moves toward the finance cluster. In &ldquo;We fished from the bank of the river,&rdquo; it shifts toward geography and water. The starting position comes from a learned static embedding, but attention layers read the context and adjust it. You will see exactly how attention drives this adjustment in a later page in this series.</p>
+
+    <p>The practical implication is that contextual embeddings are much more powerful than static ones for tasks that require disambiguation &mdash; which is most real-world language tasks. But they also require more computation: you cannot pre-compute and store one vector per word. You must run the full model on each input to get the contextual vector.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Static embeddings (Word2Vec, GloVe)</div>
+        <p>One fixed vector per word. &ldquo;Bank&rdquo; always sits in the same spot. Fast and storable. Ambiguous words get averaged positions. Good for many tasks, poor for disambiguation.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Contextual embeddings (BERT, GPT)</div>
+        <p>Each word&rsquo;s vector shifts with context. &ldquo;Bank&rdquo; moves toward finance or geography depending on the sentence. Slower, requires full model. Handles ambiguity. Powers modern language understanding.</p>
+      </div>
+    </div>
+
+    <h2>Embeddings beyond words</h2>
+
+    <p>The embedding principle is not limited to language. Anywhere you need to represent items in a way that captures similarity, the same technique applies.</p>
+
+    <p><strong>Recommendation systems</strong> use embeddings for users and products. Netflix learns a vector for each viewer based on watching history, and a vector for each film based on which viewers watch it. Films with similar viewers end up nearby. Viewers with similar tastes end up nearby. A recommendation is simply: find the films whose vectors sit closest to this viewer&rsquo;s vector <span class="citation" title="Koren, Y., Bell, R. &amp; Volinsky, C. (2009). Matrix Factorization Techniques for Recommender Systems. IEEE Computer.">(Koren et al., 2009)</span>.</p>
+
+    <p><strong>Images</strong> get embedded too. A convolutional neural network trained on image recognition produces a vector for each image in its final layer. Images of the same type cluster together. Two photos of labradors sit near each other. A photo of a cricket stadium sits in a completely different region. This is why Google Images reverse search works: your uploaded photo becomes a vector, and the system finds the nearby vectors in its index.</p>
+
+    <p><strong>Medical codes</strong> have been embedded using patterns in patient records. Diagnoses that co-occur in the same patients end up nearby, even if the diagnostic codes themselves are completely unrelated numbers. Researchers have shown that embedding medical histories produces vectors that cluster similar disease trajectories together, enabling more accurate risk prediction than using raw diagnostic codes <span class="citation" title="Choi, E. et al. (2016). RETAIN: An Interpretable Predictive Model for Healthcare using Reverse Time Attention Mechanism. NeurIPS.">(Choi et al., 2016)</span>.</p>
+
+    <p><strong>Semantic search</strong> is perhaps the most direct application. Instead of matching keywords, you embed the search query and every document in a collection. Retrieval returns documents whose vectors sit closest to the query vector. A search for &ldquo;heart condition treatment&rdquo; finds a document about &ldquo;cardiac therapy options&rdquo; even though no words overlap, because the concepts sit nearby in the embedding space. This is the same mechanism you will encounter later in memory architectures for AI agents.</p>
+
+    <h2>Why this matters for LLMs specifically</h2>
+
+    <p>Language model training begins with an embedding table: a learnable matrix with one row per token in the vocabulary. When a token is processed, its row is looked up and retrieved &mdash; this is the token&rsquo;s starting vector. Everything the model does with that token begins from this position.</p>
+
+    <p>The embedding table is jointly learned with the rest of the model. As training improves the model&rsquo;s predictions, the embedding vectors shift to better support those predictions. By the end of training, the embedding table encodes a compressed summary of how every token in the vocabulary relates to every other token, extracted from trillions of words of human text.</p>
+
+    <p>When a practitioner says a language model &ldquo;understands&rdquo; that &ldquo;Paris&rdquo; relates to &ldquo;France&rdquo; the way &ldquo;Tokyo&rdquo; relates to &ldquo;Japan,&rdquo; they mean that this relationship is encoded as a consistent geometric direction in the embedding space. The model can complete analogies, answer geography questions, and generalise across similar structures not because it has memorised facts, but because those facts are implicit in the geometry it learned.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model represents 50,000 vocabulary items with one-hot vectors. A colleague proposes switching to 256-dimensional learned embeddings. What is the most important advantage of the switch?</div>
+      <button class="quiz-option" data-letter="A">The embedding vectors use less memory because 256 numbers is fewer than 50,000 numbers per item.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Similar concepts will have similar vectors, so the model can generalise across related items instead of treating every item as equally different from every other.</button>
+      <button class="quiz-option" data-letter="C">The embedding table can be pre-computed once and never updated during training, making it faster.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The core value of embeddings is that they encode similarity as geometric proximity. One-hot vectors treat every item as equidistant from every other item, which prevents the model from generalising across related concepts. Dense embeddings fix this. (The memory reduction is a real secondary benefit, but it is not the most important advantage.)"
+           data-incorrect="Memory efficiency is a real benefit (and true for answer A), but it is not the main advantage. The fundamental problem with one-hot vectors is equidistance: every item is identically far from every other, which prevents the model from leveraging similarities. Dense embeddings encode semantic relationships as geometric distances, which is the core gain. Embeddings are also updated during training, not frozen, so C is incorrect."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">What does it mean, mechanically, when the vector arithmetic &ldquo;king &minus; man + woman&rdquo; lands near &ldquo;queen&rdquo; in embedding space?</div>
+      <button class="quiz-option" data-letter="A">The model was trained with an explicit rule that queen = king(female) and this encoded that rule as an equation.</button>
+      <button class="quiz-option" data-letter="B">The tokenizer noticed that &ldquo;king&rdquo; and &ldquo;queen&rdquo; share similar characters and placed them near each other.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Relationships like gender are encoded as consistent geometric directions in the space, so subtracting &ldquo;man&rdquo; and adding &ldquo;woman&rdquo; moves along the gender direction and lands in the female-royalty region.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. No explicit rule was stored. The geometry emerged from training on context: because gender-related pairs appear in parallel contexts across the corpus, the model&rsquo;s gradient updates aligned their vectors along consistent directions. The arithmetic works because those directions are stable and consistent."
+           data-incorrect="No explicit rules or character patterns are involved. The embedding space is learned purely from predicting tokens in context. The arithmetic works because semantic relationships (like gender) manifest as stable geometric directions &mdash; and you can navigate those directions with vector math."></div>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If embeddings are learned from context and antonyms sometimes end up nearby, what are the limits of using cosine similarity to judge meaning? When would you trust embedding distance as a proxy for semantic similarity, and when would you distrust it? Think about rare words, domain-specific jargon, and proper nouns that appear in very few training contexts.</p>
+    </div>
+
+  </div>
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>Embeddings replace arbitrary codes and flat one-hot vectors with positions in a learned geometric space where <strong>distance encodes meaning</strong> and <strong>direction encodes relationship</strong>. Training discovers these positions automatically, from context alone, without any human labelling of what &ldquo;similar&rdquo; means. The result is a mathematical map of how concepts relate &mdash; one you can search by proximity, navigate by arithmetic, and generalise across. Every modern AI system that works with language, images, products, or any other domain of meaning starts by converting its inputs into this kind of space.</p>
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why does one-hot encoding fail to capture semantic similarity? What fundamental property of the resulting vectors causes the problem?</li>
+        <li>What makes two embeddings close in vector space? What was the model optimising during training that caused similar concepts to cluster together?</li>
+        <li>What does it mean that &ldquo;king minus man plus woman equals queen&rdquo; in embedding arithmetic? Explain in terms of geometric directions rather than stored facts.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV FOOTER -->
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('f08-embeddings-intro');</script>
+</body>
+</html>

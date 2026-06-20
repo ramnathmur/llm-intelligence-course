@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E02 &mdash; Context Engineering &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E02 &mdash; Context Engineering">
+<meta property="og:description" content="Managing what goes into the context window &mdash; token budgeting, tool output handling, and retrieval prioritisation.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/e01-prompt-engineering.html">Module 1: Foundations of AI Engineering</a>
+    <span class="sep">&#8250;</span>
+    Context Engineering
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">E02 &middot; Module 1</div>
+    <h1>Context Engineering</h1>
+    <p class="one-liner">Managing what goes into the context window &mdash; token budgeting, tool output handling, and retrieval prioritisation.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A CEO briefing document limited to two pages. Every team wants their section included. The chief of staff decides what stays, what gets compressed, and what gets dropped &mdash; based on relevance to today&rsquo;s decision.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    In production systems, tool outputs and retrieved documents can consume 100x more tokens than the user&rsquo;s message. Treating context as a scarce resource is what separates robust systems from fragile ones.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why context is a managed resource, what placement within the window affects, and how to prioritise what goes in.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e01-prompt-engineering.html" class="prereq-chip">E01 &mdash; Prompt Engineering as a System</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Picture a chief of staff preparing the morning briefing for a CEO who has exactly two pages to read before a board meeting. Eight teams have submitted inputs. Finance wants three pages on quarterly projections. Operations wants two pages on a supply bottleneck. Marketing wants a page on a campaign. There are six others. The chief of staff cannot give everyone what they want. The window is two pages. Every word included is a word that displaces something else.</p>
+
+    <p>The chief of staff makes three kinds of decisions: what to include in full, what to compress into a sentence, and what to cut entirely. She orders the page so that the most critical information appears first &mdash; because if the CEO is interrupted mid-read, the top of the page must have done its job. She also knows the CEO&rsquo;s attention tends to drift by the bottom of page two, so she never buries the ask there.</p>
+
+    <p>This is exactly the job of context engineering. The context window is the CEO&rsquo;s two pages. The model is the CEO. You are the chief of staff. Every system prompt, retrieved document, tool output, conversation turn, and instruction competes for the same finite space. Getting this wrong wastes tokens on low-value content, buries critical instructions where the model is least likely to use them, and ultimately produces worse outputs than a smaller, better-curated context would have.</p>
+
+    <h2>The context window is not a free lunch</h2>
+
+    <p>Most developers encounter context windows as a limit to work around: &ldquo;I kept hitting the 128k limit, so I switched to a larger model.&rdquo; That framing misses the real constraint. A longer context window does not mean attention is distributed evenly across it. It means you have more rope to hang yourself with.</p>
+
+    <p>The key empirical finding here is what researchers call the <strong>lost-in-the-middle problem</strong> <span class="citation" title="Liu et al. (2023). Lost in the Middle: How Language Models Use Long Contexts. Transactions of the Association for Computational Linguistics.">(Liu et al., 2023)</span>. When the same piece of information is placed at the beginning, middle, or end of a long context, the model uses it with very different reliability. Information at the beginning and end is retrieved more accurately than information in the middle. In a 20-document retrieval task, a document buried at position 10 of 20 is used significantly less often than the same document at position 1 or 20.</p>
+
+    <p>The analogy is a long meeting agenda. Decisions made at the start &mdash; when everyone is fresh &mdash; stick. Decisions made at the very end &mdash; when they are the last thing before adjournment &mdash; also stick. The points covered in the middle of a three-hour meeting have a tendency to dissolve. Attention is not flat; it has a shape.</p>
+
+    <h3>Why the shape exists</h3>
+
+    <p>The mechanism is not fully settled, but the leading explanation is a training artifact. During pre-training, models see many documents that begin with titles, abstracts, and key conclusions, and end with summaries. The most important content of a document is disproportionately at the edges. The model learns this statistical regularity: pay more attention to edges. When it encounters a 50,000-token context in deployment, that same learned habit applies, and the middle suffers.</p>
+
+    <p>A second factor is the recency bias that many researchers have documented <span class="citation" title="Shi et al. (2023). Large Language Models Can Be Easily Distracted by Irrelevant Context. ICML.">(Shi et al., 2023)</span>. In conversational contexts, models weight recent turns more heavily. The last thing said tends to dominate. This makes retrieval-augmented generation (RAG) systems particularly vulnerable: if you append retrieved documents before the user query, the model sees the query last and gives it disproportionate weight. If you append documents after the query, the documents are most recent and can drown out earlier instructions.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Context position is not neutral. Placing critical instructions in the middle of a long context is not the same as placing them at the top. The model&rsquo;s attention has a shape &mdash; strong at the edges, weaker in the middle &mdash; and your context layout must account for this.</p>
+    </div>
+
+    <h2>The token budget problem in production</h2>
+
+    <p>Here is a number that surprises most developers the first time they see it. A typical user message in a customer-service chatbot is 30&ndash;80 tokens. A single tool call to a database API might return 4,000 tokens of JSON. A retrieved document from a knowledge base might be 2,000 tokens. A full conversation history across five turns can be 3,000 tokens. The system prompt is another 1,000 tokens.</p>
+
+    <p>Add it up: the user&rsquo;s 50-token question is now wrapped in a context of 10,000+ tokens, the vast majority of which the model generated or retrieved on the user&rsquo;s behalf. In an agentic loop that calls three tools and does two retrieval steps before answering, the ratio can be 100:1 or worse. The token bill is primarily a bill for context, not questions.</p>
+
+    <p>This has two practical consequences. First, cost scales with context length. API pricing is typically per input token plus per output token. In a system where tool outputs dominate the input, trimming those outputs aggressively cuts cost more than any other optimization. Second, latency scales with context length, because the attention mechanism is quadratic in sequence length for standard transformers. A context twice as long takes roughly four times the compute to process. In a latency-sensitive product, this is not academic.</p>
+
+    <h3>What goes into a production context</h3>
+
+    <p>A well-designed production context has six layers, each with a different priority:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>System instructions</h4>
+        <p>The model&rsquo;s behavioral contract: role, tone, constraints, output format, and escalation rules. This is almost always placed first, because it is the anchor for everything that follows. It should be concise &mdash; a bloated system prompt buries the instructions the model most needs.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Retrieved knowledge</h4>
+        <p>Documents, database results, or knowledge base excerpts retrieved for this specific query. These are the most variable layer &mdash; they can range from 0 tokens to tens of thousands depending on the query. They need active management: ranking, truncation, and deduplication before insertion.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Tool outputs</h4>
+        <p>Results from API calls, code execution, web searches, or database queries. Often the largest and noisiest layer. Raw tool output is rarely what you want in the context: JSON responses need to be formatted, error messages need to be summarised, and irrelevant fields need to be stripped before the model sees them.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Conversation history</h4>
+        <p>Prior turns in the current session. Grows unboundedly in long conversations. Most production systems do not pass the full history verbatim; they maintain a sliding window, summarise older turns, or index history externally and retrieve only the relevant prior turns for each new message.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Examples (few-shot)</h4>
+        <p>Demonstrations of the desired output format. These are high-value but expensive: each example might cost 200&ndash;500 tokens. In long contexts, examples placed early can be forgotten; placed too late, they crowd out the actual query. Many production systems move examples into fine-tuning to avoid paying this cost at inference time.</p>
+      </div>
+      <div class="walkthrough-step" data-step="6">
+        <h4>The current query</h4>
+        <p>The user&rsquo;s actual request. Often the shortest layer. Must not be buried. In most designs, the query appears last, immediately before the model&rsquo;s turn, so it benefits from recency bias rather than suffering from it.</p>
+      </div>
+    </div>
+
+    <h2>Compression versus summarisation</h2>
+
+    <p>When context gets too large, the instinctive response is summarisation: &ldquo;summarise the last 10 messages.&rdquo; Summarisation is useful but it is not the same as compression, and conflating them leads to poor decisions.</p>
+
+    <p><strong>Summarisation</strong> produces a new piece of prose that captures the gist. It is lossy by nature: specifics vanish. A summary of a tool output that returned a list of 50 product IDs with prices becomes &ldquo;the tool returned pricing data for 50 products ranging from $12 to $340.&rdquo; This is useful if the task is to make a recommendation. It is useless if the task is to find the product with ID 4872.</p>
+
+    <p><strong>Compression</strong> reduces token count while preserving the specific content the model needs for the task. It is targeted. For a JSON response from an API call, compression might mean stripping fields the model does not need (timestamps, pagination metadata, internal IDs) while preserving the fields it does. For a retrieved document, compression might mean extracting only the paragraphs that match the query, rather than passing the full 3,000-token document.</p>
+
+    <p>The distinction matters because the right technique depends on what you plan to do with the content downstream. Summarisation is appropriate when you need to preserve narrative or sentiment across a long conversation. Compression is appropriate when you need to preserve specific structured data across a tool-use chain. Getting this wrong is a common source of &ldquo;hallucination&rdquo; in agentic systems: the model was not inventing &mdash; the specific data it needed was summarised away before it reached the reasoning step.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if you have a 5,000-token retrieved document and your query only concerns one paragraph, what is the right approach &mdash; pass the full document, summarise it, or extract only the relevant paragraph?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Extract only the relevant paragraph. Passing the full 5,000-token document wastes tokens and risks burying the relevant content in the middle of the context, where attention is weakest. Summarising replaces specific content with prose, which may lose the precise details the model needs to answer correctly. The right move is targeted extraction: identify which chunk of the document is relevant to the query and pass only that chunk. This is the core job of a well-designed retrieval pipeline &mdash; chunking and ranking before insertion, not just fetching and appending.</p>
+      </div>
+    </div>
+
+    <h2>Retrieval prioritisation: what gets in and in what order</h2>
+
+    <p>RAG systems &mdash; retrieval-augmented generation, where you fetch documents from a knowledge base before generating an answer &mdash; are where context engineering decisions have the largest impact. The retrieval step can return anywhere from 1 to 50 documents. You cannot pass all 50. You must choose what goes in, how much of it, and in what order.</p>
+
+    <p>The naive approach is to rank documents by similarity score and take the top <em>k</em>. This works reasonably well for narrow queries but fails for complex ones. A query about &ldquo;the return policy for defective electronics purchased during a promotional period&rdquo; might retrieve:</p>
+
+    <ul>
+      <li>A general returns policy page (highly similar to &ldquo;return policy&rdquo;)</li>
+      <li>A page on electronics warranties (similar to &ldquo;electronics&rdquo;)</li>
+      <li>A page on promotional pricing (similar to &ldquo;promotional period&rdquo;)</li>
+    </ul>
+
+    <p>All three are relevant to different parts of the query. But none of them alone answers it. The right answer might require synthesising across all three &mdash; or the specific intersection of all three conditions might appear on a fourth document that scores lower on raw similarity because it uses different phrasing.</p>
+
+    <h3>Ranking strategies that work in production</h3>
+
+    <p>Sophisticated retrieval systems combine multiple signals. The leading approaches in production as of 2024&ndash;2025 are:</p>
+
+    <p><strong>Reciprocal Rank Fusion (RRF):</strong> Run multiple retrieval methods (dense vector search, sparse keyword search, re-ranker model), get a ranked list from each, and combine the ranks. A document that appears in the top 5 of every method scores higher than one that tops only one method. This is robust, cheap to implement, and surprisingly effective <span class="citation" title="Cormack, Clarke &amp; Buettcher (2009). Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods. SIGIR.">(Cormack et al., 2009)</span>.</p>
+
+    <p><strong>Cross-encoder re-ranking:</strong> Use a smaller model (a cross-encoder, which takes both the query and a document as input) to score document relevance after the initial retrieval. Cross-encoders are more accurate than embedding similarity but too slow to run over an entire corpus, so they are applied only to the top 50&ndash;100 candidates. The result is a more accurate top-10 that gets inserted into context <span class="citation" title="Nogueira &amp; Cho (2019). Passage Re-ranking with BERT. arXiv:1901.04085.">(Nogueira &amp; Cho, 2019)</span>.</p>
+
+    <p><strong>Maximal Marginal Relevance (MMR):</strong> Penalise documents that are too similar to ones already selected. MMR alternates between relevance to the query and diversity from what is already chosen. This prevents five nearly-identical paragraphs from crowding out a complementary document that covers a different angle <span class="citation" title="Carbonell &amp; Goldstein (1998). The Use of MMR, Diversity-Based Reranking for Reordering Documents and Producing Summaries. SIGIR.">(Carbonell &amp; Goldstein, 1998)</span>.</p>
+
+    <p>Once you have your top <em>k</em> documents, the placement question returns. Given the lost-in-the-middle finding, the most relevant document should go first (or last), not in the middle of a block of retrieved content. The least relevant document, if you include it at all, goes in the middle where it will have least impact on the answer.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You retrieve 10 documents for a RAG query. The most relevant document is placed at position 5 of 10 in the context. The least relevant is at position 1. What problem does this create?</div>
+      <button class="quiz-option" data-letter="A">The model cannot process more than 4 retrieved documents at once, so positions 5&ndash;10 are ignored.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The most relevant document is in the middle of the context, where attention is weakest. The least relevant document is at position 1, where attention is strongest &mdash; inverting the priority.</button>
+      <button class="quiz-option" data-letter="C">Document order does not matter because the model attends to all positions equally with self-attention.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly. The lost-in-the-middle effect means the model uses content at the edges of the context more reliably than content in the middle. If your most relevant document is at position 5 and a low-relevance document is at position 1, you have given the highest-attention position to the least useful content. Placement should mirror relevance ranking: most important at the top (or the bottom, immediately before the query)."
+           data-incorrect="Not quite. Self-attention is theoretically capable of attending to all positions, but empirically the model uses content near the edges more reliably (Liu et al., 2023). Document order is a design lever with measurable impact on answer quality."></div>
+    </div>
+
+    <h2>Tool output handling</h2>
+
+    <p>Agentic systems call tools &mdash; APIs, code interpreters, web search engines &mdash; and must insert the results into the context before generating the next step. Tool outputs are the least controlled layer of the context: you specified what to call, but you did not specify what comes back.</p>
+
+    <p>Raw tool outputs are almost always over-specified for the model&rsquo;s need. A REST API call to a weather service might return a 2,000-token JSON object with fields for humidity, dew point, UV index, air quality index, pollen count, and extended forecast tables &mdash; when all you needed was the current temperature and whether it is raining. Those 2,000 tokens either cost you money, consume attention budget, or both.</p>
+
+    <p>The production pattern is a <strong>tool output adapter layer</strong>: a thin function between the raw API response and the context insertion. The adapter does three things:</p>
+
+    <p><strong>1. Field selection.</strong> Extract only the fields the model will use. This is the highest-leverage move: a 2,000-token response can often become a 50-token response after extracting two or three fields. For structured outputs like JSON, this is straightforward with a schema. For unstructured outputs like web search results, it requires more judgment.</p>
+
+    <p><strong>2. Format normalisation.</strong> Models handle some formats better than others. Compact JSON is harder to reason over than a few lines of plain text. A table of five columns and 100 rows is harder to use than the same data presented as five bullet points with the most relevant row highlighted. Normalising the format to match the model&rsquo;s strengths consistently improves downstream answer quality.</p>
+
+    <p><strong>3. Error and edge case handling.</strong> APIs return errors. Paginated results return partial data. Rate limits return 429s. The adapter must handle these gracefully and insert a clear signal into the context: &ldquo;The weather API returned an error: service unavailable. Do not reference current weather data in your response.&rdquo; An unhandled error dropped raw into the context leaves the model guessing what to do with a 503 response body.</p>
+
+    <h3>Context accumulation in multi-step agents</h3>
+
+    <p>The most insidious context management problem in agentic systems is accumulation. An agent that takes 10 steps, each calling a tool, inserts 10 tool outputs into the context. Each step the model sees: the system prompt, the original user request, step 1 tool output, step 2 tool output, &hellip;, step <em>n</em> tool output, then generates the next action.</p>
+
+    <p>By step 10, the early tool outputs from step 1 and step 2 are deep in the middle of a large context, suffering maximum lost-in-the-middle degradation. If those early outputs contained critical constraints (e.g., &ldquo;user budget is $500&rdquo;), the model may behave as if it forgot them &mdash; not because the information is absent, but because its position in the context makes it less likely to influence the output.</p>
+
+    <p>Production solutions include:</p>
+
+    <ul>
+      <li><strong>State accumulation outside the context.</strong> Instead of appending raw tool outputs, maintain a structured state object. After each tool call, the model updates the state object with the relevant new information. Only the current state object &mdash; compact, structured &mdash; goes into the next context, not the full history of tool outputs.</li>
+      <li><strong>Scratchpad compression.</strong> After every N steps, run a compression pass that collapses the tool output history into a compact summary of what has been established so far. The summary moves to the front of the context; raw outputs are dropped.</li>
+      <li><strong>Pinned instructions.</strong> Critical constraints that must survive the full agent run are repeated in the context at regular intervals, or placed immediately before the current query, so they benefit from recency regardless of how long the run has been.</li>
+    </ul>
+
+    <h2>Context window sizing: bigger is not always better</h2>
+
+    <p>A common instinct when hitting context limits is to upgrade to a model with a larger window. Sometimes this is correct. But it often papers over a context engineering problem that will resurface at the larger scale.</p>
+
+    <p>There are three cases where a larger window genuinely helps: (1) tasks that require holding an entire long document in context without retrieval, such as editing a 50-page report; (2) tasks that require tracing reasoning across many steps with rich history; (3) tasks where diverse retrieved sources must all be present simultaneously because the answer requires synthesising across them.</p>
+
+    <p>There are cases where a larger window hurts or is irrelevant: when the context is padded with low-value content that would be better filtered out, a larger window just means the model has more noise to reason over. When the task is narrow and the answer is in the top retrieved document, a large window adds cost and latency for no quality gain.</p>
+
+    <p>The right question is not &ldquo;how many tokens can I fit?&rdquo; but &ldquo;what is the minimum set of tokens the model actually needs to answer correctly?&rdquo; That reframe is what separates engineers who treat context as infrastructure from engineers who treat it as a free lunch.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If you had to design an agent that runs 50 steps &mdash; each calling a different tool &mdash; without ever exceeding a 32k context budget, what is your strategy? Consider what information genuinely needs to be in the context at step 50 versus what can be compressed or externalised.</p>
+    </div>
+
+    <h2>Practical decision framework</h2>
+
+    <p>When designing the context for a production system, work through these decisions in order:</p>
+
+    <p><strong>Step 1: Audit what goes in.</strong> List every layer that enters your context: system prompt, retrieved documents, tool outputs, history, examples, query. Measure the token cost of each layer in a real production trace. The distribution is usually surprising.</p>
+
+    <p><strong>Step 2: Cut before you optimise.</strong> For each layer, ask: what happens if I remove this entirely? If nothing breaks, remove it. System prompts often contain instructions that were added defensively but are never triggered. Retrieved chunks often include boilerplate. Conversation history often includes pleasantries. Ruthless cutting before clever compression.</p>
+
+    <p><strong>Step 3: Adapt tool outputs.</strong> Build an adapter layer between every tool call and the context. Start with the simplest version: field selection. You can add format normalisation and error handling once you know which fields matter.</p>
+
+    <p><strong>Step 4: Order by relevance, not by time.</strong> Temporal order (first retrieved = first in context) is almost never the right order. Order your context by attention priority: most critical instructions first, most relevant retrieved content near the edges, query immediately before the model&rsquo;s turn.</p>
+
+    <p><strong>Step 5: Monitor context length as a metric.</strong> Track p50, p90, and p99 context lengths in production. Set alerts when context length spikes unexpectedly &mdash; this is often the first signal of a retrieval bug, a tool output explosion, or a conversation that has gone off-script and is accumulating history.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Context is a managed resource, not a dump. The chief of staff does not hand the CEO a pile of raw reports; she crafts a briefing. In the same way, the context that reaches the model is your product &mdash; curated, ordered, and sized for the specific decision the model needs to make. Every token you include that is not load-bearing is a token displacing something that is.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why does the position of information in the context window affect how well the model uses it?</li>
+        <li>What is the lost-in-the-middle problem and how does it affect RAG system design?</li>
+        <li>How does context compression differ from summarisation?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>if (typeof AIEngNav !== 'undefined') { AIEngNav.init('e02-context-engineering'); } else if (typeof LLMNav !== 'undefined') { LLMNav.init('e02-context-engineering'); }</script>
+
+</body>
+</html>

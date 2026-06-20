@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N09 &mdash; BPE Tokenisation From Scratch &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N09 &mdash; BPE Tokenisation From Scratch">
+<meta property="og:description" content="How byte-pair encoding builds the vocabulary that feeds every modern LLM">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-3/n09-bpe-tokenisation.html">Module 3: Language Modelling</a>
+    <span class="sep">&#8250;</span>
+    BPE Tokenisation From Scratch
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">N09 &middot; Module 3</div>
+    <h1>BPE Tokenisation From Scratch</h1>
+    <p class="one-liner">How byte-pair encoding builds the vocabulary that feeds every modern LLM</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A stenographer inventing shorthand. Start with individual letters. Merge the most common letter pairs into a single symbol. Repeat until you have a compact vocabulary that covers most text efficiently &mdash; the rare words still spelled out letter by letter, the common ones compressed into a single stroke.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>Tokenisation is the first and last step of every LLM pipeline &mdash; it determines what the model sees and how it speaks. Tokens are not words. They are not characters. They are something in between, shaped by a statistical algorithm that ran on your training corpus. BPE quirks cause real production bugs: unexpected token counts that blow context windows, arithmetic that fails because numbers are split across multiple tokens, whitespace surprises that change model behaviour. Every one of those bugs only makes sense if you understand how the vocabulary was built.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>How BPE builds a vocabulary from raw text, why tokenisation is non-trivial despite looking like splitting strings, why the same word can tokenise differently in different contexts, and how the number of tokens a word occupies affects model behaviour downstream.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-3/n08-gpt-from-scratch.html" class="prereq-chip">N08 &mdash; GPT From Scratch</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>Why Not Just Split on Spaces?</h2>
+
+    <p>The obvious approach to splitting text into pieces is splitting on whitespace. "The cat sat" becomes ["The", "cat", "sat"]. Simple. Deterministic. Readable.</p>
+
+    <p>It falls apart immediately when you try to build a language model on it.</p>
+
+    <p>A real corpus contains millions of unique word forms. "run", "runs", "running", "runner", "ran" are five separate vocabulary entries. So are every misspelling, every hyphenated compound, every URL, every code snippet, every number in every format. If your vocabulary is the set of all words seen in training, you end up with millions of entries. New documents will always contain words you have never seen &mdash; out-of-vocabulary tokens that the model literally cannot represent.</p>
+
+    <p>Character-level tokenisation solves the vocabulary explosion: you have at most a few hundred unique characters, and you can always represent any text. But a sentence that takes 8 word-tokens now takes 40 character-tokens. The model must learn to attend across four times as many positions to understand the same content. Attention cost scales quadratically with sequence length. Character-level models are slow and struggle to capture long-range dependencies.</p>
+
+    <p>Byte-Pair Encoding, first adapted for neural machine translation by <span class="citation" title="Sennrich et al. (2016). Neural Machine Translation of Rare Words with Subword Units. ACL.">(Sennrich et al., 2016)</span> and later the basis of GPT-2's tokeniser <span class="citation" title="Radford et al. (2019). Language Models are Unsupervised Multitask Learners. OpenAI.">(Radford et al., 2019)</span>, sits between these extremes. It compresses common sequences into single tokens while preserving the ability to represent any text character by character as a fallback. The result: a fixed vocabulary of practical size, typically 30,000&ndash;100,000 tokens, that covers real text efficiently.</p>
+
+    <h2>The BPE Algorithm Step by Step</h2>
+
+    <p>BPE is a greedy compression algorithm. It starts with the smallest possible units and merges the most common pairs repeatedly until it reaches a target vocabulary size.</p>
+
+    <p>Here is the algorithm on a tiny corpus. Imagine your entire training set is four sentences:</p>
+
+    <pre><code>"low low low low low"
+"lowest lowest lowest"
+"newer newer newer newer"
+"wider wider wider"</code></pre>
+
+    <h3>Step 1: Initialize the vocabulary with characters</h3>
+
+    <p>Split every word into its constituent characters. BPE typically adds a special end-of-word marker (often <code>&lt;/w&gt;</code> or a space prefix) to distinguish "low" as a standalone word from "low" as a prefix in "lowest". For now, represent the word "low" as the character sequence <code>l o w</code> and count how often each full word appears.</p>
+
+    <pre><code>l o w        : 5   (from "low" appearing 5 times)
+l o w e s t  : 3   (from "lowest" appearing 3 times)
+n e w e r    : 4   (from "newer" appearing 4 times)
+w i d e r    : 3   (from "wider" appearing 3 times)</code></pre>
+
+    <p>The initial vocabulary is the set of all unique characters: <code>{l, o, w, e, s, t, n, r, i, d}</code>. Ten entries.</p>
+
+    <h3>Step 2: Count all adjacent character pairs</h3>
+
+    <p>Look at every adjacent pair of characters across all word instances, weighted by how often that word appears:</p>
+
+    <pre><code>('e', 'r')  : 4 + 3 = 7   (from "newer" x4, "wider" x3)
+('l', 'o')  : 5 + 3 = 8   (from "low" x5, "lowest" x3)
+('o', 'w')  : 5 + 3 = 8   (from "low" x5, "lowest" x3)
+('e', 's')  : 3            (from "lowest" x3)
+...</code></pre>
+
+    <p>The most frequent pair is a tie between <code>('l', 'o')</code> and <code>('o', 'w')</code>, both at count 8.</p>
+
+    <h3>Step 3: Merge the most frequent pair</h3>
+
+    <p>Pick the winner (ties broken by position or alphabetically &mdash; let's take <code>('l', 'o')</code>). Create a new token <code>lo</code> and replace every occurrence of the pair <code>l o</code> with the merged token:</p>
+
+    <pre><code>lo w         : 5
+lo w e s t   : 3
+n e w e r    : 4
+w i d e r    : 3</code></pre>
+
+    <p>Vocabulary is now <code>{l, o, w, e, s, t, n, r, i, d, lo}</code> &mdash; eleven entries.</p>
+
+    <h3>Step 4: Repeat until target vocabulary size</h3>
+
+    <p>Count pairs again. Now <code>('lo', 'w')</code> appears 8 times. Merge it to get <code>low</code>. Then <code>('e', 'r')</code> appears 7 times. Merge it to get <code>er</code>. Continue until you have reached your target &mdash; say, 50 unique tokens. At that point you stop.</p>
+
+    <p>Each merge is recorded as a <em>merge rule</em>. The final tokeniser is simply a list of merge rules in the order they were learned, plus the base character vocabulary. To tokenise new text, you apply the rules from first to last.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>BPE does not pick its vocabulary by any human intuition about words. It picks whatever byte sequences are statistically most compressible in the training corpus. Common English words get single tokens. Rare words get split into pieces that the model has seen in other contexts. Brand new words are always representable as character sequences &mdash; the fallback is built in.</p>
+    </div>
+
+    <h2>How Tokenisation Works at Inference Time</h2>
+
+    <p>You have the merge rule list. A new string arrives. How do you tokenise it?</p>
+
+    <p>Start by splitting the string into individual bytes or characters. Then scan the merge rules from first to last. At each rule, find every occurrence of that pair in your current sequence and merge them. After applying all rules, what remains is your token sequence.</p>
+
+    <p>Here is a worked example. Suppose the merge rules learned (in order) are:</p>
+
+    <pre><code>Rule 1: l + o &rarr; lo
+Rule 2: lo + w &rarr; low
+Rule 3: e + r &rarr; er
+Rule 4: low + er &rarr; lower</code></pre>
+
+    <p>Tokenise the word "lower":</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Start: character sequence</h4>
+        <p><code>l o w e r</code></p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Apply Rule 1: l + o &rarr; lo</h4>
+        <p><code>lo w e r</code></p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Apply Rule 2: lo + w &rarr; low</h4>
+        <p><code>low e r</code></p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Apply Rule 3: e + r &rarr; er</h4>
+        <p><code>low er</code></p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Apply Rule 4: low + er &rarr; lower</h4>
+        <p><code>lower</code> &mdash; a single token. The word was common enough in training that it earned its own entry.</p>
+      </div>
+    </div>
+
+    <p>Now tokenise "lowing" (a word the algorithm never saw):</p>
+
+    <pre><code>Start:    l o w i n g
+Rule 1:   lo w i n g
+Rule 2:   low i n g
+Rules 3-4: no match
+Result:   low  i  n  g   (four tokens)</code></pre>
+
+    <p>The model has never seen "lowing" as a unit, but it can represent it using pieces it understands. This is the graceful degradation that makes BPE practical.</p>
+
+    <h2>Byte-Level BPE: GPT-2's Innovation</h2>
+
+    <p>The tokeniser described above works on characters. GPT-2 <span class="citation" title="Radford et al. (2019). Language Models are Unsupervised Multitask Learners. OpenAI.">(Radford et al., 2019)</span> introduced an important variant: byte-level BPE. Instead of starting from Unicode characters, it starts from the 256 possible byte values.</p>
+
+    <p>Why bytes? Because Unicode has 140,000+ code points and multi-byte encodings. A character-level BPE must handle encoding failures when it encounters characters not in its base vocabulary. Bytes have no such failure mode. Every possible string can be expressed as a sequence of bytes. The fallback vocabulary is always complete.</p>
+
+    <p>In practice, GPT-2's tokeniser maps each byte to a printable Unicode character to avoid control characters in the vocabulary, then applies BPE on those representations. The mechanism is identical; only the base units differ.</p>
+
+    <p>GPT-4 uses a different tokeniser called <code>cl100k_base</code> (available via the <code>tiktoken</code> library), with a 100,277-token vocabulary. Llama models use SentencePiece with a similar BPE approach. The details differ, but the core algorithm is the same.</p>
+
+    <h2>Why the Same Word Tokenises Differently in Different Contexts</h2>
+
+    <p>This surprises many practitioners. How can the same string produce different tokens depending on what surrounds it?</p>
+
+    <p>The answer is whitespace. BPE tokenisers typically treat a leading space as part of a token. The token for " low" (space + l + o + w) is often a different token from "low" (no leading space). At the start of a sentence, "low" has no preceding space and may tokenise differently from "low" in the middle of a sentence where a space precedes it.</p>
+
+    <p>GPT-2's tokeniser specifically preserves whitespace in this way. The token <code>" the"</code> (space + the) is one of the most common tokens in the vocabulary. But <code>"the"</code> without a leading space &mdash; as it appears after a newline or at the start of a string &mdash; may tokenise differently, or use a separate vocabulary entry.</p>
+
+    <p>The practical consequence: if you are comparing two strings by counting tokens, stripping whitespace before tokenising can give you the wrong count. If you are prompting a model and you remove a leading space, the first word's token representation changes, which can subtly alter the model's probabilities for what comes next.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: why does "1 + 1" sometimes produce 3 tokens and sometimes 5?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Numbers are tokenised by BPE based on frequency in the training corpus. "1" may be its own token. "+" may be its own token. The space between them may or may not attach to the adjacent symbol depending on the merge rules. For multi-digit numbers like "128" or "1024", BPE may have learned to merge common digit sequences or may not, depending on how often those exact sequences appeared during training. This is why arithmetic can fail unexpectedly: "128" might tokenise as one token in some contexts and as "12" + "8" or "1" + "28" in others, depending on surrounding context and tokeniser version.</p>
+      </div>
+    </div>
+
+    <h2>The Vocabulary Size Trade-off</h2>
+
+    <p>Choosing the vocabulary size is an engineering decision with real consequences.</p>
+
+    <p>A <strong>small vocabulary</strong> (say, 8,000 tokens) means more merges are needed to represent any given text. Common words become single tokens, but even moderately uncommon ones get split. Sequences are longer. Attention cost rises. The model must do more work to assemble meaning from pieces.</p>
+
+    <p>A <strong>large vocabulary</strong> (say, 200,000 tokens) means more words get single-token representations. Sequences are shorter. But the embedding matrix grows: each vocabulary entry has a corresponding embedding vector. A vocabulary of 200,000 with 4,096-dimensional embeddings requires 200,000 &times; 4,096 = 819 million parameters just for the embedding layer. The output projection (mapping back from hidden dimension to vocabulary probabilities) has the same size. Memory and compute costs at the vocabulary layer become non-trivial.</p>
+
+    <p>Most production models settle in the 30,000&ndash;100,000 range as a practical compromise. GPT-2 used 50,257. GPT-4 uses 100,277. Llama 2 uses 32,000.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      <p>There is ongoing research into whether tokenisation is the right primitive for language models at all. Character-level and byte-level models that learn from the ground up &mdash; without any BPE merging &mdash; have shown competitive results at scale <span class="citation" title="Yu et al. (2023). MegaByte: Predicting Million-byte Sequences with Multiscale Transformers. NeurIPS.">(Yu et al., 2023)</span>. The argument: letting the model learn its own compression, rather than applying a hand-designed statistical algorithm first, might produce better representations. The counter-argument: BPE compression dramatically reduces sequence lengths, which reduces training compute, which matters at scale. The debate is not settled. Most frontier models still use BPE or a close variant.</p>
+    </div>
+
+    <h2>Consequences for Model Behaviour</h2>
+
+    <p>Understanding BPE unlocks explanations for several model behaviours that otherwise seem mysterious.</p>
+
+    <h3>Arithmetic failures</h3>
+
+    <p>A model trained to add numbers faces an asymmetric task depending on how those numbers tokenise. "1 + 1" tokenises cleanly. "127 + 893" may tokenise as "12", "7", " +", " 8", "93" &mdash; five tokens with no alignment to the mathematical structure of the problem. The model must learn to do arithmetic on fragmented input, which is much harder. This partially explains why small models fail on multi-digit arithmetic and why chain-of-thought prompting <span class="citation" title="Wei et al. (2022). Chain-of-Thought Prompting Elicits Reasoning in Large Language Models. NeurIPS.">(Wei et al., 2022)</span> helps: writing intermediate steps externalises the carry operations into the token stream where the model can process them sequentially.</p>
+
+    <h3>Non-English language degradation</h3>
+
+    <p>BPE learns from the training corpus. If that corpus is 90% English, English words get compressed into single or double tokens while non-English text gets fragmented far more aggressively. A Chinese character that maps to a single UTF-8 byte sequence might take four tokens to represent. This means non-English input is effectively compressed less, sequences are longer, and the model has proportionally less context to work with per semantic unit. The degradation is not a model capacity problem &mdash; it is a tokenisation artefact.</p>
+
+    <h3>Context window calculations</h3>
+
+    <p>When you ask "how many words can fit in a 4,096-token context window", the answer is not 4,096. English text averages roughly 0.75 words per token, so 4,096 tokens is approximately 3,000 words of clean English prose. Dense technical text or code may be closer to 1:1. Non-English text may be worse. The only accurate way to know how many tokens your input uses is to run it through the tokeniser.</p>
+
+    <h3>Prompt injection and adversarial inputs</h3>
+
+    <p>Certain strings tokenise in unexpected ways, which can be exploited. Unusual Unicode characters, repeated punctuation, and strings that trigger unusual merge patterns can consume far more tokens than their visual length suggests, potentially overflowing context windows or triggering unexpected model behaviour. Understanding that the model operates on tokens, not characters or words, is the first step to reasoning about these vulnerabilities.</p>
+
+    <h2>Implementing BPE in Python</h2>
+
+    <p>Here is a minimal BPE implementation from scratch. This is not production-grade but illustrates every step of the algorithm.</p>
+
+    <pre><code>from collections import Counter, defaultdict
+
+def get_vocab(corpus):
+    """Split corpus into character-level word frequency dict."""
+    vocab = Counter()
+    for word in corpus.split():
+        vocab[' '.join(list(word)) + ' &lt;/w&gt;'] += 1
+    return vocab
+
+def get_pairs(vocab):
+    """Count all adjacent symbol pairs across the vocabulary."""
+    pairs = defaultdict(int)
+    for word, freq in vocab.items():
+        symbols = word.split()
+        for i in range(len(symbols) - 1):
+            pairs[(symbols[i], symbols[i + 1])] += freq
+    return pairs
+
+def merge_vocab(pair, vocab):
+    """Apply a single merge rule to the vocabulary."""
+    merged = {}
+    bigram = ' '.join(pair)
+    replacement = ''.join(pair)
+    for word, freq in vocab.items():
+        new_word = word.replace(bigram, replacement)
+        merged[new_word] = freq
+    return merged
+
+def train_bpe(corpus, num_merges):
+    """Run BPE training for num_merges iterations."""
+    vocab = get_vocab(corpus)
+    merge_rules = []
+
+    for i in range(num_merges):
+        pairs = get_pairs(vocab)
+        if not pairs:
+            break
+        best_pair = max(pairs, key=pairs.get)
+        vocab = merge_vocab(best_pair, vocab)
+        merge_rules.append(best_pair)
+        print(f"Merge {i+1}: {best_pair[0]} + {best_pair[1]} "
+              f"(count={pairs[best_pair]})")
+
+    return vocab, merge_rules
+
+# Example
+corpus = "low low low lowest lowest newer newer newer newer wider wider wider"
+vocab, rules = train_bpe(corpus, num_merges=10)</code></pre>
+
+    <p>Running this produces the merge sequence described earlier. The vocabulary dictionary after training shows the compressed word forms. The merge rules list is what you save &mdash; it is the tokeniser.</p>
+
+    <h3>Applying the rules to new text</h3>
+
+    <pre><code>def tokenise(word, merge_rules):
+    """Apply merge rules to a single word."""
+    symbols = list(word) + ['&lt;/w&gt;']
+
+    for pair in merge_rules:
+        i = 0
+        new_symbols = []
+        while i &lt; len(symbols):
+            if (i &lt; len(symbols) - 1 and
+                    symbols[i] == pair[0] and
+                    symbols[i + 1] == pair[1]):
+                new_symbols.append(''.join(pair))
+                i += 2
+            else:
+                new_symbols.append(symbols[i])
+                i += 1
+        symbols = new_symbols
+
+    return symbols
+
+print(tokenise('lower', rules))   # ['lower', '&lt;/w&gt;'] if 'lower' is learned
+print(tokenise('lowing', rules))  # ['low', 'i', 'n', 'g', '&lt;/w&gt;']</code></pre>
+
+    <p>The function iterates through merge rules in learned order, applying each one greedily. This greedy left-to-right application is important: it means the first applicable rule wins, which is why rule ordering matters.</p>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A BPE tokeniser trained on mostly English text is used to tokenise Japanese text. Compared to English of the same semantic content, the Japanese text will most likely:</div>
+      <button class="quiz-option" data-letter="A">Use fewer tokens, because Japanese is a more compressed writing system.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Use more tokens per semantic unit, because Japanese characters appear rarely in the training corpus so fewer merge rules were learned for them.</button>
+      <button class="quiz-option" data-letter="C">Use the same number of tokens, because BPE is language-agnostic.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. BPE learns merge rules based on training corpus frequency. A corpus dominated by English will have learned thousands of merges for common English subwords but very few for Japanese characters. Japanese text tokenises into more tokens per semantic unit, meaning the model effectively has less context for the same number of words."
+           data-incorrect="Not quite. BPE is statistically driven, not language-agnostic. The merge rules reflect whatever text was most common during training. Re-read the section on non-English language degradation."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You are counting how many tokens the word "running" uses. You tokenise it in two ways: (A) as a standalone string, (B) embedded in the sentence "She was running fast." The token count:</div>
+      <button class="quiz-option" data-letter="A">Will always be the same &mdash; the word is identical in both cases.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">May differ, because a leading space (or its absence) can change how BPE applies its merge rules to the boundary of the word.</button>
+      <button class="quiz-option" data-letter="C">Will differ because the model uses surrounding words as context when tokenising.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. BPE tokenisers like GPT-2's treat a leading space as part of a token. 'running' and ' running' may be different vocabulary entries or tokenise via different merge paths. The model has no context window at tokenisation time &mdash; but the preceding space character (or its absence) is part of the byte stream and affects the merge rules that apply."
+           data-incorrect="Close, but the reason is specific. The model does not use semantic context during tokenisation &mdash; tokenisation is a purely mechanical byte-sequence operation. The difference comes from the presence or absence of a space character at the word boundary."></div>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>Tokens are not words. They are the subword units that were statistically most useful to merge during training on a specific corpus. Every quirk of model behaviour that involves text format &mdash; number arithmetic, non-English degradation, whitespace sensitivity, context window calculations &mdash; traces back to this single fact. The model never sees your text; it sees a sequence of integers. Understanding how that conversion works is not optional background knowledge. It is the foundation of reliable prompt engineering and LLM debugging.</p>
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why does BPE use a fixed vocabulary rather than character-by-character encoding? What is the cost of character-level encoding that BPE avoids?</li>
+        <li>Why does tokenisation vary for the same word depending on surrounding context? What specific character causes this variation in GPT-2-style tokenisers?</li>
+        <li>What is the consequence of a word being split into many tokens versus few? Give one concrete example of how this affects model behaviour.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAVIGATION FOOTER -->
+  <div class="page-nav" data-prev="n08-gpt-from-scratch" data-next="n09-bpe-tokenisation">
+    <a href="../module-3/n08-gpt-from-scratch.html" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">N08 &mdash; GPT From Scratch</span>
+    </a>
+    <div></div>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n09-bpe-tokenisation');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrolled = window.scrollY;
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (total > 0 ? (scrolled / total) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Toggle-reveal panels
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      var isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      var arrow = header.querySelector('span:last-child');
+      if (arrow) arrow.textContent = isOpen ? '+' : '−';
+    });
+  });
+
+  // Quiz interactions
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.style.background = '';
+          b.style.color = '';
+        });
+        btn.style.background = correct ? 'var(--green-dim)' : 'var(--red-dim)';
+        btn.style.color = correct ? 'var(--green)' : 'var(--red)';
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.padding = '1rem 1.25rem';
+          feedback.style.fontSize = '0.88rem';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--text-muted)';
+          feedback.style.borderTop = '1px solid var(--border)';
+        }
+      });
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var isOpen = verHeader.classList.contains('open');
+      verHeader.classList.toggle('open', !isOpen);
+      verHeader.setAttribute('aria-expanded', String(!isOpen));
+      var body = document.querySelector('.verification-body');
+      if (body) body.classList.toggle('open', !isOpen);
+    });
+    verHeader.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verHeader.click(); }
+    });
+  }
+
+  // Mobile nav toggle
+  var navToggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (navToggle && overlay && sidebar) {
+    navToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('visible');
+    });
+  }
+}());
+</script>
+
+</body>
+</html>

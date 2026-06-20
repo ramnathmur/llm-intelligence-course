@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N01 &mdash; Autograd &mdash; How Gradients Flow &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N01 &mdash; Autograd &mdash; How Gradients Flow">
+<meta property="og:description" content="Every modern framework secretly builds a computational graph and walks it backward">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="n01-autograd.html">Module 1: The Gradient Machinery</a>
+    <span class="sep">&#8250;</span>
+    Autograd &mdash; How Gradients Flow
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">N01 &middot; Module 1</div>
+    <h1>Autograd &mdash; How Gradients Flow</h1>
+    <p class="one-liner">Every modern framework secretly builds a computational graph and walks it backward</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Think of an audit trail. Every calculation in a forward pass is logged in a ledger. The backward pass traces the ledger in reverse, computing how each decision contributed to the final error &mdash; exactly like a financial audit that works backward from a discrepancy to the original entry that caused it.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>PyTorch, TensorFlow, and JAX all work the same way under the hood: they build a graph of operations and differentiate it automatically. When your training loop behaves unexpectedly &mdash; gradients vanish, explode, or simply do nothing &mdash; the explanation almost always lives in the computational graph. Understanding autograd makes framework behaviour legible. You stop treating the framework as a black box and start reading what it is actually doing.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>How automatic differentiation works, why computational graphs must be stored during the forward pass, why backpropagation requires the chain rule rather than simple division, and what zeroing the gradients before each update actually does and why skipping it silently corrupts training.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites: None &mdash; this is the entry point.</span>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>The Problem That Autograd Solves</h2>
+
+    <p>Training a neural network is an optimization problem. You have a function &mdash; the network &mdash; that turns inputs into predictions. You have a loss function that measures how wrong those predictions are. Your goal is to adjust the network's parameters so the loss falls.</p>
+
+    <p>The adjustment rule is simple in principle: move each parameter in the direction that reduces the loss. To know which direction that is, you need the gradient of the loss with respect to every parameter. For a network with millions of parameters, computing those gradients by hand is not an option.</p>
+
+    <p>This is what automatic differentiation, or <em>autograd</em>, solves. It is a system that takes any computation you define in Python and computes its exact gradient automatically. PyTorch calls it <code>autograd</code>. TensorFlow calls it <code>GradientTape</code>. JAX calls it <code>grad</code>. The mechanism is different in each case, but the idea is identical.</p>
+
+    <h3>Why Not Just Estimate the Gradient?</h3>
+
+    <p>You might wonder: why not estimate the gradient numerically? Take the loss, nudge each parameter slightly, measure how the loss changes, divide. This is called finite differences, and it works in theory. In practice, a network with ten million parameters requires twenty million forward passes to estimate all gradients. That is prohibitively slow. Autograd computes all gradients in a single backward pass &mdash; a feat made possible by the chain rule of calculus.</p>
+
+    <h2>The Computational Graph</h2>
+
+    <p>When you run a forward pass in PyTorch, Python is not just computing numbers. It is building a record of every operation performed. This record is the <em>computational graph</em>.</p>
+
+    <p>Imagine you write:</p>
+
+    <pre><code>import torch
+
+x = torch.tensor(3.0, requires_grad=True)
+y = x ** 2       # y = x^2
+z = y * 2 + 1   # z = 2x^2 + 1</code></pre>
+
+    <p>Behind the scenes, PyTorch creates three nodes: one for <code>x</code>, one for <code>y</code>, one for <code>z</code>. It also records the edges between them &mdash; the <em>operations</em> that connect them. The <code>**</code> operator created a squaring node. The <code>*</code> and <code>+</code> operators created multiplication and addition nodes. Each node stores a reference to the operation that produced it and a reference to its inputs.</p>
+
+    <p>This structure is a directed acyclic graph (DAG). Directed because information flows one way &mdash; from inputs toward outputs. Acyclic because no value depends on itself.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The computational graph is not an optimization choice. It is a necessity. To compute the gradient of the final loss with respect to an early parameter, you must know every operation that sits between them. The graph is that record. Without it, backpropagation has nothing to trace.</p>
+    </div>
+
+    <h3>What Gets Stored and What Does Not</h3>
+
+    <p>PyTorch only tracks operations involving tensors with <code>requires_grad=True</code>. Your input data &mdash; images, text tokens, numbers &mdash; typically does not require gradients. Only the model's parameters do. This distinction matters: it controls which parts of the graph get built, and therefore which parts participate in the backward pass.</p>
+
+    <p>By default, PyTorch builds the graph as a <em>dynamic</em> structure: it is rebuilt fresh on every forward pass. This is why PyTorch's autograd is called "define-by-run." TensorFlow 1.x used a static graph, defined once and compiled before any data was run through it. JAX uses a different model again, based on function transformations. The dynamic approach is more flexible &mdash; you can write conditionals and loops in ordinary Python and they will be captured in the graph automatically.</p>
+
+    <h2>The Forward Pass: Building the Ledger</h2>
+
+    <p>The forward pass does two things at once. First, it computes the output values &mdash; this is what you see. Second, it records the operations used to compute them &mdash; this happens invisibly.</p>
+
+    <p>Each operation node in the graph stores a <em>backward function</em>: a small piece of code that knows how to compute the local gradient of that operation given the upstream gradient. The <code>**2</code> operation stores the rule for differentiating a square: <em>bring down the exponent, reduce the power by one</em>. The <code>*</code> operation stores the rule for differentiating a product.</p>
+
+    <p>Think of the audit trail analogy. During the financial year, every transaction is recorded in a ledger: who paid whom, what the amount was, what account was affected. The recording happens as a byproduct of running the business. At audit time, the auditor does not need to re-run the business &mdash; the ledger is already there.</p>
+
+    <p>In autograd, the graph is that ledger. The forward pass runs the business and builds the record simultaneously.</p>
+
+    <h2>The Chain Rule: Why Backpropagation Works</h2>
+
+    <p>To understand why backpropagation works, you need the chain rule. Do not worry &mdash; it is simpler than it sounds.</p>
+
+    <p>Suppose you have a composed function: one operation feeds into another. You bake a loaf of bread. The temperature of your oven affects the colour of the crust. The colour of the crust affects the score a bread judge gives it. If you want to know how the oven temperature affects the score, you cannot simply divide the score by the temperature &mdash; the relationship passes through the intermediate quantity (crust colour). You must multiply two rates of change: how much crust colour changes per degree of oven temperature, and how much score changes per unit of crust colour.</p>
+
+    <p>That is the chain rule. The rate of change of the final output with respect to an early input equals the product of all the local rates of change along the path.</p>
+
+    <p>For a neural network, the loss is the final output and each weight is an early input. The path between them may pass through dozens of operations. The chain rule says: to find how the loss responds to a weight, multiply all the local gradients along the path from that weight to the loss.</p>
+
+    <h3>Why Not Simple Division?</h3>
+
+    <p>You might ask: why can we not just divide the change in loss by the change in weight? The answer is that division only works when there is a direct, linear relationship between two quantities. In a neural network, every weight is embedded in a chain of nonlinear operations &mdash; activations like ReLU or sigmoid that bend and reshape the signal. Simple division ignores these intervening transformations. The chain rule accounts for them precisely.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if a weight appears in two separate paths to the loss, what happens to its gradient?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>The gradients from both paths are <em>added together</em>. This follows directly from the chain rule applied to a DAG: when multiple paths connect a weight to the final loss, each path contributes its own partial gradient, and the total gradient is their sum. PyTorch handles this automatically &mdash; when <code>.backward()</code> is called, gradient contributions accumulate into the <code>.grad</code> attribute of each leaf tensor.</p>
+      </div>
+    </div>
+
+    <h2>The Backward Pass: Tracing the Audit Trail</h2>
+
+    <p>When you call <code>loss.backward()</code>, PyTorch traverses the computational graph in reverse &mdash; from the loss node back toward the leaf parameters. At each node, it calls the stored backward function, passing in the gradient that arrived from the nodes above. The backward function computes the local gradient and passes the result to the nodes below.</p>
+
+    <p>This process is called <em>reverse-mode automatic differentiation</em>. It is efficient because it computes the gradient of one scalar output (the loss) with respect to many inputs (all parameters) in a single pass. This is the right mode when you have far more parameters than outputs &mdash; which is always the case in neural networks.</p>
+
+    <p>Here is the traversal step by step, using the earlier example:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Start at the loss</h4>
+        <p>The gradient of the loss with respect to itself is 1. This seeds the backward pass. Every other gradient is expressed relative to this starting value.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Move to the addition node</h4>
+        <p>The <code>+ 1</code> operation does not change the gradient. Adding a constant shifts the output but does not change how sensitive it is to its inputs. Gradient passes through unchanged.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Move to the multiplication node</h4>
+        <p>The <code>* 2</code> operation scales the gradient by 2. Whatever gradient arrived from above is multiplied by the local derivative of the multiplication operation.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Move to the squaring node</h4>
+        <p>The <code>** 2</code> operation has local derivative <code>2 * x</code>. With <code>x = 3</code>, the local derivative is 6. The arriving gradient is multiplied by 6. The final gradient of <code>z</code> with respect to <code>x</code> is <code>1 * 2 * 6 = 12</code>.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Accumulate into .grad</h4>
+        <p>The computed gradient (12) is added to <code>x.grad</code>. If <code>x.grad</code> was zero before, it is now 12. This is the signal that tells the optimizer how to adjust <code>x</code>.</p>
+      </div>
+    </div>
+
+    <p>You can verify this yourself:</p>
+
+    <pre><code>z.backward()
+print(x.grad)   # tensor(12.)  &mdash; matches our manual calculation</code></pre>
+
+    <h2>The Gradient Accumulation Problem</h2>
+
+    <p>Here is a detail that trips up many beginners, and that has an elegant explanation once you understand the graph.</p>
+
+    <p>Call <code>loss.backward()</code> twice without zeroing the gradients in between. You will find that the gradients are doubled. Call it three times and they are tripled.</p>
+
+    <p>This is not a bug. It is the system working as designed. PyTorch accumulates gradients into <code>.grad</code> rather than replacing them. The reason is that some training patterns genuinely require accumulating gradients across multiple forward passes before updating parameters &mdash; for example, when simulating a large batch size on a GPU with limited memory by running several small batches.</p>
+
+    <p>But in standard training, you want fresh gradients on every update. Accumulated gradients from previous steps corrupt the update direction &mdash; the optimizer sees a mixture of the current batch's signal and the previous batch's signal. This produces noisy, slow, or divergent training.</p>
+
+    <p>The fix is a single line before each forward pass:</p>
+
+    <pre><code>optimizer.zero_grad()   # clear accumulated gradients
+outputs = model(inputs)
+loss = criterion(outputs, targets)
+loss.backward()         # compute fresh gradients
+optimizer.step()        # update parameters</code></pre>
+
+    <p>The call to <code>optimizer.zero_grad()</code> sets every parameter's <code>.grad</code> to zero. The subsequent backward pass then accumulates from zero, giving you a clean gradient for that batch alone.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      <p>Should you call <code>optimizer.zero_grad(set_to_none=True)</code> instead of the default? PyTorch documentation recommends this in newer versions: setting gradients to <code>None</code> rather than zero avoids allocating memory for gradient tensors on parameters that did not receive gradients in that pass. The performance difference is minor for small models but measurable for very large ones. The behavior is identical for standard training loops &mdash; the optimizer checks for <code>None</code> the same way it checks for zero.</p>
+    </div>
+
+    <h2>Detaching from the Graph</h2>
+
+    <p>Sometimes you want to use a tensor's value in a computation without tracking that computation for backpropagation. A common case: computing a metric for logging purposes. You do not want the logging computation to add nodes to the graph or consume memory.</p>
+
+    <p>PyTorch provides two tools for this:</p>
+
+    <pre><code># Option 1: detach creates a new tensor with no gradient history
+value = loss.detach().item()
+
+# Option 2: no_grad context manager disables graph building entirely
+with torch.no_grad():
+    predictions = model(inputs)   # no graph built</code></pre>
+
+    <p>The <code>torch.no_grad()</code> context is especially useful during inference and validation: you do not need gradients, and disabling the graph saves both memory and computation.</p>
+
+    <h2>How the Three Major Frameworks Differ</h2>
+
+    <p>The underlying principle is the same across PyTorch, TensorFlow, and JAX, but the implementation choices differ meaningfully.</p>
+
+    <div class="comparison-table">
+      <div class="col-header">Framework</div>
+      <div class="col-header">Graph model</div>
+      <div class="col-body">
+        <strong>PyTorch</strong><br>
+        Dynamic (define-by-run). The graph is rebuilt on every forward pass. Enables arbitrary Python control flow inside the model.
+      </div>
+      <div class="col-body">
+        <strong>TensorFlow 2 / JAX</strong><br>
+        TF2 defaults to eager (dynamic) like PyTorch, but offers <code>@tf.function</code> to compile static graphs. JAX uses function transformations (<code>jit</code>, <code>grad</code>) that trace a static graph on the first call and reuse it.
+      </div>
+    </div>
+
+    <p>For learning purposes, PyTorch's dynamic graph is far more transparent. You can inspect the graph, add print statements inside the model, and reason about what is happening step by step. This is why most deep learning courses &mdash; including this one &mdash; use PyTorch as the teaching framework.</p>
+
+    <h2>A Minimal Working Example</h2>
+
+    <p>Here is the complete training loop for the simplest possible neural network: a single linear layer fitting <code>y = 2x</code>.</p>
+
+    <pre><code>import torch
+import torch.nn as nn
+
+# Data: y = 2x
+x = torch.tensor([[1.0], [2.0], [3.0], [4.0]])
+y = torch.tensor([[2.0], [4.0], [6.0], [8.0]])
+
+# Model: one linear layer, no activation
+model = nn.Linear(in_features=1, out_features=1)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+criterion = nn.MSELoss()
+
+for epoch in range(100):
+    optimizer.zero_grad()        # 1. Clear old gradients
+    predictions = model(x)       # 2. Forward pass — graph is built here
+    loss = criterion(predictions, y)   # 3. Compute loss
+    loss.backward()              # 4. Backward pass — gradients computed
+    optimizer.step()             # 5. Update parameters
+
+print(model.weight)   # Should be close to [[2.0]]
+print(model.bias)     # Should be close to [[0.0]]</code></pre>
+
+    <p>Every line in this loop corresponds to a concept in this page. Step 1 clears accumulation. Step 2 builds the graph. Step 4 traces it backward. Step 5 uses the gradients to adjust the weights. After 100 iterations, the model has learned that the relationship between <code>x</code> and <code>y</code> is multiplication by 2.</p>
+
+    <h3>What the Graph Looks Like During Step 2</h3>
+
+    <p>When <code>model(x)</code> runs, PyTorch performs a linear transformation: <code>output = x @ weight.T + bias</code>. This creates two nodes in the graph &mdash; one for the matrix multiplication, one for the bias addition. Both nodes point back to <code>weight</code> and <code>bias</code>, which are leaf tensors with <code>requires_grad=True</code>. When <code>criterion(predictions, y)</code> runs, a loss node is added. The graph is now complete.</p>
+
+    <p>When <code>loss.backward()</code> runs in step 4, PyTorch walks this graph in reverse. The gradient flows backward through the MSE loss node, through the bias addition node into <code>bias.grad</code>, and through the matrix multiplication node into <code>weight.grad</code>. These two scalars &mdash; one for weight, one for bias &mdash; are the entire gradient signal that the optimizer needs.</p>
+
+    <!-- SELF-CHECK QUIZ -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">You call <code>loss.backward()</code> without first calling <code>optimizer.zero_grad()</code>. You then run another forward pass and call <code>loss.backward()</code> again. What do the gradients in <code>model.parameters()</code> now contain?</div>
+      <button class="quiz-option" data-letter="A">Only the gradients from the second backward pass &mdash; the first was overwritten.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The sum of gradients from both backward passes, accumulated into <code>.grad</code>.</button>
+      <button class="quiz-option" data-letter="C">Zero &mdash; calling backward twice cancels the gradients out.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. PyTorch accumulates gradients on each backward call. Without zeroing first, the .grad tensors hold the sum of all gradients from all backward passes since the last zero_grad call. This is intentional design for gradient accumulation training, but a silent bug in standard single-batch training."
+           data-incorrect="Not quite. PyTorch does not overwrite or cancel gradients &mdash; it accumulates them. Check the Key Insight box on gradient accumulation above."></div>
+    </div>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Why does computing gradients for a neural network require the chain rule rather than simple division?</div>
+      <button class="quiz-option" data-letter="A">Because neural networks have too many parameters for division to be computationally feasible.</button>
+      <button class="quiz-option" data-letter="B">Because division only works for linear functions, and networks contain nonlinear activation functions between each weight and the output.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Both: division only captures direct relationships, but every weight's effect on the loss passes through a chain of operations including nonlinear activations. The chain rule multiplies the local gradients along that chain to get the total gradient.</button>
+      <div class="quiz-feedback"
+           data-correct="Exactly right. Division would only work if there were a direct proportional relationship between weight and loss. Because the relationship passes through matrix multiplications, nonlinear activations, and more matrix multiplications, you must account for each link in the chain &mdash; that is precisely what the chain rule formalizes."
+           data-incorrect="You're partially right, but the full answer captures both why division fails (nonlinearity) and what the chain rule does instead (multiplies local gradients). Re-read the section on the chain rule."></div>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Consider a model with two branches that both contribute to the loss &mdash; for example, a multi-task network that predicts price and category simultaneously. How does the computational graph handle the fact that shared early layers receive gradient signals from two separate loss heads? Where do those signals combine, and what risk does this create for training stability?</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is a computational graph and why must it be stored during the forward pass?</li>
+        <li>Why does backpropagation require the chain rule rather than simple division?</li>
+        <li>What does zeroing the gradients before each update do and why is it necessary?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAVIGATION FOOTER -->
+  <div class="page-nav" data-prev="" data-next="n01-autograd">
+    <div></div>
+    <a href="#next" class="next">
+      <span class="nav-direction">Next &rarr;</span>
+      <span class="nav-title">N02 &mdash; Coming Soon</span>
+    </a>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n01-autograd');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrolled = window.scrollY;
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (total > 0 ? (scrolled / total) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Toggle-reveal panels
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      var isOpen = body.classList.contains('open');
+      body.classList.toggle('open', !isOpen);
+      var arrow = header.querySelector('span:last-child');
+      if (arrow) arrow.textContent = isOpen ? '+' : '−';
+    });
+  });
+
+  // Quiz interactions
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.style.background = '';
+          b.style.color = '';
+        });
+        btn.style.background = correct ? 'var(--green-dim)' : 'var(--red-dim)';
+        btn.style.color = correct ? 'var(--green)' : 'var(--red)';
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.padding = '1rem 1.25rem';
+          feedback.style.fontSize = '0.88rem';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--text-muted)';
+          feedback.style.borderTop = '1px solid var(--border)';
+        }
+      });
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var isOpen = verHeader.classList.contains('open');
+      verHeader.classList.toggle('open', !isOpen);
+      verHeader.setAttribute('aria-expanded', String(!isOpen));
+      var body = document.querySelector('.verification-body');
+      if (body) body.classList.toggle('open', !isOpen);
+    });
+    verHeader.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); verHeader.click(); }
+    });
+  }
+
+  // Mobile nav toggle
+  var navToggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (navToggle && overlay && sidebar) {
+    navToggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('visible');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('visible');
+    });
+  }
+}());
+</script>
+
+</body>
+</html>

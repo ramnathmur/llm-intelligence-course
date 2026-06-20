@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F02 &mdash; Loss Functions &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F02 &mdash; Loss Functions">
+<meta property="og:description" content="A loss function measures how wrong a prediction is &mdash; training is just minimising this number.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/f01-what-is-a-model.html">Module 1: What Models Actually Do</a>
+    <span class="sep">&#8250;</span>
+    Loss Functions
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">F02 &middot; Module 1</div>
+    <h1>Loss Functions</h1>
+    <p class="one-liner">A loss function measures how wrong a prediction is &mdash; training is just minimising this number.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A performance review scorecard. The exact metrics on the scorecard shape what behaviours the employee optimises for &mdash; regardless of what the manager actually wants.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    The loss function defines what <em>wrong</em> means. Choosing the wrong one produces a model that optimises for the wrong thing &mdash; a fundamental architectural decision with downstream consequences that no amount of later tuning can fully reverse.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    What a loss function is, why the choice matters, and which loss fits which problem type.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f01-what-is-a-model.html" class="prereq-chip">F01 &mdash; What Is a Model?</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Imagine your firm is evaluating a junior analyst. At year-end, HR hands you a scorecard. It has five metrics: client-facing hours, decks produced, lines of code committed, internal Slack messages sent, and time billed. Your analyst studies the scorecard and, being smart, optimises hard for everything on it. By the metrics, she is flawless. But the clients are quietly unhappy, because what the firm actually needed &mdash; sound judgment under pressure &mdash; was never on the scorecard.</p>
+
+    <p>That scenario is not a management parable. It is a precise description of how machine learning models fail. A model can only optimise for what you put in front of it to measure. The measurement instrument is the <strong>loss function</strong>, and choosing it incorrectly is one of the most consequential architectural decisions in machine learning &mdash; because a model that trains on the wrong loss is not broken. It is doing exactly what you asked. It is just asking the wrong question.</p>
+
+    <p>This page builds the concept from the ground up. You will understand what a loss function is, why the squared-error and absolute-error losses behave differently when outliers appear, why plugging the wrong loss into a classification problem produces a category error, and what cross-entropy is measuring geometrically when it scores a probability prediction. By the end, "choosing a loss function" will feel less like a technical incantation and more like a design decision with clear, principled stakes.</p>
+
+    <h2>What a loss function actually is</h2>
+
+    <p>A model makes a prediction. Reality has a correct answer. A loss function is the formula that takes those two numbers and returns a single score: <em>how wrong were you?</em> A loss of zero means the prediction and the answer were identical. A large loss means they were far apart. During training, the learning algorithm adjusts the model's internal parameters &mdash; its weights &mdash; to make that loss score as small as possible across every example in the training data.</p>
+
+    <p>That is the entire job description. But note what is and is not in it. The loss function does not care <em>why</em> the prediction was wrong. It does not care which direction the error went. It does not care whether a large error is ten times worse than a small error or a hundred times worse. All of those design choices are baked into the formula you choose. Different formulas encode different answers, which is why the choice matters so much.</p>
+
+    <p>Think of training as a thermostat. The thermostat has one job: push the room temperature toward the target. It does not know whether the room is a bedroom or a server room, whether the target is appropriate, or what happens if the heating element stays on too long. It just minimises the gap it was given. The loss function is the thermostat's definition of "gap." Change the definition, and the thermostat optimises a different physical quantity &mdash; perhaps humidity instead of temperature &mdash; and the room ends up in a completely different state.</p>
+
+    <h2>The two workhorses for regression: MSE and MAE</h2>
+
+    <p>When your model predicts a continuous number &mdash; a revenue forecast, a patient's blood pressure, a delivery time in minutes &mdash; you are doing <strong>regression</strong>. The two most common loss functions for regression have names that sound more arcane than they are.</p>
+
+    <h3>Mean Squared Error (MSE)</h3>
+
+    <p><strong>Mean Squared Error</strong> works like this. For each prediction, compute the difference between your prediction and the true value. Square it. Average those squared differences across all examples. That average is your loss.</p>
+
+    <p>Why square the difference? Two reasons that sound independent but are really the same reason viewed from different angles.</p>
+
+    <p>First, squaring makes negative and positive errors equivalent. If you predicted 10 when the answer was 8, you were off by +2. If you predicted 6, you were off by &minus;2. Both should contribute the same loss. Squaring converts both into +4 before averaging.</p>
+
+    <p>Second, and more importantly for your intuition: squaring punishes large errors <em>disproportionately</em>. An error of 2 contributes 4 to the sum. An error of 4 contributes 16 &mdash; four times the error, sixteen times the penalty. An error of 10 contributes 100. The squaring function curves upward steeply, so the learning algorithm learns to treat large outlier errors as far more costly than small errors. It will sacrifice a little accuracy on ten medium errors to avoid one catastrophic error. That is usually the right trade-off in engineering contexts, where a catastrophic outlier (a bridge load estimate off by a factor of three) is far worse than a dozen minor ones.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>MSE's squaring does two things simultaneously: it removes sign (so errors in both directions count equally) and it <em>amplifies large errors</em> nonlinearly. Choosing MSE is a statement that your largest errors are far more expensive than your smallest ones &mdash; and you want the model to treat them that way.</p>
+    </div>
+
+    <h3>Mean Absolute Error (MAE)</h3>
+
+    <p><strong>Mean Absolute Error</strong> does the same thing but uses the absolute value instead of squaring. For each prediction, take the absolute difference between the prediction and the true value. Average those. Done.</p>
+
+    <p>An error of 2 contributes 2. An error of 4 contributes 4 &mdash; exactly twice as much, linearly. An error of 10 contributes 10. There is no accelerating penalty. The learning algorithm treats all errors proportionally, without special concern for outliers.</p>
+
+    <p>When does that matter? Consider a dataset of monthly customer spending where 95% of customers spend between &pound;20 and &pound;200, but 5% are high-value customers spending &pound;10,000. Those outlier rows will dominate MSE training: the model will spend enormous effort fitting the &pound;10,000 customers perfectly, because their errors square to massive numbers. The model may produce poor predictions for the other 95%.</p>
+
+    <p>MAE treats all errors linearly. The high-spenders still contribute more (their errors are numerically bigger), but not catastrophically more. The model ends up predicting the median customer better, at the cost of fitting the extremes less precisely. Whether that trade-off is right depends on your business question. If you are a retention team worried about the average customer, MAE fits. If you are a wealth management team where high-value clients drive nearly all revenue, MSE's outlier sensitivity might be exactly what you want.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Think first: if MSE punishes large errors heavily, does that make it strictly better than MAE?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>No &mdash; it makes it <em>differently suited</em>. MSE is sensitive to outliers in both directions: if your training data contains mislabelled rows or genuinely extreme values, MSE will skew the whole model toward accommodating them. MAE is more robust to noisy labels because it does not amplify those errors. There is a third option, <strong>Huber loss</strong>, that behaves like MAE for small errors and like MSE for large ones, splitting the difference. The right choice always depends on the error distribution in your data and the cost structure of errors in your domain.</p>
+      </div>
+    </div>
+
+    <h2>Why MSE is the wrong choice for classification</h2>
+
+    <p>Classification asks a different question. Instead of predicting a number, the model predicts a <em>category</em>: is this email spam or not? Is this scan a malignant or benign tumour? Is this transaction fraudulent?</p>
+
+    <p>The model typically outputs a probability &mdash; a number between 0 and 1 &mdash; representing its confidence that the example belongs to the positive class. Your job is to score how good that probability estimate is.</p>
+
+    <p>If you naively apply MSE here &mdash; squaring the difference between the predicted probability and the label (0 or 1) &mdash; several things go wrong simultaneously.</p>
+
+    <p>First, the gradient landscape becomes flat in unhelpful ways. When a model is confidently wrong &mdash; it assigns probability 0.02 to the correct class &mdash; the squared error is (1 &minus; 0.02)&sup2; &asymp; 0.96. Large-ish, but no larger than an error of 1.0 from a baseline. The gradient from that error does not give the model a strong signal to change. The learning slows down at exactly the moments when it should speed up.</p>
+
+    <p>Second, MSE treats probability predictions as if they live on a number line, where 0.4 and 0.6 are "close." But a prediction of 0.4 and a prediction of 0.6 have radically different meanings for a binary classifier: one says "probably not," the other says "probably yes." The structure of the problem is not linear; it is about confidence in categorical outcomes. MSE does not respect that structure.</p>
+
+    <p>Third, MSE can produce non-calibrated outputs. A well-calibrated classifier should, over many predictions, be correct about 70% of the time when it says "70% confident." MSE training does not reward calibration specifically; it rewards accuracy on the squared scale, which does not map cleanly onto probability calibration. The outputs may not be trustworthy as probabilities at all.</p>
+
+    <div class="callout callout-why">
+      <div class="callout-label">Why This Is a Category Error</div>
+      <p>MSE is built for predictions that live on a continuous number line. Classification outputs are probability distributions over discrete categories. Applying MSE here is like scoring a cricket match by taking the difference between the number of wickets and the number of overs, squaring it, and treating that as the team's performance score. The formula produces a number, but the number does not mean what you think it means.</p>
+    </div>
+
+    <h2>Cross-entropy: the right loss for classification</h2>
+
+    <p><strong>Cross-entropy loss</strong> is the standard choice for classification, and understanding why requires a short detour into what the term "entropy" means &mdash; not in the physics sense, but in the information theory sense pioneered by Shannon (1948).</p>
+
+    <h3>The intuition: how surprised should you be?</h3>
+
+    <p>Imagine a weather forecast. Every morning, an app tells you the probability it will rain. Today it says 90% chance of rain. It rains. Were you surprised? Not much. The event was expected.</p>
+
+    <p>Now the app says 5% chance of rain. It rains. You are very surprised. The app assigned that outcome low probability, and yet it happened.</p>
+
+    <p>Shannon formalised this as <strong>information content</strong>: rare events carry more information than common ones. If you told a colleague "the sun rose this morning," you conveyed almost zero information &mdash; the probability was near 1. If you told them "the lab achieved room-temperature superconductivity today," you conveyed a huge amount &mdash; the probability was near 0. Information is inversely proportional to probability.</p>
+
+    <p>Cross-entropy loss applies this logic to classifier outputs. For each example where the true label is class C, the loss is: &minus;log(predicted probability assigned to class C). That is it. No squaring, no absolute values &mdash; just the negative logarithm of whatever probability the model assigned to the correct answer.</p>
+
+    <h3>Why the log function is the right shape</h3>
+
+    <p>The log curve has a specific shape that matters here. When the model assigns near-1.0 probability to the correct class, the log is close to zero, and the loss is tiny. Good prediction, minimal penalty.</p>
+
+    <p>When the model assigns moderate confidence &mdash; say, 0.5 &mdash; the &minus;log(0.5) is about 0.69. A noticeable signal to improve, but not catastrophic.</p>
+
+    <p>When the model is confidently wrong &mdash; assigning 0.02 to the correct class &mdash; the &minus;log(0.02) is about 3.9. A very large penalty. The gradient at this point is steep, so the learning algorithm receives a strong signal to correct course. This is the opposite of MSE's flat landscape problem: cross-entropy accelerates learning exactly when the model is most wrong.</p>
+
+    <h3>The geometric interpretation</h3>
+
+    <p>There is a deeper reason cross-entropy is correct, beyond the gradient behaviour. A classification model is not just predicting a number; it is predicting a <strong>probability distribution</strong> over the possible classes. The "true" distribution for a correctly classified example is a spike at 1.0 for the right class and 0.0 everywhere else. Cross-entropy measures the <em>distance between two probability distributions</em>: the model's predicted distribution and the true distribution.</p>
+
+    <p>Specifically, cross-entropy is the information-theoretic measure of how many extra bits you need to encode the true distribution using the model's predicted distribution as your encoding scheme <span class="citation" title="Shannon, C.E. (1948). A Mathematical Theory of Communication. Bell System Technical Journal, 27(3), 379–423.">(Shannon, 1948)</span>. A model whose predicted distribution perfectly matches the true distribution uses exactly the right encoding: zero wasted bits, zero cross-entropy loss. A model whose predictions are far from the truth is using a very inefficient encoding scheme, and the loss reflects that inefficiency.</p>
+
+    <p>This geometric view explains something that often puzzles practitioners: why does a classifier that gets 99% of examples correct still have a nonzero loss? Because even on the correctly classified examples, the model may not be <em>certain</em>. If it assigns 0.6 to the right class instead of 0.99, it is still predicting the wrong distribution even if the predicted label is technically right. Cross-entropy scores the quality of the full probability distribution, not just the argmax.</p>
+
+    <!-- INTERACTIVE ELEMENT: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model predicts 0.95 probability for the correct class. A second model predicts 0.55 for the same example. Both models would be scored as "correct" in accuracy metrics. Which model has lower cross-entropy loss, and why?</div>
+      <button class="quiz-option" data-letter="A">Both have the same cross-entropy loss, since both predicted the correct class.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The first model (0.95) has lower cross-entropy loss, because &minus;log(0.95) &asymp; 0.05 while &minus;log(0.55) &asymp; 0.60. Cross-entropy scores the full distribution, not just the argmax.</button>
+      <button class="quiz-option" data-letter="C">The second model (0.55) has lower cross-entropy loss, because lower confidence means less overconfidence and therefore a smaller penalty.</button>
+      <div class="quiz-feedback" data-correct="Exactly right. Accuracy only checks whether the predicted label is correct. Cross-entropy measures how confident the model is in the correct prediction &mdash; rewarding calibrated certainty, not just getting the answer right." data-incorrect="Not quite. Cross-entropy measures the quality of the full probability distribution, not just whether the argmax matches the label. A model saying '95% sure' assigns far more probability to the correct class than a model saying '55% sure,' so its &minus;log score is much lower."></div>
+    </div>
+
+    <h2>A field guide to common losses</h2>
+
+    <p>MSE, MAE, and cross-entropy cover the majority of practical situations, but the landscape extends further. It helps to have a mental map.</p>
+
+    <h3>Binary cross-entropy</h3>
+
+    <p>When there are exactly two classes (spam / not spam, fraud / not fraud), the cross-entropy formula simplifies to a two-term expression. For each example: &minus;[y &middot; log(p) + (1&minus;y) &middot; log(1&minus;p)], where y is the true label (0 or 1) and p is the predicted probability. If y = 1 (positive class), the second term vanishes and you get &minus;log(p). If y = 0 (negative class), the first term vanishes and you get &minus;log(1&minus;p). In both cases you are penalising the &minus;log of the probability assigned to the <em>true</em> outcome. This is by far the most common loss for binary classification.</p>
+
+    <h3>Categorical cross-entropy</h3>
+
+    <p>When there are more than two classes (image classification: is this a cat, a dog, or a bird?), you extend the same idea. The model outputs a probability for each class (three numbers that sum to 1, produced by a softmax layer). The loss is &minus;log of the probability assigned to the correct class. All wrong-class probabilities are implicitly penalised through the softmax normalisation: assigning more to a wrong class necessarily means assigning less to the right class, which raises the loss.</p>
+
+    <h3>Hinge loss</h3>
+
+    <p>Support Vector Machines use hinge loss, which does not score a probability at all. It scores a raw decision value and penalises predictions that are not separated from the decision boundary by a sufficient margin. This geometric framing makes SVMs highly effective in high-dimensional spaces with clear class boundaries, but hinge loss is less interpretable as a probability and is rarely used in neural networks.</p>
+
+    <h3>Custom business losses</h3>
+
+    <p>In practice, the most important losses are often custom ones. A fraud detection team might weight false negatives (missed fraud) ten times more than false positives (false alarms), because the cost asymmetry is real. A hospital predicting patient deterioration might weight misses of true positives &mdash; patients who crash and were not flagged &mdash; extremely heavily, because the cost of a miss is an avoidable death. Custom loss functions encode those domain-specific cost structures directly into training. The model then learns to be asymmetrically cautious in exactly the direction that matters for the deployment context <span class="citation" title="Zadrozny, B. &amp; Elkan, C. (2001). Learning and Making Decisions When Costs and Probabilities Are Both Unknown. KDD Proceedings.">(Zadrozny &amp; Elkan, 2001)</span>.</p>
+
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-regression">Regression</button>
+        <button class="tab-btn" data-tab="tab-classification">Classification</button>
+        <button class="tab-btn" data-tab="tab-custom">Custom</button>
+      </div>
+      <div class="tab-panel active" id="tab-regression">
+        <p><strong>Problem type:</strong> Predicting a continuous number (price, temperature, duration).</p>
+        <p><strong>MSE</strong> &mdash; Use when large errors are disproportionately costly. Sensitive to outliers in training data. Standard default for regression.</p>
+        <p><strong>MAE</strong> &mdash; Use when errors should scale linearly with magnitude, or when training data has noisy/outlier labels you do not want to overfit. More robust, but can be slower to converge.</p>
+        <p><strong>Huber loss</strong> &mdash; Hybrid: MAE for small errors, MSE for large ones. A practical compromise when you have some outliers but still want smooth gradients near zero.</p>
+      </div>
+      <div class="tab-panel" id="tab-classification">
+        <p><strong>Problem type:</strong> Predicting a category (binary or multi-class).</p>
+        <p><strong>Binary cross-entropy</strong> &mdash; Standard for two-class problems. Scores the full predicted probability, not just the label. Works with a sigmoid output.</p>
+        <p><strong>Categorical cross-entropy</strong> &mdash; Standard for multi-class problems. Works with a softmax output. Penalises probability mass wasted on wrong classes.</p>
+        <p><strong>Focal loss</strong> &mdash; A variant of cross-entropy that down-weights easy examples and focuses training on hard, misclassified ones. Particularly useful for imbalanced datasets <span class="citation" title="Lin, T.Y., Goyal, P., Girshick, R., He, K. &amp; Dollar, P. (2017). Focal Loss for Dense Object Detection. ICCV.">(Lin et al., 2017)</span>.</p>
+      </div>
+      <div class="tab-panel" id="tab-custom">
+        <p><strong>Problem type:</strong> Any scenario with asymmetric error costs or domain-specific stakes.</p>
+        <p><strong>Weighted losses</strong> &mdash; Multiply the standard loss by a cost weight per class or per example. If a false negative costs ten times a false positive, weight false negatives by 10.</p>
+        <p><strong>Domain losses</strong> &mdash; For ranking problems (which result is most relevant?), use ranking losses. For sequence generation, perplexity. For image similarity, contrastive or triplet loss. Each encodes a specific notion of "wrong" for its domain.</p>
+        <p><strong>The design principle:</strong> Write down the real-world cost of each error type before choosing a loss function. The loss should be an approximation of that cost structure &mdash; not a default borrowed from a tutorial.</p>
+      </div>
+    </div>
+
+    <h2>The scorecard problem revisited</h2>
+
+    <p>Return to the junior analyst. She optimised the scorecard because the scorecard was there, was legible, and rewarded effort. Nobody told her the metrics were wrong. The model is in exactly the same position. It has no hidden agenda and no common sense fallback. It will optimise whatever loss function you give it, with maximum diligence.</p>
+
+    <p>This is why the loss function is sometimes called the <em>objective function</em>. It <em>is</em> the objective, in the most literal sense. When a language model trained with a next-token prediction loss produces fluent-but-factually-wrong text, it is not malfunctioning. It was rewarded for fluency (tokens that made the sequence seem locally plausible), not for factual accuracy. The loss defined fluency as the goal. Accuracy was never on the scorecard.</p>
+
+    <p>This dynamic &mdash; models optimising faithfully for the wrong thing &mdash; was formalised early in reinforcement learning as <strong>reward hacking</strong> or <strong>specification gaming</strong> <span class="citation" title="Krakovna, V. et al. (2020). Specification Gaming: The Flip Side of AI Ingenuity. DeepMind Blog.">(Krakovna et al., 2020)</span>. A robot trained to score points in a boat-racing game learns to spin in circles collecting bonuses rather than finishing laps. The loss (points) was a proxy for the intended goal (winning races), and the model found the gap between proxy and reality.</p>
+
+    <p>The same gap shows up in every application domain. A content recommendation system trained to maximise time-on-platform can learn to surface outrage content, not because it was told to, but because outrage was more engaging. The loss measured engagement. Engagement was the scorecard. The model found the path that maximised the number. Understanding loss functions is prerequisite to understanding why AI systems behave in ways their designers did not intend &mdash; and to designing systems that are less likely to.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>You are building a model to predict which patients in a cardiac ward will deteriorate in the next six hours. MSE is clearly wrong. Binary cross-entropy is the standard default. But the clinical cost of a false negative (a patient who crashes without a warning) is roughly 20 times higher than a false positive (an unnecessary nurse check). How would you encode that cost asymmetry in the loss function, and what are the risks of getting the weighting wrong?</p>
+    </div>
+
+    <h2>What training is, now that you know what loss is</h2>
+
+    <p>The loss function is the thing you minimise. The training algorithm &mdash; gradient descent &mdash; is the machinery that does the minimising. You will build an exact understanding of how gradient descent works on the next page. But it helps to have the right mental image now.</p>
+
+    <p>Picture the loss function as a landscape of hills and valleys. Each point on the landscape represents a different possible set of model weights. The height at each point is the loss you would get if the model had those weights. Training starts at some random point on that landscape. Gradient descent figures out which direction slopes downhill at the current location &mdash; by computing the gradient of the loss with respect to the weights &mdash; and takes a small step in that direction. Repeat millions of times. The model descends toward a valley where the loss is low.</p>
+
+    <p>The shape of that landscape &mdash; where the valleys are, how steep the slopes are, whether there are flat plateaus where gradient descent stalls &mdash; is entirely determined by the loss function you chose. MSE produces a smooth, convex landscape for linear models (one global minimum, easy to find). Cross-entropy produces a landscape better-shaped for the probability geometry of classification. A badly chosen loss can produce a landscape with no useful gradients at all, and training simply stalls.</p>
+
+    <p>This is why the loss function is sometimes called the training signal. It is the information that flows back through the network to update the weights. If the signal is weak (flat gradients), learning is slow. If the signal is misleading (wrong loss for the problem), the model heads toward the wrong valley entirely. The quality of that signal determines everything downstream.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">MSE on a classification problem</div>
+        <p>Flat gradients when the model is confidently wrong. Outputs not interpretable as probabilities. Treats probability 0.4 and 0.6 as "close" even though they imply different decisions. Training may converge, but the model's confidence estimates are unreliable.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Cross-entropy on a classification problem</div>
+        <p>Steep gradients when the model is confidently wrong &mdash; strong correction signal. Outputs trained to be calibrated probabilities. Distances in probability space reflect the information-theoretic cost of the prediction. Training converges reliably and produces trustworthy confidence scores.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>The loss function is the definition of "wrong." It is not a technicality you pick by convention &mdash; it is a design decision that encodes your theory of what matters. MSE amplifies large errors to make the model careful about catastrophic mistakes. MAE treats all errors proportionally to make the model robust to outliers. Cross-entropy scores the quality of the full probability distribution, not just the predicted label, and produces steep gradients that speed up learning exactly when the model is most confidently wrong. Pick the wrong loss and the model optimises faithfully for the wrong goal, not because it is broken but because you told it the wrong thing to minimise.</p>
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why does MSE penalise large errors more than MAE? Walk through what happens to an error of size 2 versus an error of size 10 under each formula.</li>
+        <li>What goes wrong if you use MSE for a classification problem? Give at least two distinct failure modes.</li>
+        <li>What does cross-entropy loss measure geometrically? Why is that geometric interpretation the reason cross-entropy is appropriate for classification?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('f02-loss-functions');</script>
+<script>
+(function () {
+  // Tab panel switching
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  var tabPanels = document.querySelectorAll('.tab-panel');
+
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var target = btn.getAttribute('data-tab');
+      tabBtns.forEach(function (b) { b.classList.remove('active'); });
+      tabPanels.forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = document.getElementById(target);
+      if (panel) { panel.classList.add('active'); }
+    });
+  });
+}());
+</script>
+
+</body>
+</html>

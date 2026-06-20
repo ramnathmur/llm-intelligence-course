@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F04 &mdash; Train / Validation / Test Splits &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F04 &mdash; Train / Validation / Test Splits">
+<meta property="og:description" content="Three separate data pools that prevent a model from memorising instead of learning.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/f01-what-is-a-model.html">Module 1: ML Foundations</a>
+    <span class="sep">&#8250;</span>
+    Train / Validation / Test Splits
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">F04 &middot; Module 1</div>
+    <h1>Train / Validation / Test Splits</h1>
+    <p class="one-liner">Three separate data pools that prevent a model from memorising instead of learning.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A law firm that prepares cases using known precedents (train), tests its arguments with a mock jury (validation), then faces the real jury on the day (test) &mdash; and never shows the mock-jury feedback to the real jury.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Evaluating a model on the same data it trained on is like marking your own exam &mdash; you will overestimate performance. The three-split discipline is the foundation of honest model evaluation.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why three splits are necessary, what each is used for, and what data leakage means.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f01-what-is-a-model.html" class="prereq-chip">F01 &mdash; What Is a Model?</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Imagine a law firm preparing to argue a major case. The senior partners spend weeks studying past rulings &mdash; precedents set in hundreds of similar disputes. They know those cases inside out. They can cite every judgment, anticipate every counter-argument, predict every objection. When they then rehearse in front of a mock jury drawn from within the firm itself, they perform brilliantly. Of course they do. The mock jury has heard all the same preparation sessions.</p>
+
+    <p>Then comes the real trial. The actual jury has seen none of the internal preparation. They bring fresh eyes, fresh questions, fresh scepticism. A firm that optimised entirely for its own mock jury &mdash; rather than the real-world challenge of persuading strangers &mdash; will find itself blindsided.</p>
+
+    <p>This is exactly the trap a machine learning model falls into if its evaluation is not designed carefully. A model that is tested on the same data it learned from will appear to perform far better than it actually does on new, unseen cases. The three-split discipline &mdash; dividing all available data into <strong>training</strong>, <strong>validation</strong>, and <strong>test</strong> sets &mdash; is the engineering practice that stops this from happening. It is one of the most important methodological ideas in all of applied machine learning.</p>
+
+    <h2>The core problem: memorisation versus learning</h2>
+
+    <p>A model learns by adjusting its internal parameters to minimise errors on the examples it sees during training. If the model is small and the problem is simple, this produces genuine generalisation &mdash; patterns discovered in the training data that also hold for new data. But if the model has enough capacity, it can do something subtler and more dangerous: it can <strong>memorise</strong> the training examples rather than extract transferable rules.</p>
+
+    <p>Memorisation looks like learning on the surface. The model produces correct outputs for every training example. Loss is very low. Accuracy is very high. But when you show it an example it has never seen, performance collapses. The model has not discovered the underlying pattern; it has stored the answers to a specific set of questions. This failure mode is called <strong>overfitting</strong>.</p>
+
+    <p>The clinical test for overfitting is simple in principle: evaluate performance on data the model has never seen during training. If performance is strong on training data but weak on fresh data, the model has overfit. If performance is similar on both, the model has learned something genuinely generalisable. This is why the training set must be held strictly separate from the evaluation data.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      A model memorising training data is not just a theoretical failure. Consider a fraud-detection model trained on historical transaction records. If it overfits, it learns to recognise the specific fraudsters from history &mdash; but misses entirely new fraud patterns that arrive after deployment. The cost of this gap is real.
+    </div>
+
+    <h2>Why two sets are not enough</h2>
+
+    <p>The most intuitive fix is to split your data into two pools: train on one, evaluate on the other. This is better than nothing, but it creates a subtle problem the moment you start making <strong>modelling decisions</strong> based on the evaluation results.</p>
+
+    <p>Every time you evaluate on the held-out set and then change something &mdash; adjust a hyperparameter, try a different algorithm, add a new feature, change the data preprocessing &mdash; you are using information from that held-out set to guide your choices. You are, in effect, training on it indirectly. Over many rounds of "evaluate, adjust, evaluate again," your model becomes tuned to the quirks of that particular held-out set, just as it would have become tuned to the training data if you had evaluated there.</p>
+
+    <p>This is sometimes called <strong>leaking</strong> the evaluation set into the model-building process. It is the organisational equivalent of the law firm's mock jury &mdash; feedback from that jury gradually shapes how the lawyers argue, until the whole preparation is tailored to that specific group of people rather than to the broader task of persuading strangers.</p>
+
+    <p>The solution is a third pool of data: the <strong>test set</strong>. Think of it as the real jury. It is set aside at the very beginning and never looked at during model development. It is touched exactly once: at the end, when you have a finalised model and want a honest measurement of how it performs on genuinely new data.</p>
+
+    <h2>The three roles, defined precisely</h2>
+
+    <p>Each of the three splits has a distinct and non-interchangeable function. Mixing these functions is the central mistake that corrupts evaluation.</p>
+
+    <h3>Training set: the precedent library</h3>
+
+    <p>The training set is the data the model learns from directly. The optimisation algorithm &mdash; gradient descent in most modern ML systems &mdash; processes these examples, computes errors, and updates model parameters to reduce those errors. The model sees training data repeatedly, across many iterations called <strong>epochs</strong>.</p>
+
+    <p>Because the model actively adjusts itself to fit the training data, any performance measurement on training data tells you nothing trustworthy about generalisation. A model can achieve perfect accuracy on training data through memorisation. This number should never be used as the primary measure of model quality.</p>
+
+    <p>In the law-firm analogy, the training set is the library of known precedents. The lawyers read, re-read, analyse, and internalise them until they can argue from them fluently. But performing well in that reading room tells you nothing about how they will do in front of a real jury.</p>
+
+    <h3>Validation set: the mock jury</h3>
+
+    <p>The validation set is the data used to make modelling decisions. After each training run, or after each change to the model architecture or hyperparameters, you evaluate on the validation set to see whether the change helped. This is the feedback loop that drives model development.</p>
+
+    <p>Because you are actively using validation performance to guide decisions, the validation set is not a pristine, neutral evaluation. Information from it flows back into model-building choices. This is expected and deliberate &mdash; that is what the validation set is for. But it means validation performance is a slightly optimistic estimate of true generalisation performance, because the model has been indirectly shaped by it.</p>
+
+    <p>Typical modelling decisions driven by validation performance include: choosing between algorithm A and algorithm B; deciding how many layers a neural network should have; selecting a regularisation strength; determining when to stop training (a technique called <strong>early stopping</strong>, where you halt training when validation loss stops improving rather than letting the model continue to overfit the training data).</p>
+
+    <h3>Test set: the real jury</h3>
+
+    <p>The test set is the data that provides the final, honest measure of model performance. It is set aside at the beginning of the project and not examined until model development is complete. You do not tune hyperparameters based on test performance. You do not choose between models based on test performance. You do not look at test results and then go back and modify your model.</p>
+
+    <p>If you do any of these things, the test set is no longer a genuine held-out evaluation. It becomes another validation set, and you lose your one opportunity for an honest final measurement. This is why the rule is strict: the test set is touched exactly once.</p>
+
+    <p>In some organisations, the test set is stored in a separate location and only unlocked by a designated team member at deployment time. This is not paranoia &mdash; it is the procedural equivalent of the trial judge enforcing that the lawyers cannot speak to the real jury before proceedings begin.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      The three-split discipline maps directly onto three distinct epistemic states. Training data is what the model can use to learn. Validation data is what you can use to make decisions. Test data is what no one touches until the very end. The moment any data crosses from one category to another, the corresponding guarantee disappears.
+    </div>
+
+    <h2>What data leakage looks like in practice</h2>
+
+    <p><strong>Data leakage</strong> is the general term for any situation where information from outside the legitimate training set contaminates the model-building process, making performance appear better than it will be on genuinely new data. It corrupts evaluation by breaking the clean separation between what the model knows and what is being used to measure it.</p>
+
+    <p>Leakage is distressingly easy to introduce without noticing. Here are four patterns that appear regularly in consulting and analytics projects.</p>
+
+    <h3>Leakage through preprocessing</h3>
+
+    <p>Suppose you are normalising a numerical feature &mdash; say, scaling revenue figures to a 0&ndash;1 range. If you compute the minimum and maximum values across the full dataset (including your test set) before splitting, you have let test-set information influence how training data is processed. The correct procedure is to compute the scaling parameters using training data only, then apply the same parameters to validation and test data.</p>
+
+    <p>The same issue arises with missing value imputation, outlier removal, and feature selection based on correlation statistics. Any statistic derived from the full dataset is carrying test-set information forward.</p>
+
+    <h3>Leakage through target encoding</h3>
+
+    <p>A common technique in categorical modelling is <strong>target encoding</strong>: replacing a category label with the average target value for that category. If you encode categories using statistics derived from the full dataset, test examples silently inform how training examples are represented. The fix is to encode categories using training data statistics only, applied consistently downstream.</p>
+
+    <h3>Leakage through time</h3>
+
+    <p>When your data has a time dimension, the split must respect chronological order. A model predicting tomorrow's sales must be trained on yesterday's data, not on a random sample that may include future values. Randomly shuffling a time-series dataset before splitting creates the fiction that the future is available as training material &mdash; and produces evaluation metrics that look excellent but are entirely fabricated.</p>
+
+    <p>The correct approach for time-series data is a <strong>temporal split</strong>: everything before date X goes into training, a window around X goes into validation, and everything after another cutoff goes into test. This mirrors real deployment conditions, where predictions are always about events that have not happened yet.</p>
+
+    <h3>Leakage through the outcome variable</h3>
+
+    <p>The most dramatic leakage occurs when the feature set includes information that is directly derived from the target variable, or that is only available because the outcome is already known. A churn model that includes "customer service calls about cancellation" as a feature may be inadvertently encoding the churn outcome itself, if those calls only happen right before a customer leaves. In deployment, you would not have that feature at prediction time.</p>
+
+    <p>This form of leakage often produces evaluation metrics that look impossibly good &mdash; which is precisely the signal to go looking for it.</p>
+
+    <h2>Typical split ratios and the k-fold alternative</h2>
+
+    <p>When you have ample data, a common starting division is roughly 70% training, 15% validation, and 15% test. The exact ratios matter less than maintaining the principle. With very large datasets &mdash; millions of examples &mdash; you may need only a few thousand examples for validation and test to get stable estimates, freeing more data for training. With small datasets, even 15% may not give you reliable statistics.</p>
+
+    <h3>When to use k-fold cross-validation</h3>
+
+    <p>With small datasets, a fixed split wastes precious training data. If you have only 500 labelled examples and hold out 150 for validation, you are training on 350 &mdash; a punishingly small sample for many problems. <strong>K-fold cross-validation</strong> solves this.</p>
+
+    <p>The idea is to partition training data into <em>k</em> equal folds (commonly 5 or 10). You run <em>k</em> training rounds. In each round, one fold serves as the validation set and the remaining <em>k&minus;1</em> folds serve as training data. At the end, you average performance across all <em>k</em> validation scores. This gives you a validation estimate that uses all available training data without contaminating any of it during each individual round.</p>
+
+    <p>The critical point: k-fold cross-validation still requires a separate, untouched test set. Cross-validation replaces the fixed validation split, not the test split. You still need a pool of data that was set aside before any decisions were made, against which you measure the final chosen model exactly once. Confusion on this point &mdash; treating k-fold results as the final evaluation &mdash; is a common mistake in project reporting.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Split before anything else</h4>
+        <p>Before you explore your data, before you compute summary statistics, before you check for outliers: split off the test set and store it separately. Any analysis you run on the full dataset risks carrying test-set information into your preprocessing decisions.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Fit preprocessing to training data only</h4>
+        <p>Compute all scaling parameters, imputation statistics, and encoding maps using training data alone. Apply the same computed parameters (without refitting) to validation and test data. This preserves the clean separation.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Iterate using validation performance</h4>
+        <p>Build, train, and compare model variants using validation metrics. Use early stopping, hyperparameter search, and architecture choices guided by validation scores. This is the normal development loop.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Evaluate on test exactly once</h4>
+        <p>When you have a finalised model, run it on the test set. Record the result. Do not use this number to make further decisions. It is your reported performance, and it represents how the model will behave on new data.</p>
+      </div>
+    </div>
+
+    <!-- INTERACTIVE: Data Leakage Scenario Quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check &mdash; Leakage Spotter</div>
+      <div class="quiz-question">A data scientist builds a customer churn model. She computes the mean transaction value for each customer across the full dataset (including future months), then uses this as a feature. She then splits the data into train/validation/test by random shuffle. What is the primary problem with this approach?</div>
+      <button class="quiz-option" data-letter="A">The train/validation/test split ratio is probably wrong for the dataset size.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Future transaction data (from validation and test periods) has leaked into the feature, making performance appear better than it will be in deployment.</button>
+      <button class="quiz-option" data-letter="C">Using mean transaction value as a feature is statistically unsound and should be log-transformed first.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. Two forms of leakage are present: (1) the feature uses data from future periods the model should not see, and (2) the random shuffle breaks temporal ordering, so test examples may actually precede training examples in calendar time. Both make evaluation metrics unreliable."
+           data-incorrect="The split ratio and feature transformation are separate concerns. The core problem is that computing the feature across the full dataset carries test-set information into the feature itself, and the random shuffle corrupts the time ordering. Deployment will always be prediction-into-the-future, which this setup does not mirror."></div>
+    </div>
+
+    <h2>A note on the connection to overfitting</h2>
+
+    <p>The three-split discipline does not <em>prevent</em> overfitting. It <em>detects</em> it. A model can still overfit the training data even with a perfectly maintained split. What the split gives you is the ability to notice: if training accuracy is 98% and validation accuracy is 67%, overfitting is happening and you can take corrective action &mdash; more regularisation, less model capacity, more training data, earlier stopping.</p>
+
+    <p>The approaches used to <em>reduce</em> overfitting are a separate topic. They include techniques like dropout in neural networks, regularisation in linear models, ensemble methods, and data augmentation. But none of them can substitute for a proper evaluation protocol. Without clean data splits, you cannot measure whether any of these techniques actually helped.</p>
+
+    <h2>The consulting parallel: why this matters beyond ML</h2>
+
+    <p>The intuition behind train/validation/test splits appears in any rigorous decision-making process. A management consultant preparing a market-entry recommendation uses historical case studies to develop hypotheses (training), stress-tests the recommendation against analogous scenarios the team brainstorms (validation), and ultimately faces client scrutiny in the final presentation &mdash; where the quality of reasoning is exposed without the safety net of internal review (test).</p>
+
+    <p>A diagnostic physician studies known presentations to build clinical pattern recognition (training), orders tests to refine differential diagnoses for the current patient (validation), and then commits to a treatment decision based on findings she cannot revise once treatment has started (test).</p>
+
+    <p>In both cases, the key principle is the same: the measure of true performance is always exposure to conditions that were not used to develop the approach. Internal rehearsal, however thorough, is not the same as external validity. The data-split discipline is the formal, machine-enforced version of this common-sense rule.</p>
+
+    <!-- SECOND INTERACTIVE: Toggle-reveal on k-fold nuance -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>When exactly should you use k-fold cross-validation rather than a single fixed split?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Use k-fold when your <strong>dataset is small</strong> (roughly fewer than a few thousand labelled examples) and a fixed validation split would leave too few examples for reliable performance estimates. K-fold uses all training data for validation across folds, giving a more stable estimate with less variance.</p>
+        <p>Keep a fixed single split when your <strong>dataset is large</strong> (thousands to millions of examples). At that scale, a fixed 15% validation split already contains enough examples for reliable statistics, and the computational cost of training <em>k</em> models is often impractical.</p>
+        <p>Use <strong>stratified k-fold</strong> when your target variable is imbalanced &mdash; for example, a fraud detection dataset where only 0.5% of transactions are fraudulent. Stratification ensures each fold contains the same proportion of minority-class examples, preventing folds where the rare class barely appears.</p>
+        <p>Always keep a separate test set either way. K-fold is a replacement for a fixed validation split, not for a held-out final test evaluation. Reporting k-fold cross-validation scores as your model's final performance is a common mistake that removes the guarantee of a truly unseen evaluation.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Every piece of data can only be in one role at a time. Training data teaches the model. Validation data informs the developer. Test data evaluates the final product honestly. The moment data crosses roles &mdash; through careless preprocessing, through peeking at test results, through random shuffles that ignore time &mdash; the evaluation is corrupted. Data leakage is not always deliberate; it is most dangerous when it is invisible.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>Why must you never use test data to make modelling decisions?</li>
+        <li>What is data leakage and how does it corrupt evaluation?</li>
+        <li>When would you use k-fold cross-validation instead of a fixed split?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV (populated by nav.js) -->
+  <div class="page-nav" data-prev="f03-loss-functions" data-next="f05-gradient-descent"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>if (window.LLMNav) LLMNav.init('f04-train-val-test');</script>
+</body>
+</html>

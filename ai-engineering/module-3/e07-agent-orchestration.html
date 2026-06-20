@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E07 &mdash; Agent Orchestration Patterns &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E07 &mdash; Agent Orchestration Patterns">
+<meta property="og:description" content="Tool calling, ReAct loops, stateful workflows, and the failure modes that arise at each layer.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="e07-agent-orchestration.html">Module 3: Agent Systems</a>
+    <span class="sep">&#8250;</span>
+    Agent Orchestration Patterns
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="3">E07 &middot; Module 3</div>
+    <h1>Agent Orchestration Patterns</h1>
+    <p class="one-liner">Tool calling, ReAct loops, stateful workflows, and the failure modes that arise at each layer.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A project manager coordinating subcontractors. A single subcontractor is predictable. A PM who delegates to five subcontractors whose work feeds each other faces cascading failures &mdash; a bad report from one poisons all downstream work. The PM's job is not just delegation; it is knowing where to insert checkpoints so a single bad delivery does not destroy the entire engagement.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Single-turn LLM calls are predictable. Multi-step agents introduce compounding failure: one bad step cascades into subsequent bad steps. Architecture choices determine where the system can recover. Engineers who understand these patterns can build agents that fail gracefully and recover on cue, rather than silently producing wrong answers four steps downstream from the original error.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    How the ReAct pattern structures agent reasoning, why state matters in multi-step workflows, and where cascading failures enter. You will also be able to identify the specific architecture decisions that determine whether a multi-agent system can recover from partial failure &mdash; or whether it has to restart from scratch.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e01-prompt-engineering.html" class="prereq-chip">E01 &mdash; Prompt Engineering as a System</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>An agent is an LLM that can take actions. That is the minimal definition. What separates a useful agent from a brittle one is the scaffolding around the model: the pattern that governs how the model decides to act, what state it maintains between steps, and where a human or a system check can intervene.</p>
+
+    <p>Three patterns dominate practical agent engineering today: tool calling, the ReAct loop, and stateful workflow orchestration. Each adds capability. Each also adds a new class of failure mode. This page builds a mental model for all three.</p>
+
+    <h2>Layer one: tool calling</h2>
+
+    <p>A base LLM generates text. A tool-calling LLM can also invoke functions. When the model decides it needs to search the web, run a SQL query, or send an email, it emits a structured request describing which function to call and with which arguments. Your application executes the function and returns the result to the model. The model then continues generating.</p>
+
+    <p>This is the foundation of all agent work. Without it, the model is a closed system &mdash; it can reason about the world but cannot touch it.</p>
+
+    <h3>How tool calling actually works</h3>
+
+    <p>The mechanics are simpler than they look. You define each tool as a JSON schema describing the function name, its parameters, and what each parameter means. You pass this schema to the model alongside your prompt. The model has been trained to recognise this schema format and to respond with a structured tool-call object when it decides it needs to invoke one <span class="citation" title="Anthropic. (2024). Tool Use Documentation. https://docs.anthropic.com/en/docs/tool-use">(Anthropic, 2024)</span>.</p>
+
+    <p>The model does not execute the function. It only requests execution. Your application code receives the request, runs the function, and sends the result back in the next message. This separation between the model's decision and the action's execution is what allows you to add validation, logging, rate-limiting, and human approval at the seam.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Distinction</div>
+      <p>The model decides <em>what</em> to call and <em>with which arguments</em>. Your application code decides <em>whether to actually execute it</em>. That gap between decision and execution is where you install every safety control in your agent system.</p>
+    </div>
+
+    <h3>Failure modes at the tool-calling layer</h3>
+
+    <p>Tool calling introduces three distinct failure classes that do not exist in single-turn LLM use.</p>
+
+    <p><strong>Wrong tool selection.</strong> The model picks a tool that is technically available but not appropriate for the current task. This happens when tool descriptions overlap in scope or are vague. A model given both a <code>search_web</code> tool and a <code>search_internal_docs</code> tool will occasionally use the wrong one if the descriptions do not make the boundary sharp. The fix is precise tool descriptions with explicit scope constraints and representative examples of when each tool applies.</p>
+
+    <p><strong>Hallucinated arguments.</strong> The model calls the right tool but invents parameter values that do not exist in the data it has seen. A model calling a <code>get_customer_record</code> function may generate a plausible-looking customer ID that is not real. Validate all arguments before execution &mdash; never trust that the model's argument is well-formed just because the function name is correct.</p>
+
+    <p><strong>Silent failure propagation.</strong> A tool call returns an error or an empty result. The model receives this result and continues reasoning as if the answer were simply "there is nothing there," rather than "the tool failed." Downstream steps then build on an absence of information that was actually a failure of retrieval. The fix is to return structured error objects rather than empty results, and to instruct the model explicitly on how to handle tool errors.</p>
+
+    <h2>Layer two: the ReAct pattern</h2>
+
+    <p>A single tool call is not an agent. An agent reasons, acts, observes the result, and then reasons again. The ReAct pattern &mdash; short for Reasoning and Acting &mdash; formalises this loop into an explicit structure that the model is prompted to follow <span class="citation" title="Yao et al. (2022). ReAct: Synergizing Reasoning and Acting in Language Models. arXiv:2210.03629.">(Yao et al., 2022)</span>.</p>
+
+    <p>In the ReAct pattern, the model is prompted to interleave two types of output. <strong>Thought</strong> steps are the model's internal reasoning: what it currently knows, what it is uncertain about, and what it intends to do next. <strong>Action</strong> steps are tool invocations. The model alternates: think, act, observe the result, think, act, until it reaches a conclusion.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Before the ReAct paper, the dominant approach for tool-augmented reasoning was chain-of-thought alone: the model reasoned through the problem in text, then picked a tool. ReAct showed that interleaving reasoning with action &mdash; thinking <em>between</em> each tool call rather than only before the first one &mdash; dramatically improved accuracy on multi-step retrieval tasks. The intuition is that each new observation should update the reasoning, not just confirm a plan the model made at the start.</p>
+    </div>
+
+    <h3>Why ReAct outperforms chain-of-thought alone</h3>
+
+    <p>Pure chain-of-thought reasoning before tool use commits the model to a plan before it has seen any evidence from the environment. If the first tool call returns unexpected data, the model's subsequent reasoning is fighting against its own prior plan.</p>
+
+    <p>ReAct threads reasoning and observation together. After each tool result, the model can update its plan. This makes the agent adaptive rather than pre-planned. In the consulting analogy: a PM who updates the project plan each time a subcontractor delivers will catch bad work faster than one who reviews everything only at the end.</p>
+
+    <p>Empirically, ReAct outperformed chain-of-thought alone on HotpotQA and FEVER benchmarks by significant margins, particularly on questions that required pivoting mid-research when early assumptions proved incorrect <span class="citation" title="Yao et al. (2022). ReAct: Synergizing Reasoning and Acting in Language Models. arXiv:2210.03629.">(Yao et al., 2022)</span>.</p>
+
+    <h3>Implementing the ReAct loop</h3>
+
+    <p>The implementation is a loop in your application code, not a feature of the model API. The model generates a thought and an action. Your code parses the action, executes the tool, appends the result to the conversation as an observation, and calls the model again. This continues until the model generates a final answer rather than an action.</p>
+
+    <p>Three engineering concerns arise immediately.</p>
+
+    <p><strong>Loop termination.</strong> The model might keep generating actions indefinitely if it cannot reach certainty. Set a hard maximum on the number of steps. Log every step. If the loop hits the maximum, surface the intermediate state to the caller rather than returning an empty error &mdash; partial reasoning is often more useful than a clean failure message.</p>
+
+    <p><strong>Context window management.</strong> Each observation appended to the conversation consumes tokens. Long-running ReAct loops can overflow the context window. Compress older steps to summaries or use a rolling window that retains the most recent N steps plus the original question. Research on long-context performance suggests that models attend most reliably to the beginning and end of the context, so keeping the task specification at the top and the most recent observations at the bottom is the sensible default <span class="citation" title="Liu et al. (2023). Lost in the Middle: How Language Models Use Long Contexts. arXiv:2307.03172.">(Liu et al., 2023)</span>.</p>
+
+    <p><strong>Parsing reliability.</strong> If you rely on the model formatting its output as <code>Thought: ... Action: ...</code> in natural text, a model update can silently break your parser. Use structured outputs or tool-calling APIs to elicit reasoning and actions in a schema-defined format rather than as free text. The schema is part of the contract; natural-language formatting is not.</p>
+
+    <!-- INTERACTIVE: ReAct loop walkthrough -->
+    <div class="diagram-container">
+      <p class="diagram-caption">The ReAct loop: each step is a model call. Your application code sits between each pair of boxes.</p>
+      <svg viewBox="0 0 720 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ReAct loop diagram showing the cycle: Task, Thought, Action, Observation, repeating until Answer">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#00e5ff"/>
+          </marker>
+          <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#c084fc"/>
+          </marker>
+        </defs>
+
+        <!-- Background boxes -->
+        <!-- Task -->
+        <rect x="10" y="130" width="110" height="60" rx="8" fill="#0f1221" stroke="#00e5ff" stroke-width="1.5"/>
+        <text x="65" y="158" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" fill="#00e5ff">TASK</text>
+        <text x="65" y="175" text-anchor="middle" font-family="system-ui" font-size="9" fill="#8892a4">User question</text>
+
+        <!-- Thought -->
+        <rect x="160" y="50" width="120" height="60" rx="8" fill="#0f1221" stroke="#c084fc" stroke-width="1.5"/>
+        <text x="220" y="78" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" fill="#c084fc">THOUGHT</text>
+        <text x="220" y="95" text-anchor="middle" font-family="system-ui" font-size="9" fill="#8892a4">Model reasons</text>
+
+        <!-- Action -->
+        <rect x="330" y="50" width="120" height="60" rx="8" fill="#0f1221" stroke="#34d399" stroke-width="1.5"/>
+        <text x="390" y="78" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" fill="#34d399">ACTION</text>
+        <text x="390" y="95" text-anchor="middle" font-family="system-ui" font-size="9" fill="#8892a4">Tool invoked</text>
+
+        <!-- Observation -->
+        <rect x="330" y="210" width="120" height="60" rx="8" fill="#0f1221" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="390" y="238" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" fill="#fbbf24">OBSERVATION</text>
+        <text x="390" y="255" text-anchor="middle" font-family="system-ui" font-size="9" fill="#8892a4">Result returned</text>
+
+        <!-- Answer -->
+        <rect x="580" y="130" width="120" height="60" rx="8" fill="#0f1221" stroke="#34d399" stroke-width="2"/>
+        <text x="640" y="158" text-anchor="middle" font-family="system-ui" font-size="11" font-weight="700" fill="#34d399">ANSWER</text>
+        <text x="640" y="175" text-anchor="middle" font-family="system-ui" font-size="9" fill="#8892a4">Final output</text>
+
+        <!-- Arrows -->
+        <!-- Task to Thought -->
+        <line x1="120" y1="155" x2="158" y2="100" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Thought to Action -->
+        <line x1="280" y1="80" x2="328" y2="80" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+
+        <!-- Action to Observation -->
+        <line x1="390" y1="110" x2="390" y2="208" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+        <!-- Observation loops back to Thought -->
+        <path d="M 330 250 Q 220 280 220 115" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow-purple)"/>
+
+        <!-- Thought to Answer (when done) -->
+        <line x1="280" y1="90" x2="578" y2="155" stroke="#34d399" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+
+        <!-- Labels -->
+        <text x="120" y="123" font-family="system-ui" font-size="8" fill="#5a6375" text-anchor="middle">start</text>
+        <text x="305" y="74" font-family="system-ui" font-size="8" fill="#5a6375" text-anchor="middle">calls tool</text>
+        <text x="412" y="165" font-family="system-ui" font-size="8" fill="#5a6375" text-anchor="middle">result</text>
+        <text x="245" y="290" font-family="system-ui" font-size="8" fill="#5a6375" text-anchor="middle">loop continues</text>
+        <text x="445" y="118" font-family="system-ui" font-size="8" fill="#5a6375" text-anchor="middle">if done</text>
+      </svg>
+    </div>
+
+    <h2>Layer three: stateful workflow orchestration</h2>
+
+    <p>A free-running ReAct loop is powerful for open-ended tasks. It is unreliable for tasks that have required intermediate checkpoints, depend on external approvals, or must be resumed after failure. For those cases, you need stateful workflow orchestration.</p>
+
+    <p>The distinction matters. A ReAct loop holds all its state in the LLM context window. When the loop ends &mdash; by reaching the answer, hitting a token limit, or crashing &mdash; the state is gone. A stateful workflow externalises the state into a durable store. Every step's output is written to a database or message queue before the next step begins. If the system crashes between steps, it can resume from the last committed checkpoint rather than starting over.</p>
+
+    <h3>The PM analogy made concrete</h3>
+
+    <p>Return to the project manager coordinating subcontractors. An unstateful PM keeps the entire project plan in her head. When she takes sick leave, the project stalls. A stateful PM maintains a project management system: every task's status is recorded, every deliverable is logged, every dependency is explicit. A deputy can pick up exactly where she left off.</p>
+
+    <p>Stateful agent orchestration builds the equivalent of that project management system. Each step is a node in a directed graph. The edges represent dependencies. The state store records which nodes have completed and what they produced. The orchestrator reads the state, determines which nodes are now unblocked, and dispatches them.</p>
+
+    <h3>Why stateful workflows are more reliable than free-running loops</h3>
+
+    <p>Three properties of stateful systems directly address the failure modes of free-running loops.</p>
+
+    <p><strong>Idempotent steps.</strong> If a step is externalised and logged, you can re-run it after a failure without re-running every step before it. In a free-running loop, re-running after a crash means restarting from the beginning, re-incurring all the latency and cost of completed steps, and risking re-running side effects (sending an email twice, deducting a payment twice). Stateful systems allow you to skip completed steps.</p>
+
+    <p><strong>Explicit state transitions.</strong> In a free-running loop, the "state" is implicit in the LLM context window. When things go wrong, debugging requires re-reading the entire context to understand what the model believed at each step. In a stateful system, you can query the state store directly. "What did step 3 produce? What did the model decide to do next based on that?" is answerable without re-running anything.</p>
+
+    <p><strong>Programmatic validation gates.</strong> Between steps in a stateful workflow, you can insert validation checks that are entirely outside the model. A step that generates a SQL query can be followed by a validator that parses the SQL syntax and checks that the referenced tables exist, before the query is ever executed. This is not something you can do cleanly in a free-running loop without breaking the loop's flow.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A free-running loop is fast to build and fragile at scale. A stateful workflow is slower to design and dramatically more reliable. The right choice depends on stakes: use a loop for exploratory, low-stakes tasks where failure cost is low. Use a stateful workflow for tasks that modify external systems, involve money, or must complete reliably over long time horizons.</p>
+    </div>
+
+    <h2>Multi-agent systems and cascading failure</h2>
+
+    <p>A single agent can be monitored. A system of agents whose outputs feed each other is a cascading failure machine if not carefully designed.</p>
+
+    <p>Consider a pipeline: Agent A gathers research, Agent B synthesises it, Agent C writes the final report. If Agent A returns partially incorrect research, Agent B synthesises it faithfully, and Agent C reports it accurately. The error from Agent A has now been amplified by two subsequent steps and appears in the final report wearing the authority of a fully processed document.</p>
+
+    <p>This is not a hypothetical. Research into LLM multi-agent frameworks found that error propagation through agent pipelines is a primary failure mode in production deployments, and that the errors are systematically harder to detect at the end of the pipeline than at the point of origin <span class="citation" title="Wang et al. (2024). A Survey on Large Language Model based Autonomous Agents. Frontiers of Computer Science.">(Wang et al., 2024)</span>.</p>
+
+    <h3>Four patterns that limit cascading failure</h3>
+
+    <p><strong>Confidence scoring at agent outputs.</strong> Each agent in the pipeline should express uncertainty alongside its outputs. If Agent A's research synthesis includes low-confidence sections, downstream agents should treat those sections differently than high-confidence ones. This requires designing output schemas that carry confidence metadata, not just the content itself.</p>
+
+    <p><strong>Cross-agent validation.</strong> Rather than passing Agent A's output directly to Agent B, pass it to a validator agent first. The validator's only job is to check for internal consistency, factual plausibility, and completeness. This adds latency and cost, but it breaks the propagation chain at the first point where errors can still be caught cleanly.</p>
+
+    <p><strong>Decomposition that limits dependencies.</strong> The deepest vulnerabilities in multi-agent systems are long dependency chains: A depends on B which depends on C which depends on D. An error at D cascades through the entire chain. Where possible, design parallel subgraphs: A and B both depend on D, but A and B do not depend on each other. Errors at D surface independently at two points, both of which are close to the source.</p>
+
+    <p><strong>Human-in-the-loop checkpoints.</strong> Some decisions should not be delegated to an agent, regardless of how well the preceding steps went. Any action that is irreversible, high-cost, or high-visibility should require a human approval step. The engineering question is not whether to include human checkpoints but where to position them to maximise coverage while minimising interruption.</p>
+
+    <h2>Human-in-the-loop: where and how</h2>
+
+    <p>A human-in-the-loop checkpoint is not a fallback for when the model gets confused. It is a designed control point in the workflow, positioned based on risk analysis rather than ad hoc intuition.</p>
+
+    <h3>Positioning checkpoints by risk profile</h3>
+
+    <p>The right place for a human checkpoint is immediately before an action that is high-stakes and difficult to reverse. In the consulting analogy: you do not review every email the PM sends, but you do approve the final deliverable before it goes to the client and you approve any change to the project scope that incurs additional cost.</p>
+
+    <p>The engineering translation: define a risk tier for every action your agent can take. <strong>Tier 1 (read-only, reversible):</strong> search the web, read a file, query a database. No checkpoint required. <strong>Tier 2 (write, limited scope):</strong> create a draft, add a calendar event, send an internal message. Checkpoint optional based on confidence. <strong>Tier 3 (irreversible, external impact):</strong> send an email to a customer, submit a form, execute a financial transaction. Always checkpoint.</p>
+
+    <p>This tier structure can be enforced architecturally. Your tool-calling middleware checks the tier of each requested action and routes Tier 3 actions to a human approval queue before executing them. The model does not choose whether to ask for approval &mdash; the architecture enforces it.</p>
+
+    <h3>Engineering a checkpoint that does not break the loop</h3>
+
+    <p>The naive implementation of a human checkpoint pauses the agent and waits synchronously for a response. This is fine for short-lived tasks. For long-running workflows, you need an asynchronous implementation: the agent writes its checkpoint request to a queue, suspends its state, and resumes when the human response arrives &mdash; which might be hours or days later.</p>
+
+    <p>This requires the stateful workflow architecture described above. You cannot resume a suspended agent if all its state lives in an ephemeral context window. The checkpoint is only practical if the state is durable.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      The research community has not converged on a standard for expressing agent uncertainty or confidence in multi-agent systems. Some frameworks attach numeric confidence scores to agent outputs; others use explicit reasoning traces; others rely on structured disagreement between multiple agents running in parallel. None of these has a clear empirical advantage across all task types. Treat any confidence mechanism you implement as a heuristic to be validated against your specific task distribution, not as a solved problem.
+    </div>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A multi-step agent is tasked with researching a competitor and drafting a strategy memo. The research step returns incomplete data. Which architectural choice best prevents this incomplete data from producing a confident-sounding but wrong strategy memo?</div>
+      <button class="quiz-option" data-letter="A">Increase the model temperature so the model explores more possibilities.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Insert a validation step between research and synthesis that checks completeness and flags low-confidence sections before they feed the synthesis agent.</button>
+      <button class="quiz-option" data-letter="C">Ask the model to add a disclaimer at the end of the memo if it is uncertain.</button>
+      <button class="quiz-option" data-letter="D">Run the full pipeline twice and compare outputs for consistency.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. A validation step between research and synthesis breaks the propagation chain at the earliest point where the error can still be cleanly detected. The synthesis agent never sees the incomplete data; it sees a flagged gap instead. This is the cross-agent validation pattern. Option C produces a memo with a disclaimer, which is better than nothing but does not prevent the error from being amplified through synthesis. Option D detects inconsistency but does not identify which agent introduced the error or allow targeted recovery."
+           data-incorrect="Think about where in the pipeline the error can still be detected cleanly, before it gets amplified. The earlier you catch it, the less expensive the recovery. Asking the model to self-report uncertainty (option C) relies on the model correctly recognising what it does not know &mdash; which is precisely where LLMs are least reliable."></div>
+    </div>
+
+    <h2>Putting the layers together</h2>
+
+    <p>A production agent system typically combines all three layers. Tool calling gives the model the ability to act. The ReAct pattern gives the model a structured way to reason between actions. Stateful orchestration externalises the state so the system can recover, be audited, and be interrupted for human review.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Define tools with precise scope boundaries</h4>
+        <p>Write tool descriptions that answer: when should the model use this, when should it not, and what does a well-formed argument look like? Overlapping tool scopes produce systematic misrouting. Validate all arguments before execution.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Implement the ReAct loop with a hard step limit</h4>
+        <p>Prompt the model to produce explicit Thought/Action outputs. Parse using structured schema, not regex over free text. Set a maximum step count. Log every step to a durable store from the first loop iteration.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Externalise state before any long-running workflow</h4>
+        <p>If the task runs longer than one synchronous response cycle, persists across sessions, or modifies external systems, move to a stateful orchestration architecture. Every step's output is committed before the next step begins.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Insert validation agents between producer and consumer agents</h4>
+        <p>For any pipeline where Agent A's output feeds Agent B, add a validation step that checks completeness, confidence, and internal consistency. Fail loudly rather than passing bad data silently downstream.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Enforce human checkpoints architecturally for Tier 3 actions</h4>
+        <p>Map every tool to a risk tier. Route Tier 3 actions (irreversible, external-impact) through a human approval queue. Do not make this a prompt instruction &mdash; make it a middleware enforcement that the model cannot route around.</p>
+      </div>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>The three-layer architecture described here assumes a single orchestrator controlling a set of tools and sub-agents. Research into fully decentralised multi-agent systems, where agents negotiate tasks among themselves without a central coordinator, suggests different failure modes: deadlock, circular delegation, and goal divergence across agents with different context windows. These patterns are active research areas. Before adopting a decentralised architecture, ask whether the coordination overhead is justified by the parallelism gain, or whether a simpler centralised orchestrator would serve just as well with fewer failure modes to manage.</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the ReAct pattern and why does it outperform pure chain-of-thought for tool-augmented tasks?</li>
+        <li>What makes a stateful workflow more reliable than a free-running agent loop?</li>
+        <li>At what point does a multi-agent system need a human-in-the-loop checkpoint and how do you engineer one?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e07-agent-orchestration" data-next="e07-agent-orchestration"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e07-agent-orchestration');</script>
+<script>AIEngNav.init('e07-agent-orchestration');</script>
+
+</body>
+</html>

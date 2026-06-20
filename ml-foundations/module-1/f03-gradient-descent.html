@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F03 &mdash; Gradient Descent &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F03 &mdash; Gradient Descent">
+<meta property="og:description" content="The update rule that nudges every parameter slightly downhill on the loss surface.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/f03-gradient-descent.html">Module 1: Foundations of Learning</a>
+    <span class="sep">&#8250;</span>
+    Gradient Descent
+  </div>
+
+  <div class="hero">
+    <div class="gap-badge" data-module="1">F03 &middot; Module 1</div>
+    <h1>Gradient Descent</h1>
+    <p class="one-liner">The update rule that nudges every parameter slightly downhill on the loss surface.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Finding the lowest point in a hilly landscape while blindfolded &mdash; you can only feel the slope beneath your feet, so you take small steps in the downhill direction and repeat.
+    </div>
+  </div>
+
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Gradient descent is the single algorithm that makes training possible. Every weight update in every neural network &mdash; including LLMs &mdash; is gradient descent in some form.
+  </div>
+
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    After this page, you can explain how gradient descent works, why the learning rate is the most consequential knob in training, and why the algorithm is powerful but cannot guarantee finding the best possible solution.
+  </div>
+
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/f02-loss-functions.html" class="prereq-chip">F02 &mdash; Loss Functions</a>
+  </div>
+
+  <div class="content">
+
+    <p>Imagine you've been dropped into a hilly landscape in complete darkness, blindfolded. Your goal is to find the lowest valley. You can't see the terrain. You can't see where the valley is. But you can feel the ground beneath your feet, and that gives you one piece of information: which direction is downhill right now, and how steep the slope is. So you do the sensible thing. You take a careful step in the downhill direction. You feel the new slope. You take another step. Repeat. You're not guaranteed to reach the deepest valley in the whole landscape &mdash; you might settle into a local dip &mdash; but with every step, you're lower than you were before. That is gradient descent in its entirety.</p>
+
+    <p>The "landscape" in machine learning is called the <strong>loss surface</strong>. Its altitude at any point represents how wrong the model currently is &mdash; measured by the loss function you met in F02. The horizontal coordinates represent the values of the model's weights: every possible combination of weight values corresponds to a different spot on this surface. The training algorithm's job is to find the spot with the lowest altitude, which means the weight values that produce the smallest error. Gradient descent is how it navigates there.</p>
+
+    <p>This page walks the algorithm from first principles. You will see exactly what the "slope" means mathematically, why the size of each step matters so much, and where the blindfolded hiker analogy starts to break down &mdash; because the real loss surface is far stranger than any hilly landscape you could walk through.</p>
+
+    <h2>What the slope actually is: the gradient</h2>
+
+    <p>In the hiker analogy, "slope" is intuitive. In the math, it has a precise name: the <strong>gradient</strong>. The gradient is a collection of numbers &mdash; one per weight &mdash; where each number tells you: "if I increase this weight by a tiny amount, how much does the loss change, and in which direction?" A positive gradient for a weight means that increasing the weight makes the error worse. A negative gradient means that increasing it would make the error better. The size of the gradient number captures how steep the slope is in that direction.</p>
+
+    <p>A simple example makes this concrete. Suppose your model has only two weights &mdash; call them W1 and W2. After computing the loss on a batch of examples, you run backpropagation and find that the gradient for W1 is +0.8 and the gradient for W2 is &minus;0.3. This tells you: W1 is currently too large (increasing it makes things worse, so it needs to come down), and W2 is slightly too small (decreasing it would make things worse, so it needs to go up). Gradient descent acts on exactly this information. It moves each weight in the <em>opposite direction</em> of its gradient. W1 steps down. W2 steps up. The error decreases a little. Then you measure again, compute a new gradient, and repeat.</p>
+
+    <p>For a real model with billions of weights, the same logic applies across every single parameter simultaneously. Backpropagation computes the gradient for every weight in one backward sweep &mdash; a remarkable efficiency that makes training feasible at scale. The gradient for the model as a whole is then a vector with one entry per weight, pointing in the direction that would most steeply increase the loss. Gradient descent steps the opposite way.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A loss surface shown as a curved bowl. A red dot marks the starting position on the slope. Cyan arrows trace three steps downhill toward the valley floor marked in green.">
+        <defs>
+          <linearGradient id="surface-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#161c30"/>
+            <stop offset="100%" stop-color="#0f1221"/>
+          </linearGradient>
+          <marker id="step-arrow" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#00e5ff"/>
+          </marker>
+          <marker id="grad-arrow" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#f87171"/>
+          </marker>
+        </defs>
+
+        <!-- Loss surface bowl shape -->
+        <path d="M40 60 Q 200 60 340 260 Q 480 60 640 60" fill="none" stroke="#1e2640" stroke-width="2"/>
+        <path d="M40 60 Q 200 60 340 260 Q 480 60 640 60 L 640 300 L 40 300 Z" fill="url(#surface-grad)" opacity="0.6"/>
+
+        <!-- Axis labels -->
+        <text x="340" y="295" fill="#5a6375" font-size="11" text-anchor="middle">weight value (W)</text>
+        <text x="18" y="60" fill="#8892a4" font-size="11" text-anchor="middle">high</text>
+        <text x="18" y="270" fill="#8892a4" font-size="11" text-anchor="middle">low</text>
+        <text x="18" y="155" fill="#5a6375" font-size="11" text-anchor="middle" transform="rotate(-90 18 155)">loss</text>
+
+        <!-- Starting position -->
+        <circle cx="175" cy="108" r="9" fill="#f87171"/>
+        <text x="175" y="95" fill="#f87171" font-size="12" text-anchor="middle">start</text>
+
+        <!-- Gradient (uphill) arrow -->
+        <line x1="175" y1="108" x2="145" y2="82" stroke="#f87171" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#grad-arrow)"/>
+        <text x="118" y="78" fill="#f87171" font-size="10">gradient</text>
+        <text x="107" y="90" fill="#f87171" font-size="10">(uphill)</text>
+
+        <!-- Three descent steps -->
+        <line x1="175" y1="108" x2="218" y2="148" stroke="#00e5ff" stroke-width="2.5" marker-end="url(#step-arrow)"/>
+        <circle cx="218" cy="148" r="7" fill="#00e5ff" opacity="0.8"/>
+        <text x="235" y="143" fill="#00e5ff" font-size="11">step 1</text>
+
+        <line x1="218" y1="148" x2="258" y2="190" stroke="#00e5ff" stroke-width="2.5" marker-end="url(#step-arrow)"/>
+        <circle cx="258" cy="190" r="7" fill="#00e5ff" opacity="0.8"/>
+        <text x="273" y="185" fill="#00e5ff" font-size="11">step 2</text>
+
+        <line x1="258" y1="190" x2="295" y2="225" stroke="#00e5ff" stroke-width="2.5" marker-end="url(#step-arrow)"/>
+        <circle cx="295" cy="225" r="7" fill="#00e5ff" opacity="0.8"/>
+        <text x="310" y="220" fill="#00e5ff" font-size="11">step 3</text>
+
+        <!-- Valley floor -->
+        <circle cx="340" cy="260" r="9" fill="#34d399"/>
+        <text x="340" y="278" fill="#34d399" font-size="12" text-anchor="middle">low loss (goal)</text>
+      </svg>
+      <p class="diagram-caption">Each step moves the weights opposite to the gradient (which points uphill, shown in red). After enough steps, the weights reach a low-loss region. The size of each cyan arrow represents the learning rate &mdash; bigger arrows mean bigger, riskier steps.</p>
+    </div>
+
+    <h2>The learning rate: the most consequential knob in training</h2>
+
+    <p>The gradient tells you <em>which direction</em> to step. It does not tell you <em>how far</em>. That is controlled by the <strong>learning rate</strong> &mdash; a single number, typically somewhere between 0.0001 and 0.1, that you set before training begins. It is the most consequential hyperparameter in training, and getting it wrong in either direction is costly.</p>
+
+    <h3>Too large: overshooting the valley</h3>
+
+    <p>Think of the blindfolded hiker again. The slope says "step left." But if you lunge three metres instead of taking a small step, you might sail straight past the valley and land on the slope on the other side, now facing a slope that says "step right." Lunge again, back past the valley. Lunge again. You oscillate back and forth, never settling. In practice, a learning rate that is too large causes the loss to bounce around wildly, or even to increase instead of decrease. In severe cases the model's weights explode to enormous values and training collapses entirely &mdash; called <em>gradient explosion</em>.</p>
+
+    <h3>Too small: painfully slow progress</h3>
+
+    <p>Now suppose you take steps of one millimetre. You will eventually reach the valley, but training a large model on trillions of tokens at millimetre-steps would take years. Too-small learning rates also increase the risk of getting stuck in a tiny local dip near your starting position, because the gentle downward pull is never strong enough to carry you out of a shallow bowl. In practice, a learning rate that is too small produces a loss curve that barely moves &mdash; technically improving, but so slowly that compute time is wasted.</p>
+
+    <h3>The sweet spot: calibrated steps</h3>
+
+    <p>A well-chosen learning rate produces a loss curve that falls steadily in the first phase of training, decelerates as it approaches good territory, and plateaus when the model has extracted most of what the data can teach. In practice, researchers rarely use a fixed learning rate throughout training. Instead they use a <strong>learning rate schedule</strong>: start at a moderate rate, warm it up over the first few thousand steps (so early random updates don't destabilize the network), then decay it gradually toward the end of training so the final weights settle rather than jitter. The exact schedule is an active area of engineering; modern training runs treat it as seriously as architectural choices.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Think first: if you double the learning rate mid-training, what are the two most likely outcomes?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>The two most likely outcomes are: (1) the loss bounces up briefly and then recovers, settling at a similar final value but getting there faster &mdash; the best case; or (2) the loss spikes dramatically and fails to come back down, because the larger steps are now overshooting the low-loss region the model was converging toward. Which outcome you get depends on how close you already are to a minimum. Early in training, when weights are far from good values, a larger learning rate is often tolerable. Late in training, when the model is in a narrow low-loss valley, a large step can kick it right out again. This is why learning rate schedules decay toward the end of training.</p>
+      </div>
+    </div>
+
+    <h2>Batch size: how much data before each step</h2>
+
+    <p>In the purest version of gradient descent, you would run every single training example through the model, average the resulting gradients, and then take one step. For a dataset of trillions of tokens, that would mean waiting an extremely long time between weight updates. Not practical.</p>
+
+    <p>The practical solution is to compute the gradient from a randomly sampled <strong>mini-batch</strong> of examples &mdash; say, 512 or 4,096 at a time &mdash; and take a step after each mini-batch. This is called <strong>mini-batch gradient descent</strong>, or often just <strong>stochastic gradient descent</strong> (SGD) because the mini-batches are sampled randomly. It is the universal choice in modern deep learning.</p>
+
+    <p>Three variants exist, and understanding the differences answers the second verification question directly.</p>
+
+    <div class="tabs">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="tab-batch">Batch GD</button>
+        <button class="tab-btn" data-tab="tab-sgd">Stochastic GD</button>
+        <button class="tab-btn" data-tab="tab-minibatch">Mini-Batch GD</button>
+      </div>
+      <div class="tab-panel active" id="tab-batch">
+        <p><strong>Full-batch gradient descent</strong> uses the entire dataset before each weight update. The gradient is precise &mdash; averaged over every training example, so it reliably points downhill. But for datasets with billions of examples, computing one gradient takes an impractical amount of time and memory. One update might take days. Used almost nowhere in modern practice.</p>
+        <p>Analogy: a management consultancy that refuses to change strategy until it has surveyed every single client in the world before the next board meeting.</p>
+      </div>
+      <div class="tab-panel" id="tab-sgd">
+        <p><strong>Stochastic gradient descent (pure SGD)</strong> takes one example at a time, updates weights after each one. Updates are fast and happen constantly. But the gradient from a single example is noisy &mdash; it might be an unusual example that points in a misleading direction. The loss curve bounces around chaotically, making convergence hard to monitor. Rarely used on its own in deep learning, though the name &ldquo;SGD&rdquo; is widely reused to mean mini-batch.</p>
+        <p>Analogy: a consultant who rewrites the entire proposal after every single client call, regardless of how representative that call was.</p>
+      </div>
+      <div class="tab-panel" id="tab-minibatch">
+        <p><strong>Mini-batch gradient descent</strong> is the practical sweet spot. Sample a random batch of examples (commonly 256 to 4,096), average the gradient, take one step, repeat. Batching smooths out the noise of individual examples without the wait of full-batch. Hardware accelerators (GPUs, TPUs) are designed to parallelize exactly this computation, so mini-batches run much faster per update than single examples. This is what every major LLM uses.</p>
+        <p>Analogy: a consulting team that reviews fifty client feedback forms before their weekly strategy meeting &mdash; enough signal to move confidently, fast enough to keep improving.</p>
+      </div>
+    </div>
+
+    <p>The batch size interacts with the learning rate in a way worth noting. A larger batch produces a more accurate gradient, which means you could tolerate a larger learning rate (since each step is a more reliable direction). A smaller batch is noisier, which generally calls for a smaller learning rate. In practice, scaling laws for batch size and learning rate are an active area of research &mdash; teams at frontier labs study optimal combinations carefully before committing to a multi-million-dollar training run.</p>
+
+    <h2>The loss surface is nothing like a smooth valley</h2>
+
+    <p>The blindfolded hiker analogy is helpful, but it creates a misleading picture: a smooth, bowl-shaped landscape with one obvious lowest point. Real loss surfaces are nothing like that. A model with billions of weights lives in a space with billions of dimensions. The surface in that space is extraordinarily complex, and several features of it matter for understanding why gradient descent behaves as it does.</p>
+
+    <h3>Local minima: valleys within valleys</h3>
+
+    <p>A <strong>local minimum</strong> is a point where every small step in any direction goes uphill &mdash; but it isn't the lowest point overall. The blindfolded hiker who drops into a small dip on the hillside is stuck: every step feels uphill. This is the classic concern about gradient descent, and the intuitive worry is that a model might converge to a mediocre local minimum far from the best possible solution.</p>
+
+    <p>For low-dimensional problems, local minima are a serious trap. For very high-dimensional spaces like those inhabited by billion-parameter models, the story is more nuanced. A local minimum requires the surface to curve upward in <em>every one</em> of billions of dimensions simultaneously. The mathematical probability of that is extremely low. What happens far more often in high dimensions is a <strong>saddle point</strong> &mdash; a point that is a minimum in some directions but a maximum in others. Gradient descent typically escapes saddle points because the gradient is rarely exactly zero there. The empirical evidence from training large models supports this: models trained with gradient descent do not seem to get badly stuck in local minima. They find solutions that generalize well, even if the exact final weights vary between runs <span class="citation" title="Goodfellow, I., Vinyals, O. & Saxe, A. (2015). Qualitatively characterizing neural network optimization problems. ICLR.">(Goodfellow et al., 2015)</span>.</p>
+
+    <h3>Flat regions and plateaus</h3>
+
+    <p>More problematic than local minima, in practice, are <strong>flat regions</strong> &mdash; areas where the gradient is nearly zero in all directions, not because you're in a minimum, but because the surface is very shallow. Gradient descent takes tiny steps here because the slope is barely perceptible, and training slows dramatically. This is one reason modern optimizers add <strong>momentum</strong> &mdash; a concept borrowed from physics: the weight updates accumulate a velocity from past steps, so even if the current gradient is small, prior momentum carries the model through flat regions. Adam <span class="citation" title="Kingma, D. & Ba, J. (2015). Adam: A Method for Stochastic Optimization. ICLR.">(Kingma &amp; Ba, 2015)</span>, the optimizer used in nearly all LLM training, combines gradient information with adaptive per-parameter learning rates and momentum, solving most of these flat-region problems automatically.</p>
+
+    <h3>The global minimum may not be the goal</h3>
+
+    <p>Here is a counterintuitive point that often surprises people: the theoretical global minimum of the loss &mdash; the absolute lowest point on the entire surface &mdash; is <em>not</em> what you want. A model that achieves the absolute lowest possible training loss has almost certainly memorized the training data verbatim rather than learning the underlying patterns. It will perform brilliantly on examples it has seen and fail on everything new. This is called <strong>overfitting</strong>. The practical goal of gradient descent is not to find the global minimum but to find a region of the loss surface that is low enough to reflect genuine patterns, while generalizing to unseen data. Where exactly to stop is determined by monitoring performance on a held-out validation set and stopping training before the model starts memorizing rather than learning.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Active Debate</div>
+      <p>The question of why gradient descent on large neural networks finds solutions that generalize so well &mdash; rather than overfitting or getting stuck &mdash; is genuinely not fully understood. The field has several competing explanations (implicit regularization, loss surface geometry in high dimensions, the role of stochastic noise from mini-batches) but no single settled account. The empirical observation &mdash; that it works remarkably well &mdash; is robust. The theory of <em>why</em> is still being written.</p>
+    </div>
+
+    <h2>Modern optimizers: gradient descent with upgrades</h2>
+
+    <p>Pure gradient descent &mdash; compute gradient, multiply by learning rate, subtract from weights &mdash; is elegant but often slow in practice. Modern training uses enhanced versions that address the flat regions and noisy gradients that pure gradient descent handles poorly.</p>
+
+    <p><strong>SGD with Momentum</strong> accumulates a weighted average of past gradients. Imagine the hiker carrying a heavy backpack that keeps them moving in their recent direction even when the immediate slope is nearly flat. Momentum helps the model push through plateaus and also dampens the oscillation that can occur when the learning rate is near the upper edge of stability.</p>
+
+    <p><strong>Adam</strong> (Adaptive Moment Estimation) is the default choice for most LLM training today. It maintains separate adaptive learning rates for each individual weight, scaling them based on how large that weight's gradient has been historically. Weights that receive large, consistent gradients get their learning rate reduced (so they don't overshoot). Weights that receive small or infrequent gradients get their learning rate increased (so they make progress). The result is a self-tuning optimizer that handles the enormous variation in gradient magnitudes across billions of parameters far better than a single global learning rate can <span class="citation" title="Kingma, D. & Ba, J. (2015). Adam: A Method for Stochastic Optimization. ICLR.">(Kingma &amp; Ba, 2015)</span>.</p>
+
+    <p>You do not need to implement any of these from scratch &mdash; every deep learning framework (PyTorch, JAX) ships them as one-line calls. But understanding what they are doing under the hood lets you reason about training instabilities, learning rate schedules, and why certain architectural choices interact badly with certain optimizers. That reasoning becomes essential when you start reading papers about how frontier models are trained.</p>
+
+    <h2>One complete training step, end to end</h2>
+
+    <p>Before the self-check, it's worth walking through a single gradient descent update from input to weight change, because the five-step sequence is the heartbeat of the entire training process.</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <h4>Sample a mini-batch</h4>
+        <p>Randomly select a batch of training examples &mdash; say, 512 sentences from the training corpus. These will be the basis for this weight update. The randomness is intentional: it introduces the noise that helps the model escape flat regions and reduces the risk of the gradient being biased toward a particular subset of the data.</p>
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <h4>Forward pass &mdash; make predictions</h4>
+        <p>Run each example through the model from input to output. The model uses its current weights to produce predictions &mdash; probability distributions over the next token for each position. This is the model "guessing" based on everything it has learned so far.</p>
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <h4>Compute the loss</h4>
+        <p>Compare the predictions to the correct answers using the loss function (from F02). Average the loss across all 512 examples in the batch. This single number is the altitude of the current position on the loss surface.</p>
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <h4>Backward pass &mdash; compute the gradient</h4>
+        <p>Run backpropagation: trace the error backward through every layer, computing how much each weight contributed to the loss and in which direction. The result is one gradient number per weight &mdash; the slope of the loss surface with respect to that weight, pointing uphill.</p>
+      </div>
+      <div class="walkthrough-step" data-step="5">
+        <h4>Update &mdash; step downhill</h4>
+        <p>Subtract a fraction of the gradient from each weight: new_weight = old_weight &minus; (learning_rate &times; gradient). Every weight moves a tiny amount in the direction that reduces loss. The model is now marginally better than it was. Discard the gradient. Start over with the next mini-batch.</p>
+      </div>
+    </div>
+
+    <p>That five-step loop runs trillions of times during the training of a large language model. The weights that emerge from this process are not the result of anyone programming in knowledge. They are the residue of trillions of small error-corrections, each one nudging the model slightly closer to being right. Every fact the model "knows," every reasoning pattern it exhibits, every stylistic tendency it has &mdash; all of it crystallized through iterations of this loop.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model is training and the loss is spiking upward violently after each update instead of decreasing steadily. What is the most likely cause?</div>
+      <button class="quiz-option" data-letter="A">The batch size is too large, so the gradient is too accurate and the model is overfitting to each batch.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The learning rate is too large, so each step overshoots the low-loss region and the model bounces back and forth across the valley.</button>
+      <button class="quiz-option" data-letter="C">The loss function is wrong, so the gradient is pointing in the right direction but the loss metric is recording it incorrectly.</button>
+      <div class="quiz-feedback" data-correct="Correct. A violently spiking loss is the classic symptom of a learning rate that is too large. The model is taking steps so large that it consistently overshoots low-loss regions, landing on the opposite slope each time. The fix is to reduce the learning rate, often by an order of magnitude, and restart or resume training from a checkpoint." data-incorrect="Think about what controls how far the model moves with each update. The accuracy of the gradient (batch size) matters for the direction. What controls the magnitude of the step?"></div>
+    </div>
+
+    <h2>Why gradient descent doesn't guarantee the global minimum</h2>
+
+    <p>The third verification question deserves a direct answer. Gradient descent is a <strong>local</strong> algorithm: at each step, it looks only at the immediate slope beneath the current position. It has no map of the broader terrain. This means three things follow inevitably.</p>
+
+    <p>First, it can converge to a <strong>local minimum</strong> &mdash; a bowl that is not the lowest bowl. As discussed, this is less of a problem in high-dimensional spaces than intuition suggests, but it is not zero risk, especially in smaller models or unusual loss landscapes.</p>
+
+    <p>Second, the solution you find depends on where you <strong>start</strong>. Weights are initialized randomly before training begins. Two runs with different random seeds will follow different paths through the loss surface and can end up at different solutions &mdash; both of which might generalize well, but with different learned representations. This is why training large models is not fully reproducible.</p>
+
+    <p>Third, gradient descent finds a <strong>stationary point</strong> &mdash; a place where the gradient is (approximately) zero &mdash; which may be a minimum, a saddle point, or even a maximum in some rare direction. In practice, the algorithm rarely gets exactly stuck at a non-minimum stationary point, because mini-batch noise keeps perturbing the gradient slightly, and momentum from the optimizer provides some escape energy. But the guarantee of optimality that you might want &mdash; "this set of weights is the best possible" &mdash; simply does not exist for gradient descent on non-convex loss surfaces. The field has grown comfortable with this: empirically, the solutions found are good enough to produce remarkable capabilities, even if we cannot prove they are the best.</p>
+
+    <p>Understanding this limitation also explains a practical reality about LLM development: you cannot train the same frontier model twice and get identical results. The weights will differ, the exact capabilities will differ slightly, and sometimes one run will simply be better than another for reasons that are hard to fully attribute. This irreproducibility is a genuine challenge for scientific rigor in the field.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Gradient descent is deceptively simple: compute the slope, step downhill, repeat. But it is the foundation on which every trained model rests. The gradient tells you which direction to move; the learning rate tells you how far; the batch size determines how reliably the gradient reflects the true data distribution. Get these three elements right, and this one loop &mdash; run trillions of times &mdash; transforms random numbers into weights that encode language, facts, and reasoning. There is no other algorithm doing this. There is only gradient descent, applied at scale.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If gradient descent always follows the local slope, and the loss surface has billions of dimensions, how does a model trained with gradient descent ever learn to do tasks (like multi-step reasoning) that seem to require holding a path across many distant points on the surface &mdash; not just a local downhill step?</p>
+    </div>
+
+    <p class="diagram-caption">Reference note: The Adam optimizer is from Kingma, D. &amp; Ba, J. (2015), "Adam: A Method for Stochastic Optimization," ICLR. Analysis of loss surface geometry in high-dimensional spaces is from Goodfellow, I., Vinyals, O. &amp; Saxe, A. (2015), "Qualitatively characterizing neural network optimization problems," ICLR. The original formulation of gradient descent applied to multi-layer networks is from Rumelhart, D., Hinton, G. &amp; Williams, R. (1986), "Learning Representations by Back-Propagating Errors," Nature.</p>
+
+  </div>
+
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What happens if the learning rate is too large? Too small?</li>
+        <li>What is the difference between batch and mini-batch gradient descent?</li>
+        <li>Why does gradient descent not guarantee finding the global minimum?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('f03-gradient-descent');</script>
+<script>
+(function () {
+  // Tab panel behavior for the batch/SGD/mini-batch comparison
+  var tabBtns = document.querySelectorAll('.tab-btn');
+  var tabPanels = document.querySelectorAll('.tab-panel');
+  if (!tabBtns.length) return;
+
+  for (var i = 0; i < tabBtns.length; i++) {
+    tabBtns[i].addEventListener('click', function () {
+      var targetId = this.getAttribute('data-tab');
+      for (var j = 0; j < tabBtns.length; j++) {
+        tabBtns[j].classList.remove('active');
+      }
+      for (var k = 0; k < tabPanels.length; k++) {
+        tabPanels[k].classList.remove('active');
+      }
+      this.classList.add('active');
+      var targetPanel = document.getElementById(targetId);
+      if (targetPanel) targetPanel.classList.add('active');
+    });
+  }
+})();
+</script>
+</body>
+</html>

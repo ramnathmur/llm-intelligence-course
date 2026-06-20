@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E05 &mdash; Vector Databases &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E05 &mdash; Vector Databases">
+<meta property="og:description" content="How semantic search works at scale &mdash; approximate nearest-neighbour search and when to use which store.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-2/e04-rag-architecture.html">Module 2: Retrieval and Memory</a>
+    <span class="sep">&#8250;</span>
+    Vector Databases
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="2">E05 &middot; Module 2</div>
+    <h1>Vector Databases</h1>
+    <p class="one-liner">How semantic search works at scale &mdash; approximate nearest-neighbour search and when to use which store.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A library finding system. Brute force is checking every book one by one. ANN indexing is an organised system &mdash; books are grouped by genre, then by topic within genre &mdash; so you only check the relevant section.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Brute-force cosine similarity search over millions of vectors is too slow for real-time retrieval. Vector databases solve this with approximate nearest-neighbour algorithms &mdash; understanding the approximation helps you reason about retrieval failure modes.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why exact vector search does not scale and how ANN indices trade recall for speed &mdash; and when that trade-off bites you in production.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-2/e04-rag-architecture.html" class="prereq-chip">E04 &mdash; RAG Architecture</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Imagine you have built a RAG system. Your knowledge base has 5 million documents, each converted to a 1,536-dimensional embedding vector. A user submits a query. You embed the query into the same space and want to return the 10 documents whose vectors are closest to the query vector. How long does that take?</p>
+
+    <p>If you compare the query vector against every document vector one by one &mdash; computing a cosine similarity for each &mdash; that is 5 million dot products. On a modern server, this takes roughly 2&ndash;5 seconds per query. For a real-time application, that is catastrophic. A user waiting 4 seconds for a search result will not wait long. This is the scaling wall that every production RAG system eventually hits, and it is exactly why vector databases exist.</p>
+
+    <p>This page covers how vector databases solve the problem, what they sacrifice to do it, and how to choose between them. By the end, you will be able to reason about retrieval failures not just as "the system returned the wrong document" but as a specific consequence of the index design choices made during setup.</p>
+
+    <h2>The problem: exact search does not scale</h2>
+
+    <p>The naive approach is called <strong>exact nearest-neighbour search</strong> or brute-force search. You compare the query to every vector in the database and rank them by similarity. The answer is always correct &mdash; you guaranteed the closest vectors &mdash; but the cost is linear in the number of vectors. Double the corpus, double the query latency.</p>
+
+    <p>Small corpora handle this fine. If you have 10,000 documents and queries run in 50 milliseconds, you are not worried. But the moment you cross the mid-hundreds-of-thousands mark, exact search becomes impractical for interactive applications. At millions of vectors and sub-second latency requirements, it is simply off the table.</p>
+
+    <p>The fundamental challenge is called the <strong>curse of dimensionality</strong>. In high-dimensional spaces (like the 1,536 dimensions of a typical embedding), the geometry behaves counterintuitively. Points that should be close in meaning end up at similar distances from each other, making it hard to prune large swaths of the search space early. Tree structures that work brilliantly in two or three dimensions degrade toward brute force as dimensionality climbs.</p>
+
+    <p>The solution is to give up the guarantee of exactness and instead find vectors that are <em>approximately</em> nearest. This is called <strong>Approximate Nearest Neighbour</strong> search, or ANN.</p>
+
+    <h2>ANN: trading recall for speed</h2>
+
+    <p>The ANN insight is deceptively simple: <em>you do not need to check every book if you can quickly identify which section to check</em>. Build an index structure at load time that organises vectors into navigable regions. At query time, use that structure to home in on the promising region and search only there.</p>
+
+    <p>This is a direct trade-off. You get fast queries. In exchange, you occasionally miss a true nearest neighbour because it sits in a region you did not visit. The miss rate is measured by <strong>recall</strong> &mdash; the fraction of the true top-K results that appear in your approximate top-K results. A system with 95% recall at K=10 means that, on average, you retrieve 9.5 of the 10 truly closest documents. The one you miss might be the most relevant document in your corpus. Or it might be indistinguishable from the ones you found. That depends on your data.</p>
+
+    <p>The tunable parameter that controls the trade-off is usually called <strong>ef</strong> (in HNSW) or <strong>nprobe</strong> (in IVF-based indices). Increase it and you visit more of the index, improving recall but increasing latency. Decrease it and you get faster queries at the cost of more misses. This dial is the first thing to reach for when a production RAG system shows retrieval failures.</p>
+
+    <h2>How HNSW works</h2>
+
+    <p><strong>Hierarchical Navigable Small World</strong> (HNSW) is currently the dominant ANN algorithm for LLM retrieval applications. It was introduced by Malkov &amp; Yashunin (2018) <span class="citation" title="Malkov, Y.A. &amp; Yashunin, D.A. (2018). Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs. IEEE TPAMI.">(Malkov &amp; Yashunin, 2018)</span> and has become the default in most vector databases, including Pinecone, Weaviate, Qdrant, and Chroma.</p>
+
+    <p>The name contains the whole architecture. To understand it, start with the concept of a <strong>navigable small world</strong>. Imagine a social network where every person knows a few close friends (near neighbours) and also a few people in completely different cities (long-range connections). This structure has the "small world" property: you can reach anyone in a small number of hops by first using the long-range connections to jump across the network, then using the short-range connections to close in precisely.</p>
+
+    <p>HNSW builds exactly this kind of graph for vectors. Each vector becomes a node. During index construction, each node is connected to a small number of neighbours. Some connections are short (to similar vectors) and some are longer (to more distant vectors that provide navigational shortcuts). The <strong>hierarchical</strong> part adds multiple layers. The top layer has only a few hundred nodes connected by long-range links. Lower layers are progressively denser, with shorter and shorter connections. The bottom layer contains all vectors.</p>
+
+    <div class="diagram-container">
+      <svg width="580" height="300" viewBox="0 0 580 300" role="img" aria-label="HNSW layer diagram showing three layers: sparse top layer with long-range connections, middle layer, and dense bottom layer with query entry point and search path">
+        <rect x="1" y="1" width="578" height="298" rx="10" fill="none" stroke="var(--border)"/>
+
+        <!-- Layer labels -->
+        <text x="20" y="42" fill="var(--text-muted)" font-size="11">Layer 2 (top)</text>
+        <text x="20" y="122" fill="var(--text-muted)" font-size="11">Layer 1</text>
+        <text x="20" y="222" fill="var(--text-muted)" font-size="11">Layer 0 (all vectors)</text>
+
+        <!-- Layer 2 — 4 nodes, long-range connections -->
+        <line x1="140" y1="50" x2="290" y2="50" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="6 3"/>
+        <line x1="290" y1="50" x2="430" y2="50" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="6 3"/>
+        <line x1="140" y1="50" x2="430" y2="50" stroke="var(--cyan)" stroke-width="1" stroke-dasharray="2 4" opacity="0.4"/>
+        <circle cx="140" cy="50" r="7" fill="var(--surface3)" stroke="var(--cyan)" stroke-width="2"/>
+        <circle cx="290" cy="50" r="7" fill="var(--surface3)" stroke="var(--cyan)" stroke-width="2"/>
+        <circle cx="430" cy="50" r="7" fill="var(--surface3)" stroke="var(--cyan)" stroke-width="2"/>
+        <circle cx="510" cy="50" r="7" fill="var(--surface3)" stroke="var(--cyan)" stroke-width="2"/>
+        <text x="290" y="30" fill="var(--cyan)" font-size="10" text-anchor="middle">sparse — long-range navigation</text>
+
+        <!-- Layer 1 — more nodes -->
+        <line x1="100" y1="130" x2="200" y2="130" stroke="var(--green)" stroke-width="1.5"/>
+        <line x1="200" y1="130" x2="310" y2="130" stroke="var(--green)" stroke-width="1.5"/>
+        <line x1="310" y1="130" x2="400" y2="130" stroke="var(--green)" stroke-width="1.5"/>
+        <line x1="400" y1="130" x2="490" y2="130" stroke="var(--green)" stroke-width="1.5"/>
+        <line x1="100" y1="130" x2="310" y2="130" stroke="var(--green)" stroke-width="1" opacity="0.3"/>
+        <circle cx="100" cy="130" r="6" fill="var(--surface3)" stroke="var(--green)" stroke-width="2"/>
+        <circle cx="200" cy="130" r="6" fill="var(--surface3)" stroke="var(--green)" stroke-width="2"/>
+        <circle cx="310" cy="130" r="6" fill="var(--surface3)" stroke="var(--green)" stroke-width="2"/>
+        <circle cx="400" cy="130" r="6" fill="var(--surface3)" stroke="var(--green)" stroke-width="2"/>
+        <circle cx="490" cy="130" r="6" fill="var(--surface3)" stroke="var(--green)" stroke-width="2"/>
+
+        <!-- Layer 0 — dense, all vectors -->
+        <line x1="80" y1="240" x2="130" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="130" y1="240" x2="175" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="175" y1="240" x2="220" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="220" y1="240" x2="265" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="265" y1="240" x2="310" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="310" y1="240" x2="355" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="355" y1="240" x2="400" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="400" y1="240" x2="450" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <line x1="450" y1="240" x2="500" y2="240" stroke="var(--surface3)" stroke-width="1"/>
+        <!-- some cross links -->
+        <line x1="130" y1="240" x2="265" y2="240" stroke="var(--surface3)" stroke-width="1" opacity="0.5"/>
+        <line x1="265" y1="240" x2="450" y2="240" stroke="var(--surface3)" stroke-width="1" opacity="0.5"/>
+
+        <circle cx="80"  cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="130" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="175" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="220" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="265" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <!-- Target result node -->
+        <circle cx="310" cy="240" r="7" fill="var(--amber)" stroke="var(--amber)" stroke-width="2"/>
+        <circle cx="355" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="400" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="450" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+        <circle cx="500" cy="240" r="5" fill="var(--surface3)" stroke="var(--text-muted)" stroke-width="1.5"/>
+
+        <!-- Query entry point at top, descend path -->
+        <circle cx="290" cy="50" r="10" fill="var(--cyan)" opacity="0.3"/>
+        <text x="290" y="68" fill="var(--cyan)" font-size="9" text-anchor="middle">entry</text>
+
+        <!-- Descent arrows between layers -->
+        <line x1="290" y1="57" x2="290" y2="124" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arr-cyan)"/>
+        <line x1="310" y1="136" x2="310" y2="233" stroke="var(--cyan)" stroke-width="1.5" stroke-dasharray="4 2" marker-end="url(#arr-cyan)"/>
+
+        <!-- Target label -->
+        <text x="310" y="265" fill="var(--amber)" font-size="10" text-anchor="middle">nearest</text>
+
+        <defs>
+          <marker id="arr-cyan" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--cyan)"/>
+          </marker>
+        </defs>
+      </svg>
+      <p class="diagram-caption">A query enters the HNSW graph at the top layer, navigates via long-range links to the right region, then descends through progressively denser layers to find the approximate nearest neighbour (amber node) at the bottom.</p>
+    </div>
+
+    <p>When a query arrives, the search enters the top layer at a pre-selected entry point and greedily moves toward nodes that are closer to the query, using the long-range links to travel large distances quickly. When it finds a local minimum at the current layer, it drops down to the next layer and continues the greedy search from that point, now using shorter-range links for precision. By the time it reaches the bottom layer, it has already navigated most of the distance. It then explores a local neighbourhood of the bottom layer &mdash; controlled by the <code>ef</code> parameter &mdash; and returns the closest candidates found.</p>
+
+    <p>Why is HNSW dominant? Three reasons. First, query performance is outstanding &mdash; typically logarithmic in the corpus size, so doubling the corpus barely affects latency. Second, it achieves high recall with modest <code>ef</code> values. Third, it supports dynamic insertion &mdash; you can add new vectors to the index without rebuilding it from scratch. This last property matters enormously for real systems where new documents arrive continuously.</p>
+
+    <h3>The IVF alternative</h3>
+
+    <p>The other major family of ANN algorithms is <strong>Inverted File Index</strong> (IVF). The name comes from information retrieval, where an inverted index maps terms to document lists. Here the analogy is: cluster all vectors into groups (using k-means), then at query time search only the most relevant clusters.</p>
+
+    <p>Building an IVF index has two phases. First, train a clustering model on your vectors, producing a set of <strong>centroids</strong> &mdash; one per cluster. This is done offline. Second, assign every vector in the corpus to its nearest centroid. At query time, embed the query and find the <code>nprobe</code> nearest centroids, then search only the vectors assigned to those clusters.</p>
+
+    <p>IVF is fast at query time and very memory-efficient when combined with product quantization (PQ), which compresses each vector by representing it as a set of short codes. The trade-off is that building the index requires a training phase, and dynamic insertion is awkward &mdash; new vectors may not fit neatly into the existing clusters. IVF also requires you to choose the number of clusters at build time. For static, batch-loaded corpora, IVF with PQ (sometimes called IVF-PQ or IVFADC) is hard to beat on memory and throughput. For dynamic corpora with frequent updates, HNSW is usually the better choice.</p>
+
+    <h2>What recall actually means in practice</h2>
+
+    <p>When a vendor says their vector database achieves "95% recall at K=10," this is not an abstract quality score. It has direct consequences for your RAG pipeline. Here is how to think about it.</p>
+
+    <p>Suppose the user asks a question and the true best-matching document &mdash; the one that perfectly answers it &mdash; sits at position 1 in the exact search ranking. Your ANN index, with 95% recall at K=10, will include this document in its top-10 results 95% of the time. But 5% of the time, it will miss it entirely. Your LLM then has to answer the question without the best evidence. In a low-stakes application, this is a tolerable failure rate. In a medical information system or a legal research tool, it may not be.</p>
+
+    <p>Recall is not uniform across your corpus. It tends to be worst for vectors that sit in sparse or outlier regions of the embedding space &mdash; unusual documents, specialised terminology, content that does not cluster neatly with anything else. These are often the exact documents that matter most for hard or unusual queries. This is the retrieval failure mode to audit first: run your hardest test queries and check whether the misses are concentrated in particular document types or topics.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if you increase the <code>ef</code> parameter from 50 to 200 in HNSW, what changes and what stays the same?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p><strong>What changes:</strong> The search explores a larger candidate set at the bottom layer before returning results. This increases recall &mdash; you are less likely to miss the true nearest neighbour. Query latency also increases because more comparisons are made.</p>
+        <p><strong>What stays the same:</strong> The index structure itself (the graph with its connections) does not change. The vectors stored are the same. The <code>ef</code> parameter only controls how many candidates are considered during search, not how the graph is built. Build-time parameters like <code>M</code> (the number of connections per node) are fixed at index creation.</p>
+        <p>The practical upshot: <code>ef</code> is a run-time dial you can adjust without rebuilding the index. This makes it the first parameter to tune when recall is too low.</p>
+      </div>
+    </div>
+
+    <h2>Choosing a vector store</h2>
+
+    <p>The market for vector databases has exploded since 2022. The choice is more about your operational context than raw algorithm performance, since most serious options implement HNSW or offer it as a default. Here are the relevant distinctions.</p>
+
+    <h3>Managed cloud vs. self-hosted</h3>
+
+    <p><strong>Managed options</strong> (Pinecone, Zilliz Cloud, Weaviate Cloud) handle infrastructure, replication, and scaling for you. You pay per vector stored and per query. The cost model is predictable and the operational burden is low. The downside is data leaves your infrastructure, which matters for compliance-sensitive applications.</p>
+
+    <p><strong>Self-hosted options</strong> (Qdrant, Weaviate OSS, Milvus, Chroma) run on your own servers or Kubernetes cluster. You control data residency, can tune hardware (GPUs significantly accelerate large ANN operations), and pay only for infrastructure. The operational overhead is real, especially at scale.</p>
+
+    <p><strong>Embedded options</strong> (Chroma running in-process, FAISS as a library, LanceDB) are the right choice for prototyping and small-scale deployments. No external service to manage, sub-millisecond latency for moderate corpus sizes, zero network overhead. They break down when you need to serve multiple processes or scale horizontally.</p>
+
+    <h3>Metadata filtering</h3>
+
+    <p>A capability that separates production-grade vector stores from toy implementations is <strong>metadata filtering</strong>. In a real system, you rarely want to search all vectors. You want to search vectors belonging to a particular customer, dated within the last 30 days, or tagged with a specific document type. Without metadata filtering, you would have to retrieve a broad set and then discard irrelevant results at the application layer &mdash; wasting compute and degrading effective recall.</p>
+
+    <p>Implementations vary significantly. Some databases apply the metadata filter <em>before</em> the ANN search (pre-filtering), which guarantees you only search within the qualifying subset but requires the filter to leave enough vectors to search effectively. Others filter <em>after</em> the ANN search (post-filtering), which is faster but can return fewer than K results if many candidates are filtered out. Qdrant, Weaviate, and Pinecone have invested heavily in efficient pre-filtering; check the documentation for your chosen store carefully, as this is one of the trickiest implementation details in practice.</p>
+
+    <h3>Hybrid sparse-dense retrieval</h3>
+
+    <p>Dense vector search is powerful but has a specific weakness: <strong>keyword precision</strong>. If a user searches for a very specific product code, a person's unusual name, or a technical acronym, the embedding model may not have learned a useful representation for it. The vector for "SKU-47829-B" lands somewhere vague; every document about product codes looks similar. A lexical search (old-fashioned keyword matching) would nail this instantly because the exact string appears in the document.</p>
+
+    <p>Hybrid retrieval combines dense vector search with sparse keyword search (typically BM25, the standard information-retrieval ranking algorithm). Both retrieve a set of candidates. A fusion step &mdash; usually Reciprocal Rank Fusion (RRF) <span class="citation" title="Cormack, G.V., Clarke, C.L.A. &amp; Buettcher, S. (2009). Reciprocal Rank Fusion outperforms Condorcet and individual rank learning methods. SIGIR.">(Cormack et al., 2009)</span> &mdash; combines the two ranked lists into a single result set. Weaviate and Qdrant support hybrid retrieval natively. Elasticsearch has added vector support specifically to enable this pattern.</p>
+
+    <p>When should you use hybrid? Use it whenever your corpus contains specific identifiers, proper nouns, technical codes, or terminology that embedding models are unlikely to generalise well. A general knowledge assistant can often get away with pure dense retrieval. A legal document system searching for specific case citations, or a product catalogue searched by part number, almost certainly needs hybrid retrieval.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A RAG system returns irrelevant results when users search for specific product codes like "XR-4821". Dense vector search is returning documents about products generally, not the specific model. What is the right fix?</div>
+      <button class="quiz-option" data-letter="A">Increase the <code>ef</code> parameter to explore more candidates.</button>
+      <button class="quiz-option" data-letter="B">Switch to a larger embedding model with more dimensions.</button>
+      <button class="quiz-option" data-letter="C" data-correct="true">Add sparse keyword (BM25) search alongside the dense search and use hybrid retrieval with rank fusion.</button>
+      <button class="quiz-option" data-letter="D">Rebuild the HNSW index with a higher <code>M</code> value.</button>
+      <div class="quiz-feedback" data-correct="Correct. This is exactly the weakness of dense retrieval: specific identifiers and codes that embedding models have not learned generalize poorly. BM25 handles exact keyword matches natively, so hybrid retrieval is the right tool." data-incorrect="Tuning the ANN index won't help here &mdash; the problem is that the embedding model produces similar vectors for product-code queries regardless of how many candidates you explore. This is a representation problem, not an index-coverage problem."></div>
+    </div>
+
+    <h2>Indexing vs. query latency: the build-time cost</h2>
+
+    <p>ANN indices are not free to build. Constructing an HNSW index over a million vectors takes minutes to hours depending on the dimensionality and the <code>M</code> parameter (the number of connections per node). The larger <code>M</code> is, the higher recall you get at query time, but the longer the build and the more memory the index consumes. A typical starting point is <code>M=16</code> or <code>M=32</code>. Going above <code>M=64</code> rarely pays off unless you have very high recall requirements and abundant memory.</p>
+
+    <p>For IVF indices, the number of clusters (often called <code>nlist</code>) is the key build parameter. More clusters mean finer-grained partitioning and potentially higher recall &mdash; but they also require a larger <code>nprobe</code> at query time to cover enough of the space. A common rule of thumb is to set <code>nlist</code> to roughly the square root of the number of vectors, and <code>nprobe</code> to 5&ndash;20% of <code>nlist</code>.</p>
+
+    <p>An important operational reality: when you add new vectors to an HNSW index, they are inserted with all the right graph connections. But as your corpus grows and the data distribution shifts, the index can develop structural inefficiencies. Most production systems periodically rebuild the index from scratch to restore optimal performance. Budgeting for this rebuild time &mdash; and designing your system to serve queries from a previous index while the new one builds &mdash; is a real infrastructure concern.</p>
+
+    <h2>The memory question</h2>
+
+    <p>Vector search is fundamentally a memory-bound operation. A single float32 vector of 1,536 dimensions takes 6 KB. One million such vectors take 6 GB &mdash; before the index structure overhead. The HNSW graph itself adds 30&ndash;100% on top, depending on <code>M</code>. At 10 million vectors, you are looking at 60&ndash;120 GB of RAM just for the index. This is why many production deployments use GPU-accelerated search (FAISS with CUDA support can parallelize comparisons massively) or opt for quantization.</p>
+
+    <p><strong>Product Quantization</strong> (PQ) compresses each vector by splitting it into sub-vectors and replacing each sub-vector with a short code drawn from a learned codebook. A 1,536-dimensional float32 vector (6 KB) can be compressed to a PQ code of 64&ndash;192 bytes &mdash; a 30x&ndash;90x reduction. The trade-off is a small but real degradation in recall because the compressed representations are approximate. For very large corpora where fitting everything in RAM is the binding constraint, PQ is indispensable.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Vector databases solve the scaling problem by trading recall for speed. HNSW organises vectors into a navigable multi-layer graph where queries descend from sparse long-range connections to dense short-range ones, reaching approximate nearest neighbours in logarithmic time. The <code>ef</code> parameter is the runtime dial that controls how much of the graph to explore &mdash; the first thing to reach for when retrieval quality degrades. For queries involving specific identifiers or technical codes, dense search alone will fail; hybrid sparse-dense retrieval is the correct architecture.</p>
+    </div>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Your vector database achieves 97% recall at K=10 on your benchmark queries, but users still complain about missed results. What would you investigate? (Hint: think about which documents the 3% miss rate might be concentrated in, and whether your benchmark queries are representative of production traffic.)</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What does HNSW stand for and why is it the dominant ANN algorithm for LLM retrieval?</li>
+        <li>What does the approximation in ANN mean for retrieval recall &mdash; and when does it matter?</li>
+        <li>When would you use a hybrid sparse-dense retrieval system over pure vector search?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>
+(function () {
+  // Initialise nav if AIEngNav is available; otherwise fall back gracefully.
+  if (typeof AIEngNav !== 'undefined') {
+    AIEngNav.init('e05-vector-databases');
+  } else if (typeof LLMNav !== 'undefined') {
+    LLMNav.init('e05-vector-databases');
+  }
+})();
+</script>
+</body>
+</html>

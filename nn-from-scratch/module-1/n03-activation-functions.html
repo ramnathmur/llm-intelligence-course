@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N03 &mdash; Activation Functions &mdash; Building Neural Networks From Scratch</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="N03 &mdash; Activation Functions">
+<meta property="og:description" content="The nonlinear gates that let networks learn curves not just lines.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/n02-mlp-from-scratch.html">Module 1: Neural Network Foundations</a>
+    <span class="sep">&#8250;</span>
+    Activation Functions
+  </div>
+
+  <div class="hero">
+    <div class="gap-badge" data-module="1">N03 &middot; Module 1</div>
+    <h1>Activation Functions</h1>
+    <p class="one-liner">The nonlinear gates that let networks learn curves not just lines.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A committee decision rule. Sigmoid says vote proportionally to conviction. ReLU says vote only if conviction exceeds a threshold &mdash; otherwise stay silent. The threshold rule produces sparser, faster-training networks.
+    </div>
+  </div>
+
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Activation function choice shapes what a network can learn and how fast it trains. ReLU&rsquo;s dominance over sigmoid and tanh is not arbitrary &mdash; it solved the vanishing gradient problem that stalled deep networks for years. Understanding this choice is understanding why modern deep learning became possible at all.
+  </div>
+
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    Why ReLU dominates, what the vanishing gradient problem is, and how activation function choice affects trainability. You can explain what a dead neuron is, why sigmoid causes gradients to vanish in deep networks, and what Leaky ReLU fixes and what it trades away.
+  </div>
+
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/n02-mlp-from-scratch.html" class="prereq-chip">N02 &mdash; MLP From Scratch</a>
+  </div>
+
+  <div class="content">
+
+    <p>Imagine a consulting firm that runs all major decisions through a committee of specialists. Each specialist scores a proposal from &minus;10 to +10. If you simply add up those scores, the final recommendation is a weighted sum &mdash; a completely linear process. No matter how many rounds of committee review you run, the overall result is still just a weighted average of the original inputs. Adding more rounds does not let the committee handle more complex problems. It just moves numbers around.</p>
+
+    <p>That is the fundamental problem with a neural network that uses no activation functions, or only linear ones. Stack as many layers as you like and you still get a linear function of the original inputs. The whole enterprise collapses into a single matrix multiplication. To make a network genuinely deeper &mdash; to let it learn hierarchical, curving, non-straight relationships between inputs and outputs &mdash; you need something that breaks the linearity. That something is the activation function.</p>
+
+    <p>An activation function sits at the output of every neuron. It takes the neuron&rsquo;s raw score (the weighted sum of its inputs) and transforms it before passing the result to the next layer. The transformation is deliberately nonlinear: it introduces bends, kinks, and thresholds. Those bends are what allow deep networks to carve up complex decision boundaries, approximate curves, and ultimately learn to recognise handwriting, translate languages, and generate code.</p>
+
+    <p>Historically, three activation functions have dominated: sigmoid, tanh, and ReLU. They each represent a different theory of what that nonlinear gate should do. The history of which one won &mdash; and why &mdash; is also the history of how the field learned to train genuinely deep networks.</p>
+
+    <h2>Sigmoid: the original probabilistic vote</h2>
+
+    <p>Sigmoid was the default activation function for the first generation of neural networks. It has a clean probabilistic story: it squashes any real number into the interval (0, 1), which you can read as a probability. A neuron with sigmoid activation is asking: given this weighted evidence, how strongly do I vote &ldquo;yes&rdquo;?</p>
+
+    <p>The formula looks like this: &sigma;(x) = 1 / (1 + e<sup>&minus;x</sup>). For large positive inputs it approaches 1. For large negative inputs it approaches 0. At zero it returns exactly 0.5. The curve is S-shaped &mdash; gently rising in the middle, flattening out at the extremes.</p>
+
+    <div class="diagram-container">
+      <p class="diagram-caption">The three major activation functions, compared side by side. Hover over each curve to see key properties. The x-axis is the neuron&rsquo;s raw input; the y-axis is what gets passed forward.</p>
+      <svg id="activation-svg" width="660" height="300" viewBox="0 0 660 300" role="img" aria-label="Comparison of sigmoid, tanh, and ReLU activation functions">
+        <defs>
+          <marker id="ax" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L7,3.5 L0,7 z" fill="var(--text-dim)"></path>
+          </marker>
+        </defs>
+
+        <!-- Panel 1: Sigmoid -->
+        <g id="panel-sigmoid" transform="translate(10,20)">
+          <rect x="0" y="0" width="200" height="240" rx="8" fill="var(--surface)" stroke="var(--border)"></rect>
+          <text x="100" y="20" fill="var(--cyan)" font-size="12" font-weight="700" text-anchor="middle">Sigmoid &sigma;(x)</text>
+          <!-- axes -->
+          <line x1="20" y1="190" x2="190" y2="190" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <line x1="100" y1="195" x2="100" y2="35" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <!-- sigmoid curve: maps x from -5..5 to pixel space 20..190, y from 0..1 to 180..40 -->
+          <polyline fill="none" stroke="var(--cyan)" stroke-width="2.5"
+            points="20,178 30,175 40,171 50,164 60,154 70,138 80,118 90,101 100,88 110,77 120,66 130,57 140,49 150,44 160,41 170,39 180,38">
+          </polyline>
+          <!-- labels -->
+          <text x="14" y="186" fill="var(--text-dim)" font-size="9" text-anchor="middle">0</text>
+          <text x="14" y="140" fill="var(--text-dim)" font-size="9" text-anchor="middle">0.5</text>
+          <text x="14" y="40" fill="var(--text-dim)" font-size="9" text-anchor="middle">1</text>
+          <text x="185" y="202" fill="var(--text-dim)" font-size="9">x</text>
+          <!-- annotation -->
+          <rect x="25" y="200" width="150" height="30" rx="4" fill="var(--surface2)"></rect>
+          <text x="100" y="211" fill="var(--amber)" font-size="9" text-anchor="middle">Saturates at 0 and 1</text>
+          <text x="100" y="224" fill="var(--text-muted)" font-size="9" text-anchor="middle">Gradient &rarr; 0 at extremes</text>
+        </g>
+
+        <!-- Panel 2: Tanh -->
+        <g id="panel-tanh" transform="translate(230,20)">
+          <rect x="0" y="0" width="200" height="240" rx="8" fill="var(--surface)" stroke="var(--border)"></rect>
+          <text x="100" y="20" fill="var(--purple)" font-size="12" font-weight="700" text-anchor="middle">Tanh</text>
+          <!-- axes -->
+          <line x1="20" y1="115" x2="190" y2="115" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <line x1="100" y1="195" x2="100" y2="35" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <!-- tanh curve: output -1..1 mapped to 190..40 -->
+          <polyline fill="none" stroke="var(--purple)" stroke-width="2.5"
+            points="20,183 30,180 40,174 50,163 60,147 70,126 80,109 90,96 100,115 110,96 120,83 130,68 140,55 150,48 160,43 170,40 180,38">
+          </polyline>
+          <!-- zero-center line -->
+          <text x="14" y="118" fill="var(--text-dim)" font-size="9" text-anchor="middle">0</text>
+          <text x="14" y="44" fill="var(--text-dim)" font-size="9" text-anchor="middle">+1</text>
+          <text x="14" y="190" fill="var(--text-dim)" font-size="9" text-anchor="middle">&minus;1</text>
+          <text x="185" y="127" fill="var(--text-dim)" font-size="9">x</text>
+          <!-- annotation -->
+          <rect x="25" y="200" width="150" height="30" rx="4" fill="var(--surface2)"></rect>
+          <text x="100" y="211" fill="var(--amber)" font-size="9" text-anchor="middle">Zero-centred output</text>
+          <text x="100" y="224" fill="var(--text-muted)" font-size="9" text-anchor="middle">Still saturates at &plusmn;1</text>
+        </g>
+
+        <!-- Panel 3: ReLU -->
+        <g id="panel-relu" transform="translate(450,20)">
+          <rect x="0" y="0" width="200" height="240" rx="8" fill="var(--surface)" stroke="var(--border)"></rect>
+          <text x="100" y="20" fill="var(--green)" font-size="12" font-weight="700" text-anchor="middle">ReLU max(0, x)</text>
+          <!-- axes -->
+          <line x1="20" y1="170" x2="190" y2="170" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <line x1="100" y1="190" x2="100" y2="35" stroke="var(--surface3)" stroke-width="1" marker-end="url(#ax)"></line>
+          <!-- ReLU: flat at 0 for x<0, then linear -->
+          <polyline fill="none" stroke="var(--green)" stroke-width="2.5"
+            points="20,170 100,170 180,50">
+          </polyline>
+          <!-- dead zone indicator -->
+          <rect x="20" y="150" width="80" height="20" rx="3" fill="var(--red-dim)"></rect>
+          <text x="60" y="163" fill="var(--red)" font-size="9" text-anchor="middle">dead zone</text>
+          <text x="185" y="182" fill="var(--text-dim)" font-size="9">x</text>
+          <!-- annotation -->
+          <rect x="25" y="200" width="150" height="30" rx="4" fill="var(--surface2)"></rect>
+          <text x="100" y="211" fill="var(--green)" font-size="9" text-anchor="middle">No saturation for x &gt; 0</text>
+          <text x="100" y="224" fill="var(--text-muted)" font-size="9" text-anchor="middle">Dead neurons when x &lt; 0</text>
+        </g>
+      </svg>
+    </div>
+
+    <p>The elegance of sigmoid has a hidden cost. Look at what happens at the extremes of the curve. When the input is a large positive number, the output is stuck very close to 1. When the input is a large negative number, the output is stuck very close to 0. In both cases the curve is nearly flat. A nearly flat curve has a nearly zero slope. And slope is exactly what backpropagation uses to push learning signals backwards through the network.</p>
+
+    <h3>Why flat regions kill learning: the vanishing gradient</h3>
+
+    <p>To understand why flatness is catastrophic, you need a quick picture of how learning signals travel through a neural network. During backpropagation &mdash; explored in detail in N02 &mdash; the network computes how much each weight contributed to the error. It does this by multiplying gradients backwards through each layer, from the output layer towards the input layer.</p>
+
+    <p>Here is the problem. Each time the signal passes through a layer with sigmoid activation, it gets multiplied by the slope of the sigmoid at that layer. When that slope is small &mdash; which it is whenever the neuron has saturated to a value near 0 or 1 &mdash; the signal shrinks. Pass through ten layers, each multiplying by a small number, and you are multiplying small numbers together ten times. The result is a gradient so tiny it is effectively zero.</p>
+
+    <p>The layers closest to the input receive an almost-zero learning signal. From those layers&rsquo; point of view, the network has stopped learning. Weights barely move. Training stalls. The features learned in early layers are essentially frozen and never improved. This is the <strong>vanishing gradient problem</strong>, and it is the reason that for most of the 1990s and 2000s, neural networks with more than a few layers simply refused to train <span class="citation" title="Hochreiter, S. (1991). Untersuchungen zu dynamischen neuronalen Netzen. Diploma thesis, TU Munich. First formal analysis of vanishing and exploding gradients in deep networks.">(Hochreiter, 1991)</span>.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>If you multiply ten numbers each equal to 0.25 together, you get 0.25<sup>10</sup> &approx; 0.000001. That is roughly a million times smaller than the original signal. Now consider that a practical deep network might have dozens of layers. The gradient does not just shrink &mdash; it vanishes to a value indistinguishable from floating-point noise.</p>
+    </div>
+
+    <h2>Tanh: a partial fix with the same flaw</h2>
+
+    <p>Tanh (hyperbolic tangent) was the next widely used activation function. It looks like a stretched sigmoid, but with output range (&minus;1, +1) instead of (0, 1). The zero-centred output was a genuine improvement: because outputs average to zero rather than 0.5, the gradient updates in the next layer tend to be less biased and training tends to be faster in practice.</p>
+
+    <p>But tanh shares sigmoid&rsquo;s fundamental structural problem. It also has flat regions at both extremes. Neurons that saturate to +1 or &minus;1 produce nearly-zero gradients. The vanishing gradient problem persists. Tanh is a better sigmoid, not a different kind of solution.</p>
+
+    <h2>ReLU: the kink that fixed deep learning</h2>
+
+    <p>In 2010 and 2011, a series of papers demonstrated that a radically simpler function outperformed sigmoid and tanh for training deep networks. The Rectified Linear Unit &mdash; ReLU &mdash; is almost embarrassingly simple: output the input if it is positive, otherwise output zero <span class="citation" title="Nair, V. &amp; Hinton, G. E. (2010). Rectified Linear Units Improve Restricted Boltzmann Machines. ICML 2010.">(Nair &amp; Hinton, 2010)</span>. In Python: <code>max(0, x)</code>.</p>
+
+    <p>That is the entire function. No exponentials. No divisions. One comparison and one multiplication per neuron. Yet this function solved the vanishing gradient problem in a single stroke, and it is the reason you can train networks with hundreds of layers today.</p>
+
+    <h3>Why ReLU does not vanish</h3>
+
+    <p>For any input greater than zero, ReLU&rsquo;s slope is exactly 1. Not small, not shrinking &mdash; exactly 1. When backpropagation passes through a ReLU neuron that is active (receiving a positive input), it multiplies the gradient by 1, which means the gradient flows through unchanged. Stack a hundred active ReLU layers and the gradient from the output reaches the first layer just as strong as it left. No multiplication chain of small numbers. No vanishing.</p>
+
+    <p>This is the &ldquo;threshold vote&rdquo; from the opening analogy made mathematical. A ReLU neuron either votes with full conviction (gradient = 1) or stays completely silent (gradient = 0). There is no &ldquo;mostly convinced&rdquo; state that attenuates the signal.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header"><span>Think first: what does it mean for a ReLU neuron&rsquo;s gradient to be exactly 1 when active?</span><span>+</span></div>
+      <div class="toggle-reveal-body">
+        <p>It means the neuron is a perfect gradient highway. Whatever learning signal arrives at its output gets passed backwards to its inputs without any scaling. The neuron contributes to learning exactly as much as the downstream error dictates &mdash; no more, no less. Compare this to sigmoid, where even a lightly-saturated neuron might pass only 10% of the signal through, compounding across every layer until nothing reaches the early weights.</p>
+      </div>
+    </div>
+
+    <p>A second benefit is computational. Training a large network requires evaluating millions of activations per second. Sigmoid requires computing an exponential function for every neuron on every forward and backward pass. ReLU requires only a comparison: is this number positive? On modern hardware, the difference in speed is substantial. ReLU enabled networks to grow larger and train faster simultaneously, which is why the deep learning renaissance that began with AlexNet in 2012 &mdash; which used ReLU throughout &mdash; would not have been practical with sigmoid <span class="citation" title="Krizhevsky, A., Sutskever, I. &amp; Hinton, G. E. (2012). ImageNet Classification with Deep Convolutional Neural Networks. NeurIPS 2012.">(Krizhevsky et al., 2012)</span>.</p>
+
+    <h2>The dead neuron problem: ReLU&rsquo;s cost</h2>
+
+    <p>ReLU is not a free lunch. Look at the left half of its curve in the diagram above. For any input less than or equal to zero, ReLU outputs exactly zero. The gradient through that region is also exactly zero. A neuron that consistently receives negative inputs will output zero on every forward pass and receive zero gradient on every backward pass. Its weights never update. The neuron is effectively switched off for the rest of training. It has become a <strong>dead neuron</strong>.</p>
+
+    <p>How does a neuron get stuck like this? Two common routes. First, the initial random weights might be configured such that the neuron&rsquo;s input is always negative from the first batch forward. Second, and more insidiously, a very large gradient update can push the neuron&rsquo;s weights so negative that no subsequent training example can revive it. This is called the &ldquo;dying ReLU&rdquo; problem, and in poorly-tuned networks a significant fraction of neurons can die and stay dead, wasting network capacity.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A neuron in your network has been receiving negative weighted sums for the last 10,000 training steps and its weights have not changed in that time. What is most likely happening?</div>
+      <button class="quiz-option" data-letter="A">The neuron is acting as a regularizer, deliberately ignoring irrelevant inputs.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">The neuron is dead: its ReLU activation outputs zero and passes zero gradient, so its weights never update.</button>
+      <button class="quiz-option" data-letter="C">The neuron has converged perfectly and no further updates are needed.</button>
+      <div class="quiz-feedback"
+        data-correct="Exactly. When all inputs to a ReLU neuron are negative, it outputs zero and the gradient through it is also zero. Backpropagation has no signal to update the weights, so the neuron is permanently frozen in a useless state."
+        data-incorrect="Not quite. If the neuron&rsquo;s output is always zero and its weights never change, that is the definition of a dead ReLU neuron. Regularization and convergence both look different &mdash; other neurons&rsquo; weights would still be changing in those cases.">
+      </div>
+    </div>
+
+    <h2>Leaky ReLU: patching the dead zone</h2>
+
+    <p>Leaky ReLU was proposed as a simple patch for the dead neuron problem <span class="citation" title="Maas, A. L., Hannun, A. Y. &amp; Ng, A. Y. (2013). Rectifier Nonlinearities Improve Neural Network Acoustic Models. ICML Workshop 2013.">(Maas et al., 2013)</span>. Instead of outputting exactly zero for negative inputs, it outputs a small positive fraction &alpha; of the input (typically 0.01). The formula is: <code>max(&alpha;x, x)</code>.</p>
+
+    <p>This tiny leak keeps the gradient flowing. For negative inputs, the gradient is no longer zero &mdash; it is &alpha;, a small but non-zero number. A neuron that would have died with standard ReLU can now still receive a tiny learning signal and eventually recover if conditions change.</p>
+
+    <p>What does Leaky ReLU trade away? Two things. First, the clean &ldquo;sparse activation&rdquo; property of ReLU disappears. With ReLU, neurons are either fully on or fully off, which means most neurons are silent for any given input &mdash; a useful inductive bias for many problems. With Leaky ReLU, all neurons always have at least a small output, increasing the density of activations throughout the network.</p>
+
+    <p>Second, &alpha; is a hyperparameter. Set it too large and you lose the benefit of having a threshold at all; the function approaches a linear mapping. Set it too small and you do not fix the dead neuron problem meaningfully. Practitioners must tune this, and different datasets favour different values. Parametric ReLU (PReLU) takes this further by making &alpha; a learnable weight rather than a fixed constant <span class="citation" title="He, K., Zhang, X., Ren, S. &amp; Sun, J. (2015). Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification. ICCV 2015.">(He et al., 2015)</span>, adding flexibility at the cost of more parameters.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Standard ReLU</div>
+        <p>Gradient is exactly 1 for active neurons. Dead neurons receive zero gradient and can never recover. Activations are sparse. No hyperparameter to tune. Fast to compute.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">Leaky ReLU</div>
+        <p>Gradient is &alpha; for negative inputs &mdash; small but non-zero. Dead neurons can recover over training. Activations are less sparse. Requires tuning &alpha;. Marginally slower.</p>
+      </div>
+    </div>
+
+    <h2>The modern landscape: ELU, GELU, Swish</h2>
+
+    <p>The story did not stop with Leaky ReLU. As researchers built ever-deeper networks for increasingly diverse tasks, new activation functions emerged that offered different trade-offs.</p>
+
+    <p><strong>ELU (Exponential Linear Unit)</strong> uses an exponential curve in the negative region rather than a flat line or a leak <span class="citation" title="Clevert, D., Unterthiner, T. &amp; Hochreiter, S. (2016). Fast and Accurate Deep Network Learning by Exponential Linear Units (ELUs). ICLR 2016.">(Clevert et al., 2016)</span>. This makes the average output close to zero (like tanh) while preserving non-zero gradients for negative inputs (like Leaky ReLU). The result tends to be faster convergence on some architectures, at the cost of the exponential computation being slower than a simple comparison.</p>
+
+    <p><strong>GELU (Gaussian Error Linear Unit)</strong> is the activation function used in BERT, GPT, and most modern transformer architectures <span class="citation" title="Hendrycks, D. &amp; Gimpel, K. (2016). Gaussian Error Linear Units (GELUs). arXiv:1606.08415.">(Hendrycks &amp; Gimpel, 2016)</span>. It is a smooth approximation to ReLU that gates the input by a probability derived from its position in a Gaussian distribution. Intuitively, GELU is asking: &ldquo;what is the probability that a random noise perturbation would not zero this input out?&rdquo; Inputs with high probability of being meaningful get passed through at full strength. Borderline inputs get attenuated. GELU avoids the hard kink that ReLU has at zero, which helps training on some tasks, particularly in language models where that kink can cause instability.</p>
+
+    <p><strong>Swish</strong> (also called SiLU) is defined as x &middot; &sigma;(x) &mdash; the input times its own sigmoid <span class="citation" title="Ramachandran, P., Zoph, B. &amp; Le, Q. V. (2017). Searching for Activation Functions. arXiv:1710.05941.">(Ramachandran et al., 2017)</span>. It was found by automated neural architecture search, not by human intuition. Like GELU, it is smooth and non-monotonic &mdash; it dips slightly below zero for small negative inputs before flattening. Swish consistently outperforms ReLU on deep residual networks and is the default in EfficientNet and many production vision models.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>Every activation function is a different answer to the same question: how should a neuron gate its output? Sigmoid gates proportionally (everything gets through, scaled by conviction). ReLU gates by threshold (all-or-nothing, silence below zero). Leaky ReLU allows a whisper below the threshold. GELU and Swish gate by a smooth probability. The gradient properties that flow from each answer determine whether deep networks train at all &mdash; and ReLU won not because it is the most elegant, but because it is the one whose gradients do not shrink.</p>
+    </div>
+
+    <h2>How to choose in practice</h2>
+
+    <p>Given the range of options, practitioners follow a simple decision ladder.</p>
+
+    <p><strong>Start with ReLU.</strong> It is fast, well-understood, and works on the majority of problems including image classification, regression, and basic sequence tasks. If you are building a network from scratch and you do not have a reason to choose otherwise, ReLU is the correct default.</p>
+
+    <p><strong>Switch to Leaky ReLU or ELU if you observe dead neurons.</strong> You can detect dead neurons by monitoring the fraction of neurons outputting zero on a validation batch. If a significant portion (say, more than 10%) is consistently zero, the dying ReLU problem is active and Leaky ReLU is a straightforward fix.</p>
+
+    <p><strong>Use GELU for transformer-based architectures.</strong> Language models and vision transformers almost universally use GELU because it matches the smooth, probabilistic nature of attention-weighted computation better than the hard threshold of ReLU. If you are building on top of a pre-trained transformer backbone, match its activation function to avoid mismatch.</p>
+
+    <p><strong>Consider Swish for deep convolutional networks.</strong> On very deep residual networks, Swish and its close cousin Mish often converge faster and to better final accuracy than ReLU. The cost is a more expensive forward pass, which matters if you are training on a tight compute budget.</p>
+
+    <p><strong>Sigmoid and tanh have their place at outputs, not in hidden layers.</strong> For binary classification, a single sigmoid output neuron is still standard: it produces a probability between 0 and 1. For recurrent networks (LSTMs and GRUs), tanh is used within the gating mechanisms for specific mathematical reasons. In hidden layers, avoid both for any network deeper than two or three layers.</p>
+
+    <div class="callout callout-why">
+      <div class="callout-label">Connection Forward</div>
+      <p>The activation function choice you make in a feedforward network carries directly into every advanced architecture. When you build convolutional networks, the same ReLU layers appear after each filter. When you read about transformer attention in the LLM Intelligence course, the feed-forward sublayer inside each transformer block is two linear layers with GELU between them &mdash; exactly the pattern from this page, just repeated 96 times in a large model. The principle scales with architecture but does not change.</p>
+    </div>
+
+    <h2>The sparsity bonus: why dead neurons are not purely bad</h2>
+
+    <p>There is one more angle worth holding. The fact that ReLU silences neurons for negative inputs is not only a risk (dead neurons). It is also a feature. When a network uses ReLU, typically only a fraction of neurons are active on any given input. The representation of a specific image, or a specific sentence, is encoded in a sparse subset of all the neurons in the network.</p>
+
+    <p>Sparse representations have several advantages. They are easier to separate: two different inputs that activate different sparse subsets are automatically distinct, even if the overall network is large. They tend to be more robust: corrupting a few neurons in a sparse code degrades the representation less than corrupting the same proportion of a dense code. And there is a biological parallel: cortical neurons in the mammalian brain are thought to operate in a sparse regime, with roughly 5&ndash;10% active at any given time. Whether that parallel is meaningful or coincidental is debated, but the engineering advantages of sparsity are well-established in the deep learning literature <span class="citation" title="Glorot, X., Bordes, A. &amp; Bengio, Y. (2011). Deep Sparse Rectifier Neural Networks. AISTATS 2011.">(Glorot et al., 2011)</span>.</p>
+
+    <p>The dead neuron problem is a bug. The sparse activation pattern is a feature. They arise from the same cause &mdash; ReLU zeroing negative inputs &mdash; and good network design tries to capture the benefit while avoiding the failure mode. Learning rate scheduling, careful weight initialisation (especially He initialisation, designed specifically for ReLU networks), and batch normalisation all help keep most neurons alive while still enjoying the sparsity benefit.</p>
+
+  </div>
+
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is a dead neuron in a ReLU network and how does it arise?</li>
+        <li>Why does sigmoid cause vanishing gradients in deep networks?</li>
+        <li>What does Leaky ReLU fix and what does it trade away?</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="page-nav" data-prev="n02-mlp-from-scratch" data-next="n03-activation-functions">
+    <a href="n02-mlp-from-scratch.html" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">N02 &mdash; MLP From Scratch</span>
+    </a>
+    <div></div>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('n03-activation-functions');</script>
+<script>
+(function () {
+  // Quiz interaction
+  var quizOptions = document.querySelectorAll('.quiz-option');
+  quizOptions.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var quiz = btn.closest('.quiz');
+      if (!quiz) return;
+      var feedback = quiz.querySelector('.quiz-feedback');
+      var allOpts = quiz.querySelectorAll('.quiz-option');
+      allOpts.forEach(function (o) { o.disabled = true; });
+      var isCorrect = btn.getAttribute('data-correct') === 'true';
+      btn.style.borderColor = isCorrect ? 'var(--green)' : 'var(--red)';
+      btn.style.background = isCorrect ? 'var(--green-dim)' : 'var(--red-dim)';
+      if (feedback) {
+        feedback.textContent = isCorrect
+          ? feedback.getAttribute('data-correct')
+          : feedback.getAttribute('data-incorrect');
+        feedback.style.display = 'block';
+        feedback.style.color = isCorrect ? 'var(--green)' : 'var(--amber)';
+      }
+    });
+  });
+
+  // Toggle-reveal interaction
+  var reveals = document.querySelectorAll('.toggle-reveal');
+  reveals.forEach(function (el) {
+    var header = el.querySelector('.toggle-reveal-header');
+    var body = el.querySelector('.toggle-reveal-body');
+    var icon = header ? header.querySelector('span:last-child') : null;
+    if (!header || !body) return;
+    body.style.display = 'none';
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function () {
+      var open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      if (icon) icon.textContent = open ? '+' : '&minus;';
+    });
+  });
+
+  // Verification toggle
+  var verHeader = document.querySelector('.verification-header');
+  if (verHeader) {
+    verHeader.addEventListener('click', function () {
+      var verBody = document.querySelector('.verification-body');
+      var icon = verHeader.querySelector('.toggle-icon');
+      var isOpen = verHeader.classList.contains('open');
+      if (isOpen) {
+        verHeader.classList.remove('open');
+        if (verBody) verBody.classList.remove('open');
+        if (icon) icon.style.transform = '';
+      } else {
+        verHeader.classList.add('open');
+        if (verBody) verBody.classList.add('open');
+        if (icon) icon.style.transform = 'rotate(180deg)';
+      }
+    });
+  }
+
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var total = document.documentElement.scrollHeight - window.innerHeight;
+      var pct = total > 0 ? (window.scrollY / total) * 100 : 0;
+      bar.style.width = pct + '%';
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

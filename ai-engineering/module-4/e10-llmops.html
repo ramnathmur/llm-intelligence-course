@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E10 &mdash; LLMOps &mdash; Running LLM Systems in Production &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E10 &mdash; LLMOps &mdash; Running LLM Systems in Production">
+<meta property="og:description" content="Prompt versioning, tracing, cost monitoring, guardrails, and CI/CD for model updates.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="e10-llmops.html">Module 4: Production and Operations</a>
+    <span class="sep">&#8250;</span>
+    LLMOps &mdash; Running LLM Systems in Production
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="4">E10 &middot; Module 4</div>
+    <h1>LLMOps &mdash; Running LLM Systems in Production</h1>
+    <p class="one-liner">Prompt versioning, tracing, cost monitoring, guardrails, and CI/CD for model updates.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Running a restaurant vs cooking a meal. Cooking one meal is straightforward. Running a restaurant requires systems &mdash; inventory management, quality control, staff coordination, cash flow monitoring. LLMOps is the restaurant management layer: the infrastructure that keeps the kitchen operating reliably at scale, day after day, even when the head chef changes recipes or the supplier delivers different ingredients.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    An LLM system in production is a live system that changes &mdash; models update, prompts drift, costs spike, failures occur silently. LLMOps treats LLM systems like distributed systems: with observability, testing, and staged rollouts. Without it, teams discover regressions through customer complaints, watch costs climb without understanding why, and cannot tell whether a system change helped or hurt. With it, they operate with the same discipline that software engineering teams apply to backend services.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    What LLMOps covers, why LLM systems need specialised observability beyond standard application logging, and how shadow deployments reduce production risk when rolling out new models or prompts.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-3/e08-evaluation-pipelines.html" class="prereq-chip">E08 &mdash; Evaluation Pipelines</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>You built an LLM system. It works in staging. You deploy it to production. Thirty days later, a user reports it is giving wrong answers. You look at the logs. There are none &mdash; at least, none that tell you what prompt was sent, what model responded, how many tokens the exchange consumed, or what the latency was. You cannot reproduce the failure. You cannot tell when it started. You do not know if it is one edge case or a systematic regression.</p>
+
+    <p>This is the default state of LLM systems built by teams that treat the model as a magic endpoint rather than as a component of a software system. LLMOps is the set of practices that prevents this state. It borrows heavily from DevOps and MLOps but adds a layer specific to language models: prompts are code, model versions change behaviour silently, and cost is a first-class operational concern.</p>
+
+    <p>This page covers the five pillars of LLMOps: prompt versioning, tracing and observability, cost monitoring, guardrails, and CI/CD for model updates. By the end, you will be able to describe what each pillar does, why it is necessary, and how shadow deployments reduce the risk of rolling out changes.</p>
+
+    <h2>Pillar 1: Prompt versioning</h2>
+
+    <p>A prompt is software. It has behaviour. It can regress. It needs to be versioned, tested, and deployed with the same discipline as application code.</p>
+
+    <p>In most early-stage LLM projects, prompts live in one of three places: hardcoded in application source, stored in a database column with no version history, or &mdash; worst of all &mdash; edited live in a playground and copied into production when they seem to work. None of these is adequate once the system is in production.</p>
+
+    <h3>What prompt versioning solves</h3>
+
+    <p>Consider what happens when a developer edits a prompt in place to fix a formatting issue. The change goes live immediately. It fixes the formatting problem. But it also silently changes the model's behaviour on ten other input categories. Nobody notices for three weeks, until a customer escalates. The developer cannot reproduce the previous prompt because it was overwritten. The deployment timeline shows no record of the change.</p>
+
+    <p>Prompt versioning solves this by treating each distinct prompt as an immutable artifact with a unique version identifier. Updating a prompt creates a new version; the old version is never overwritten. Each version can be tested independently. Deployments reference specific versions. Rollback is a matter of switching the deployment to point at a previous version.</p>
+
+    <h3>Implementation patterns</h3>
+
+    <p>The simplest implementation is to store prompts as files in version control alongside application code. A prompt file is a text file with a header declaring its version, last modified date, and the model it was tested against. Changes go through code review. A Git blame shows who changed what and when <span class="citation" title="Chase, H. (2023). LangChain: Building applications with LLMs through composability. GitHub.">(Chase, 2023)</span>.</p>
+
+    <p>More sophisticated teams use a dedicated prompt registry &mdash; a service that provides an API for reading prompt versions and tracks which version is deployed to which environment. Tools like LangSmith, Weights &amp; Biases Prompts, and PromptLayer provide this capability. The registry decouples prompt deployment from code deployment: a product manager can update a prompt and promote it through environments without a code release <span class="citation" title="Weights &amp; Biases. (2024). Prompts in W&amp;B. https://docs.wandb.ai/guides/prompts">(Weights &amp; Biases, 2024)</span>.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Principle</div>
+      <p>A prompt is a software artifact. It must be version-controlled, tested before deployment, and referenced by version identifier in production. Any system where "the prompt" refers to a mutable string in a database column will eventually suffer a silent regression that cannot be debugged.</p>
+    </div>
+
+    <h3>Tagging and environment promotion</h3>
+
+    <p>Production-grade prompt management uses the same environment promotion model as software deployment. A prompt is authored in development, tested in staging with a fixed evaluation suite, and promoted to production only after the evaluation suite passes. The promotion is an explicit action tied to a version tag, not an implicit overwrite.</p>
+
+    <p>This pattern also supports A/B testing: two prompt versions can be deployed simultaneously to different user cohorts, with their respective outputs tracked separately. After a defined period, the version with better evaluation metrics is promoted and the other is retired.</p>
+
+    <h2>Pillar 2: Tracing and observability</h2>
+
+    <p>Standard application logging captures HTTP requests, database queries, error codes, and response times. This is not enough for LLM systems. An LLM call is not a simple function call with a predictable input-output relationship. It involves a multi-part request (system prompt, conversation history, injected context), a stochastic output, intermediate tool calls, and a token consumption figure that affects cost. Standard logging captures none of this structure.</p>
+
+    <h3>What tracing captures that logging does not</h3>
+
+    <p>Tracing is structured, end-to-end instrumentation of an LLM pipeline execution. A single user request may trigger a chain of operations: retrieve documents from a vector database, inject them into a prompt, call the LLM, parse the response, call a tool based on that response, call the LLM again with the tool result. Tracing captures every step in this chain as a span, with timestamps, inputs, outputs, and metadata <span class="citation" title="OpenTelemetry Authors. (2023). OpenTelemetry Specification. https://opentelemetry.io/docs/specs/otel/">(OpenTelemetry, 2023)</span>.</p>
+
+    <p>The result is a complete, reproducible record of what happened during each request. You can answer questions that standard logging cannot: What exact prompt text was sent to the model? What documents were retrieved and what were their similarity scores? Which tool call failed? How much did this specific user session cost in tokens? How does latency break down across retrieval, LLM call, and post-processing?</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: A customer reports that the AI assistant gave a confidently wrong answer about a product specification. What would a trace of that request tell you that a standard application log would not?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>A trace would show you the exact system prompt version used, the documents retrieved from the knowledge base (and their similarity scores), whether the relevant specification document was retrieved at all, the full prompt assembled from those pieces, and the model's verbatim response. A standard log would give you a timestamp, an HTTP 200 status, and a response time. With the trace, you can determine whether the failure was a retrieval problem (wrong documents retrieved), a prompt problem (retrieved documents not properly injected), a model hallucination (correct documents retrieved but model ignored them), or a freshness problem (correct documents retrieved but outdated content). Without the trace, you are guessing.</p>
+      </div>
+    </div>
+
+    <h3>The three layers of LLM observability</h3>
+
+    <p>Practioners typically organize LLM observability into three layers that mirror the layers of the pipeline itself.</p>
+
+    <p><strong>Infrastructure layer:</strong> latency, error rates, API availability. This is standard application monitoring and most teams have it already. It tells you when the system is down but not why outputs are wrong.</p>
+
+    <p><strong>Pipeline layer:</strong> per-step traces capturing inputs, outputs, and latency for each stage of the pipeline. This is LLM-specific and requires dedicated instrumentation. It tells you which step produced a bad output. Tools in this space include LangSmith, LlamaIndex Observability, Langfuse, and Arize AI <span class="citation" title="Langfuse. (2024). Open-source LLM observability. https://langfuse.com/docs">(Langfuse, 2024)</span>.</p>
+
+    <p><strong>Quality layer:</strong> automated evaluation of output quality over time. This is the most powerful layer and the least commonly implemented. It uses an evaluation pipeline (as covered in <a href="../module-3/e08-evaluation-pipelines.html">E08 &mdash; Evaluation Pipelines</a>) to score every production output or a sample of them, and tracks those scores as time-series metrics. When scores drop, you get an alert before customers complain.</p>
+
+    <h3>Sampling strategies</h3>
+
+    <p>Tracing every request in full detail is expensive both in storage and in the overhead of the instrumentation. Production systems use sampling: capture full traces for a fraction of requests, perhaps 10%, and capture only summary metrics for the rest. High-value traces &mdash; those involving errors, high-cost requests, or flagged outputs &mdash; are captured in full regardless of the sampling rate. This is the same strategy used by distributed tracing systems for backend microservices <span class="citation" title="Sigelman, B. et al. (2010). Dapper, a Large-Scale Distributed Systems Tracing Infrastructure. Google Technical Report.">(Sigelman et al., 2010)</span>.</p>
+
+    <h2>Pillar 3: Cost monitoring</h2>
+
+    <p>LLM costs are unusual as infrastructure costs go. They are proportional to usage in a way that is difficult to predict, they can spike suddenly when a bug causes token inflation, and they are invisible to standard infrastructure monitoring unless you instrument them deliberately.</p>
+
+    <h3>The token economy</h3>
+
+    <p>Every LLM API call has a cost denominated in tokens: a fixed price per thousand input tokens and a different (usually higher) price per thousand output tokens. A system that processes 100,000 user requests per day with an average of 2,000 input tokens and 500 output tokens per request is consuming 200 million input tokens and 50 million output tokens daily. At typical API prices for capable models, this is a non-trivial operational expense, comparable to or exceeding compute costs for the rest of the application stack.</p>
+
+    <p>The key monitoring questions are: What is the average token count per request, and how is it distributed? Is it stable over time? What is the cost per user, per session type, or per feature? Are there outliers &mdash; requests that consume 10x the typical tokens &mdash; and what causes them?</p>
+
+    <h3>Cost anomalies and their causes</h3>
+
+    <p>Cost spikes in LLM systems have identifiable causes. The most common are: a prompt change that added large context chunks without removing old ones, a retrieval bug that injects duplicate documents, a conversation-length bug that sends the full chat history with every message instead of a summary, or a runaway agent loop that makes dozens of tool calls before timing out.</p>
+
+    <p>Effective cost monitoring sets budget alerts at the daily, weekly, and per-user levels. When spend crosses a threshold, the alert fires before the invoice does. Some teams implement hard token budgets per user session or per request type, rejecting requests that would exceed the budget. This prevents a single edge case from generating a four-figure API bill <span class="citation" title="Anthropic. (2024). Usage and Rate Limits. https://docs.anthropic.com/en/api/rate-limits">(Anthropic, 2024)</span>.</p>
+
+    <h3>Cost attribution</h3>
+
+    <p>Cost attribution answers the question: which feature, workflow, or user cohort is generating which fraction of spend? Without attribution, cost reduction is guesswork. With it, you can identify that a single feature used by 3% of users generates 40% of token spend &mdash; and then decide whether that feature's value justifies its cost or whether it needs optimisation.</p>
+
+    <p>Implementation is simple: tag every API call with metadata (feature name, user cohort, pipeline stage) and aggregate that metadata with the token counts from the API response. Most LLM API responses include token counts in the response body; storing these with the request metadata is enough to build cost attribution dashboards.</p>
+
+    <h2>Pillar 4: Guardrails</h2>
+
+    <p>Guardrails are runtime checks that run before or after LLM calls to enforce safety and quality constraints. They are distinct from model safety features: model safety is baked into the model's weights by the provider, while guardrails are additional checks that the application team controls and configures for their specific use case.</p>
+
+    <h3>Input guardrails</h3>
+
+    <p>Input guardrails run on user-submitted text before it reaches the model. They check for: prompt injection attempts (instructions that try to override the system prompt), policy violations (content that the application is not permitted to process), personally identifiable information that should not be sent to the API, and malformed inputs that would cause downstream failures.</p>
+
+    <p>A customer service bot might have input guardrails that detect when a user is submitting what looks like a system prompt override, classify the topic of the user's message to ensure it is within scope, and redact credit card numbers before the text reaches the model. All of this happens before the API call, so a rejected input costs no tokens.</p>
+
+    <h3>Output guardrails</h3>
+
+    <p>Output guardrails run on the model's response before it is shown to the user. They check for: factual claims that can be verified against a known source (useful for high-stakes domains like healthcare or legal), policy violations in the model's own output, format validation (ensuring the response conforms to the expected JSON schema), and toxicity or harmful content that slipped through the model's built-in filters.</p>
+
+    <p>The tradeoff in output guardrails is latency. Every guardrail check adds processing time between the model's response and the user's experience. Input guardrails are preferable to output guardrails when possible because they prevent the API call entirely for invalid inputs. Output guardrails are necessary when the risk is in what the model might say, not in what the user might send.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Architecture Note</div>
+      <p>Think of guardrails as a security layer, not a trust layer. They do not exist because the model is untrustworthy; they exist because no component in a production system should be implicitly trusted without verification. A well-designed guardrail layer defines explicit contracts: what inputs are acceptable, what outputs are valid, and what happens when a contract is violated.</p>
+    </div>
+
+    <h3>Guardrail tools and patterns</h3>
+
+    <p>Several libraries provide off-the-shelf guardrail implementations. NVIDIA NeMo Guardrails provides a declarative language for defining dialogue policies and safety checks <span class="citation" title="Rebedea, T. et al. (2023). NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails. arXiv:2310.10501.">(Rebedea et al., 2023)</span>. Guardrails AI provides a Python-native framework for defining validators on structured outputs. LLM-Guard focuses on security-oriented checks including prompt injection detection and PII redaction <span class="citation" title="Protect AI. (2023). LLM Guard: The Security Toolkit for LLM Interactions. https://llm-guard.com">(Protect AI, 2023)</span>.</p>
+
+    <p>Teams with very specific requirements often build custom guardrails as simple Python functions: a function that takes a string, runs a check, and returns either the string or raises an exception. The complexity of the guardrail framework matters less than the discipline of having the layer at all.</p>
+
+    <h2>Pillar 5: CI/CD for model updates</h2>
+
+    <p>A model update from a provider &mdash; say, a move from gpt-4-turbo to gpt-4o, or Claude 3 Sonnet to Claude 3.5 Sonnet &mdash; is not like a library patch. Library patches change internal implementation while preserving the public interface. Model updates change the interface itself: the same prompt can produce different output, with different formatting tendencies, different knowledge cutoffs, different refusal patterns, and different token counts.</p>
+
+    <p>This means model updates must be treated as software releases with their own testing and deployment process.</p>
+
+    <h3>The LLM CI/CD pipeline</h3>
+
+    <p>A mature LLM CI/CD pipeline has four stages. <strong>First, evaluation against a golden dataset.</strong> When a model update is proposed &mdash; whether it is a new model version, a new prompt, or a new retrieval configuration &mdash; run it against the fixed evaluation suite from <a href="../module-3/e08-evaluation-pipelines.html">E08 &mdash; Evaluation Pipelines</a> and compare scores to the current production baseline. A regression on the eval suite blocks the deployment.</p>
+
+    <p><strong>Second, shadow deployment.</strong> Route a copy of production traffic to the new model or prompt without serving its responses to users. Collect traces of both the current system and the shadow system running in parallel. This reveals how the candidate behaves on real production inputs, not just the curated evaluation set. (More on shadow deployment below.)</p>
+
+    <p><strong>Third, canary release.</strong> If shadow performance is acceptable, route a small fraction of production traffic &mdash; typically 5&ndash;10% &mdash; to the new version and serve its responses to real users. Monitor cost, latency, error rates, and automated quality scores for that cohort. If metrics are stable for a defined period (24 hours to one week depending on traffic volume), proceed to full rollout.</p>
+
+    <p><strong>Fourth, full rollout with rollback plan.</strong> Move 100% of traffic to the new version. Keep the previous version ready for immediate rollback. Define the rollback trigger conditions in advance: which metric crossing which threshold in which timeframe triggers an automatic or manual rollback.</p>
+
+    <h3>Shadow deployments explained</h3>
+
+    <p>Shadow deployment is the most powerful risk-reduction technique in LLMOps. Understanding it in detail is worth the investment.</p>
+
+    <p>The setup: you are running model version A in production. You want to test model version B. You configure the routing layer to duplicate each incoming request and send it to both A and B. The user sees only A's response. B's response is captured and stored but never shown. After running in shadow mode for a period, you compare A's responses and B's responses across thousands of real inputs.</p>
+
+    <p>Shadow deployment tests what a staging environment cannot: real production traffic. Staging environments are built on curated, sanitised test data. Production traffic is messier, more diverse, and more adversarial. Shadow deployment exposes the candidate system to that traffic without any risk to users.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Your team is planning to switch from one LLM provider to another. The new provider's model performs better on your evaluation suite. A colleague proposes going straight to a canary release at 10% traffic. What is the stronger argument for running a shadow deployment first?</div>
+      <button class="quiz-option" data-letter="A">Shadow deployments are cheaper to run than canary releases because they do not require API calls to the new model.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">Shadow deployments expose the candidate to real production traffic without any user impact, so you can identify failure modes that do not appear in the evaluation suite before any user sees the new model's responses.</button>
+      <button class="quiz-option" data-letter="C">Shadow deployments allow the new model to learn from production traffic before going live.</button>
+      <button class="quiz-option" data-letter="D">Shadow deployments bypass the need for an evaluation suite because real traffic is a better test.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. The key advantage of shadow deployment over a canary is that users are not exposed to potential failures during the shadow phase. Your evaluation suite covers known test cases; production traffic covers unknown edge cases. Running shadow first gives you coverage of both, with user risk deferred until after you have evidence from real traffic."
+           data-incorrect="Think about what makes shadow deployment distinct from a canary release. In a canary, users see the new model's responses. In shadow deployment, they do not. The value is that you get real-traffic signal without any user-facing risk. Shadow deployments still require API calls to the new model (option A is wrong), and they do not involve any learning or training (option C is wrong). The evaluation suite remains necessary because shadow mode alone does not give you ground-truth quality scores (option D is wrong)."></div>
+    </div>
+
+    <h3>What shadow deployment does not test</h3>
+
+    <p>Shadow deployment has a blind spot: it cannot measure user experience. If the new model produces responses that users would rate as better or worse, shadow deployment cannot capture that signal because users only ever see one system. For subjective quality differences, you need a canary with real users, or a human preference evaluation where annotators compare A and B responses side by side.</p>
+
+    <p>Shadow deployment also does not test stateful interactions well. If your system maintains conversation history and each response influences the next user message, running a parallel shadow copy of the conversation does not produce realistic multi-turn data. The shadow conversation diverges from the real one after the first turn because the user's next message was shaped by the real system's response, not the shadow's.</p>
+
+    <h2>Tying the pillars together: the operational lifecycle</h2>
+
+    <p>The five pillars are not independent tools; they interact to form a continuous operational lifecycle for LLM systems.</p>
+
+    <p>Prompt versioning gives you the ability to track what changed. Tracing gives you the ability to see what happened during each request. Cost monitoring tells you the financial consequence of changes. Guardrails enforce the constraints that make outputs safe to show to users. CI/CD gives you the process for moving changes through environments safely.</p>
+
+    <p>Together, they produce the same operational discipline that software engineering teams have developed for backend services over the past twenty years, adapted for the specific properties of language model systems: stochastic outputs, prompt-as-code, and cost-per-token pricing.</p>
+
+    <h3>The maturity progression</h3>
+
+    <p>Teams rarely implement all five pillars at once. A practical maturity progression looks like this. At the earliest stage, add tracing first: you need observability before you can debug anything else. Add prompt versioning as soon as the first prompt edit causes a regression &mdash; that moment, which every team experiences, is the clearest possible argument for versioning. Add cost monitoring when the monthly API bill first surprises you. Add guardrails when the first safety or quality incident occurs in production. Add CI/CD for model updates when the first provider model update breaks your system without warning.</p>
+
+    <p>Each pillar solves a specific category of production pain. Teams that wait until they feel all five pains simultaneously are usually the ones who have a significant incident that forces the issue. Teams that anticipate the pains and add the pillars incrementally operate more smoothly.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Your LLM system processes medical appointment scheduling queries. A user asks the system to recommend a dosage for a medication. The system's scope is scheduling, not medical advice. Identify which pillar &mdash; or which combination of pillars &mdash; should catch this, and at what stage of the request lifecycle. There is more than one valid answer.</p>
+    </div>
+
+  </div><!-- end .content -->
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is prompt versioning and what problem does it solve compared to editing prompts in place?</li>
+        <li>What does tracing capture that standard application logging does not?</li>
+        <li>How do you implement a shadow deployment for an LLM system and what does it test?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e09-prev-placeholder" data-next="e11-next-placeholder"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>
+(function () {
+  if (typeof AIEngNav !== 'undefined') {
+    AIEngNav.init('e10-llmops');
+  } else if (typeof LLMNav !== 'undefined') {
+    LLMNav.init('e10-llmops');
+  }
+})();
+</script>
+
+</body>
+</html>

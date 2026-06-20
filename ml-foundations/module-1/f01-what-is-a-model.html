@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F01 &mdash; What Is a Model? &mdash; ML Foundations</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="F01 &mdash; What Is a Model?">
+<meta property="og:description" content="A model is a function that maps inputs to predictions by storing learned patterns as numbers.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="f01-what-is-a-model.html">Module 1: What Is a Model?</a>
+    <span class="sep">&#8250;</span>
+    What Is a Model?
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">F01 &middot; Module 1</div>
+    <h1>What Is a Model?</h1>
+    <p class="one-liner">A model is a function that maps inputs to predictions by storing learned patterns as numbers.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      A consultant who has read thousands of case studies and answers new questions by pattern-matching against prior experience &mdash; except the patterns are stored as numbers, not memories.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    Every AI tool you use is a model. Understanding what a model actually is dissolves the mystery and lets you reason about when they work and when they fail.
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    What a model is, what it stores, and why it generalises to unseen inputs.
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites: None &mdash; this is the entry point.</span>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <p>Picture a senior management consultant who has spent twenty years reading case studies. Show her a new client situation and she will not flip through a filing cabinet looking for an exact match. She will pattern-match: "This looks like the turnaround we ran in Johannesburg in 2018. Similar cost structure, similar market dynamics." Her advice comes from patterns compressed across thousands of engagements, not from memorising any one of them.</p>
+
+    <p>A machine learning model works the same way, except the patterns live as numbers rather than as human memory. The model reads a vast amount of examples, extracts the patterns that explain them, and stores those patterns as numbers. Ask it something new, and it pattern-matches against what it learned. It does not look up the answer &mdash; it derives it.</p>
+
+    <p>That one idea &mdash; patterns stored as numbers, applied to unseen inputs &mdash; is the entire conceptual core of machine learning. Everything else is implementation detail. This page builds that core carefully so you have a foundation to stand on for every page that follows.</p>
+
+    <h2>The two systems you already know</h2>
+
+    <p>Before defining a model precisely, it helps to contrast it with the two alternatives you almost certainly already use: lookup tables and rule-based systems.</p>
+
+    <h3>Lookup tables</h3>
+
+    <p>A lookup table stores known answers for known questions. A tax table is a good example. You find your income bracket, read across to the applicable rate, apply it. The table was built by someone who enumerated every case in advance. It works perfectly &mdash; until you encounter a situation the table's author did not anticipate.</p>
+
+    <p>Databases and spreadsheet VLOOKUP functions are both lookup tables at heart. They retrieve. They do not infer.</p>
+
+    <h3>Rule-based systems</h3>
+
+    <p>Rule-based systems replace the table with explicit logic. An early fraud detection system might say: "Flag any transaction over $10,000 that occurs in a country different from the card's home country." A human expert wrote these rules. The system applies them mechanically.</p>
+
+    <p>Rule-based systems are powerful when experts can articulate the logic precisely. They fail in two situations. First, when the space of inputs is too large for any set of rules to cover. Second, when the correct rule is tacit knowledge that experts cannot put into words &mdash; like recognising whether a sentence sounds natural, or whether a scan looks malignant.</p>
+
+    <h3>Where models come in</h3>
+
+    <p>A model is what you build when you cannot enumerate all the answers in advance and cannot write down all the rules. Instead of specifying the logic, you show the system many examples and let it discover the logic for itself. The discovered logic is stored as numbers. That collection of numbers is the model.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Distinction</div>
+      <p>Rule-based systems encode <em>human knowledge</em> as logic. Models encode <em>statistical patterns</em> as numbers. The difference determines what each can generalise to.</p>
+    </div>
+
+    <h2>What a model actually is: a function</h2>
+
+    <p>Strip away all the jargon and a model is a <strong>function</strong>. It takes inputs, applies a transformation, and produces outputs. That transformation is defined by a set of numbers called <strong>parameters</strong> or <strong>weights</strong>.</p>
+
+    <p>Consider the simplest possible model: a straight line. You want to predict next month's sales from this month's marketing spend. The model is:</p>
+
+    <p><code>predicted_sales = weight &times; marketing_spend + bias</code></p>
+
+    <p>Two parameters: <code>weight</code> and <code>bias</code>. The weight controls how steeply sales respond to spend. The bias captures baseline sales with zero marketing. Given any value of marketing spend, the function produces a prediction.</p>
+
+    <p>That is a model. A frontier language model like GPT-4 is the same conceptual object, with hundreds of billions of parameters instead of two, and a much more complex function. But the core idea is identical: parameters define a mapping from inputs to outputs.</p>
+
+    <h3>The anatomy of a model</h3>
+
+    <p>Every model has three ingredients.</p>
+
+    <p><strong>Architecture.</strong> The shape of the function &mdash; how inputs connect to outputs, how many parameters there are, what kind of transformations are applied. A straight line is one architecture. A neural network is another. The architecture is chosen by the engineer before training begins.</p>
+
+    <p><strong>Parameters.</strong> The numbers that fill in the architecture. Before training, they are typically random. After training, they encode the patterns extracted from data. The parameters are what the model <em>is</em>, in a sense: swap the parameters and you have a completely different model, even with the same architecture.</p>
+
+    <p><strong>A prediction rule.</strong> Given new inputs, the model runs the function using its learned parameters and produces an output. For a sales model, the output is a number. For an image classifier, it might be a label like "cat" or "dog." For a language model, it is a probability distribution over possible next tokens.</p>
+
+    <div class="before-after">
+      <div class="panel before">
+        <div class="panel-label">Rule-based system</div>
+        <p>A human writes logic: "If marketing spend &gt; $50k AND quarter is Q4, predict sales &gt; $1M." Logic is explicit. The system fails on any case the author did not anticipate. Hard to update when the world changes.</p>
+      </div>
+      <div class="panel after">
+        <div class="panel-label">A model</div>
+        <p>Examples define the logic implicitly. The model discovers: sales and spend correlate in this season-adjusted way. Logic is stored as parameters. Updates by retraining on new data. Generalises to situations the author never saw.</p>
+      </div>
+    </div>
+
+    <h2>What it means for a model to learn</h2>
+
+    <p>Learning is the process of adjusting parameters until the model's predictions match the training data as closely as possible.</p>
+
+    <p>Return to the sales example. Start with random values for <code>weight</code> and <code>bias</code>. Feed in last year's actual marketing spend figures, one month at a time. For each month, the model produces a prediction. Compare the prediction to the actual sales figure. The gap is the <strong>error</strong>.</p>
+
+    <p>Now adjust the parameters in whatever direction reduces that error. Do this for every example. Repeat many times. Gradually, the parameters settle into values that make the model's predictions fit the data well. That process of parameter adjustment is called <strong>training</strong>. The algorithm that does the adjusting is called <strong>gradient descent</strong>.</p>
+
+    <p>After training, the parameters have changed from random noise into numbers that encode the relationship between marketing spend and sales. The model has <em>learned</em> that relationship from examples, rather than being told it by a rule.</p>
+
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: if learning means fitting parameters to data, why not just memorise every training example?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Memorisation would mean storing every (input, output) pair exactly. Two problems make this unworkable. First, storage: a language model trains on trillions of tokens. Storing them all verbatim would require more space than the model has parameters &mdash; the numbers simply do not fit. Second, and more importantly, memorisation does not generalise. If your sales model memorised last year's data, it would produce a perfect prediction for the months it saw and a completely blank stare for any new month. The whole point of a model is to extract patterns that apply to inputs it has never seen. Generalisation requires compression: the model must discard the specific examples and retain only the patterns they imply.</p>
+      </div>
+    </div>
+
+    <h2>Why models generalise to unseen inputs</h2>
+
+    <p>This is the question at the heart of machine learning. Training data is always finite. The world keeps producing new situations. Why should a model that learned from past examples do anything useful on future ones?</p>
+
+    <p>The answer is that useful patterns are persistent. If marketing spend predicted sales last year, it probably predicts sales this month too &mdash; not because you declared it to, but because the underlying mechanism (advertising drives awareness, awareness drives purchase) is real and stable. A model that discovers that pattern owns something that transfers across time and context.</p>
+
+    <p>The formal version of this idea is called the <strong>inductive bias</strong> of a model: the assumptions baked into its architecture about what kinds of patterns are worth looking for. A straight line assumes the relationship is, well, linear. A neural network assumes the relationship can be built up from many small non-linear transformations. Different architectures are better suited to different kinds of problems because their inductive biases align differently with the structure of the world.</p>
+
+    <h3>The generalisation bargain</h3>
+
+    <p>There is always a bargain involved. A model that fits training data perfectly &mdash; that can reproduce every quirk and noise spike in the examples it saw &mdash; has almost certainly memorised noise rather than pattern. It will perform poorly on new data. Statisticians call this <strong>overfitting</strong>.</p>
+
+    <p>A model that is too simple to fit the training data misses real patterns. Its predictions are wrong everywhere, not just on unseen inputs. That is <strong>underfitting</strong>.</p>
+
+    <p>Good training finds the middle: complex enough to capture genuine structure, simple enough to generalise rather than memorise. Every decision in machine learning &mdash; how many parameters, how long to train, how much data to use &mdash; is ultimately an attempt to navigate this bargain.</p>
+
+    <div class="diagram-container">
+      <p class="diagram-caption">The generalisation bargain: three positions on the complexity spectrum. Click a position to see what happens to predictions on unseen data.</p>
+      <svg id="gen-svg" width="560" height="260" viewBox="0 0 560 260" role="img" aria-label="Three curves showing underfitting, good fit, and overfitting relative to training data points">
+        <defs>
+          <marker id="gen-arrow" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--text-dim)"></path>
+          </marker>
+        </defs>
+        <!-- Axes -->
+        <line x1="40" y1="220" x2="530" y2="220" stroke="var(--surface3)" stroke-width="1"></line>
+        <line x1="40" y1="220" x2="40" y2="30" stroke="var(--surface3)" stroke-width="1"></line>
+        <text x="285" y="248" fill="var(--text-dim)" font-size="11" text-anchor="middle">Model complexity</text>
+        <text x="14" y="130" fill="var(--text-dim)" font-size="11" text-anchor="middle" transform="rotate(-90,14,130)">Error</text>
+        <text x="60" y="238" fill="var(--text-dim)" font-size="10">Simple</text>
+        <text x="470" y="238" fill="var(--text-dim)" font-size="10">Complex</text>
+
+        <!-- Training error curve (falls monotonically) -->
+        <path d="M60,190 Q180,160 280,100 Q370,60 500,40" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-dasharray="5 3"></path>
+        <text x="510" y="38" fill="var(--cyan)" font-size="10">Train error</text>
+
+        <!-- Validation error curve (U-shape) -->
+        <path d="M60,195 Q180,140 280,100 Q370,120 500,185" fill="none" stroke="var(--amber)" stroke-width="2.5"></path>
+        <text x="510" y="183" fill="var(--amber)" font-size="10">Val error</text>
+
+        <!-- Sweet spot marker -->
+        <line x1="280" y1="90" x2="280" y2="220" stroke="var(--green)" stroke-width="1" stroke-dasharray="4 3"></line>
+        <text x="280" y="83" fill="var(--green)" font-size="11" text-anchor="middle">Sweet spot</text>
+
+        <!-- Zone labels -->
+        <text x="130" y="55" fill="var(--text-dim)" font-size="10" text-anchor="middle">Underfitting</text>
+        <text x="410" y="55" fill="var(--text-dim)" font-size="10" text-anchor="middle">Overfitting</text>
+      </svg>
+    </div>
+
+    <p>The cyan dashed line is training error: as the model gets more complex it always fits the training data better. The amber line is validation error &mdash; how well the model performs on data it has never seen. It falls at first (the model is learning genuine patterns) and then rises (the model starts memorising noise). The sweet spot is where validation error is lowest. Everything in the practice of machine learning is an attempt to find and stay near that point.</p>
+
+    <h2>What the parameters actually store</h2>
+
+    <p>It is tempting to think of parameters as a filing cabinet, with each number storing one fact. They do not work that way.</p>
+
+    <p>In a linear model, the weight directly encodes the relationship between input and output. But in a neural network &mdash; the architecture behind modern AI systems &mdash; no single parameter corresponds to a single fact. Instead, facts and patterns are distributed across millions or billions of parameters. The same parameter participates in representing thousands of different concepts. Remove any single parameter and you will not excise one clean fact; you will degrade performance slightly across many tasks.</p>
+
+    <p>Think of it like the collective knowledge of a consulting team. No one person on the team owns "the Japan market strategy." That knowledge is distributed: one partner understands the regulatory environment, another knows the key clients, a third has done three similar engagements. The team can answer questions about Japan because the knowledge is encoded collectively. Ask any one person to carry the whole thing and you lose fidelity immediately.</p>
+
+    <p>This distributed encoding is why models generalise. If facts were stored individually, one example could corrupt one slot. Because facts are distributed, no single training example dominates any single parameter, and the system is forced to find configurations that are consistent across all examples simultaneously.</p>
+
+    <h3>What a model cannot store</h3>
+
+    <p>Distributed storage has one critical implication: models cannot update a single fact cleanly. If your linear sales model was trained before a global pandemic changed the relationship between marketing and sales, you cannot just edit the "marketing coefficient" parameter. The relationship is encoded across all parameters jointly. You retrain.</p>
+
+    <p>This is not a flaw &mdash; it is a consequence of the design. And it means that when a model gives you a confidently wrong answer about a recent event, it is not because it is lying. It is because it never saw evidence that would have shifted its distributed representation of that situation. The pattern it learned was real in its training data and simply no longer holds.</p>
+
+    <h2>The three things a model must have</h2>
+
+    <p>Every working model has three components, and a failure in any one of them breaks the system. Knowing which component failed is half the diagnostic work when a model misbehaves.</p>
+
+    <p><strong>Data</strong> &mdash; examples from which to learn. No data, no model. Bad data, bad model. The single most reliable predictor of model quality is the quality of the training data, not the sophistication of the architecture.</p>
+
+    <p><strong>An objective</strong> &mdash; a precise definition of what "doing well" means. For the sales predictor, doing well means minimising the gap between predicted and actual sales. The objective function makes that gap a number the optimiser can minimise. Without a clear objective, training has no direction.</p>
+
+    <p><strong>An optimisation algorithm</strong> &mdash; the procedure that adjusts parameters to improve the objective. Gradient descent is the standard. It evaluates how each parameter affects the objective and nudges parameters in the direction that lowers the error. Run it long enough on enough data and parameters converge to values that make good predictions.</p>
+
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">Your company wants to build a system that flags potentially fraudulent invoices. The fraud team says there are too many variations to write rules for all of them. Which approach is better suited?</div>
+      <button class="quiz-option" data-letter="A">A rule-based system, because fraud rules are well understood.</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">A model trained on historical invoices, because the patterns are too varied to enumerate as explicit rules.</button>
+      <button class="quiz-option" data-letter="C">A lookup table of known fraudulent invoices.</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. When the space of patterns is too large or complex to enumerate, a model learns the logic from examples instead of requiring a human to write it out. That is exactly the situation the fraud team described."
+           data-incorrect="Think about why the fraud team cannot write rules: the patterns are too varied. A model can discover those patterns from data without anyone articulating them explicitly. Lookup tables only match exact known cases; rule-based systems only cover cases the author anticipated."></div>
+    </div>
+
+    <h2>The difference between a model and a rule-based system</h2>
+
+    <p>This question comes up often in practice, and the answer is sharper than it first appears.</p>
+
+    <p>A rule-based system encodes logic that a human understood and expressed. Its behaviour is fully auditable: trace any decision back to the rule that produced it. Its failure mode is coverage: it can only handle situations its authors anticipated.</p>
+
+    <p>A model encodes logic that no human fully articulated. Its behaviour is partially opaque: the parameters encode the logic collectively, not as readable rules. Its failure mode is distribution shift: it handles situations that look like training data well, and situations that do not look like training data poorly.</p>
+
+    <p>Neither is universally better. A good engineering decision requires knowing which failure mode matters more for your situation. If the rules are few, stable, and well understood (tax calculations, physics simulations), rule-based systems are more transparent and easier to audit. If the patterns are complex, numerous, and implicit (fraud detection, image recognition, language), models are more capable.</p>
+
+    <p>Most real systems mix both. A model flags suspicious invoices; a rule then checks that the flagged invoice is above a threshold before triggering a human review. The model handles the complexity the rules cannot; the rules handle the policy constraints the model should not.</p>
+
+    <h3>Why models fail</h3>
+
+    <p>Understanding failure modes is the practical payoff of understanding what a model is.</p>
+
+    <p>Models fail when the world they encounter during deployment differs from the world they trained on. Call this <strong>distribution shift</strong>. If your sales model trained on pre-pandemic data, the relationship between spend and sales may have changed. If your fraud model trained on 2019 fraud patterns, new tactics it never saw will slip through.</p>
+
+    <p>Models also fail at the boundaries of their training data. Ask a model about a niche domain it saw little of during training and its predictions become unreliable. It does not know it has left the region where its patterns hold; it continues to produce predictions with the same apparent confidence. This is one of the most important things to understand about all current AI systems: they do not know what they do not know.</p>
+
+    <p>Finally, models fail when the objective they trained on does not match the outcome you actually care about. A recommendation model trained to maximise clicks may learn to recommend outrage-inducing content. A language model trained on a proxy for "helpfulness" may learn to produce text that sounds helpful rather than text that is helpful. Objective misspecification is the hidden source of many AI failures that look like intelligence problems but are really design problems.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>Every AI tool you use is a model. Pick one you use regularly. What was it probably trained on? What distribution shift might make it fail? What objective was it trained to maximise &mdash; and how closely does that objective match what you actually want?</p>
+    </div>
+
+    <h2>Models in the ML Foundations curriculum</h2>
+
+    <p>This course builds up from this foundation. The pages that follow examine specific types of models, specific training algorithms, and specific failure modes. Each page connects back to the three-ingredient view of models: data, objective, optimisation.</p>
+
+    <p>The most important thing to carry forward from this page is the function view. A model is not a database. It is not a chatbot with a personality. It is a function &mdash; a mathematical object that takes inputs, applies a transformation defined by learned parameters, and returns outputs. The wonder is not that such a function exists. The wonder is that you can learn one from data that is general enough to be useful on inputs the function has never seen.</p>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>A model is a function defined by learned parameters. Training adjusts those parameters until the function predicts well on known examples. Generalisation happens because training forces the model to compress patterns rather than memorise examples &mdash; and real patterns persist beyond the specific data they were extracted from.</p>
+    </div>
+
+  </div>
+
+  <!-- VERIFICATION QUESTIONS -->
+  <div class="verification" role="region" aria-label="Verification questions">
+    <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+      <h3>Verification Questions</h3>
+      <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+    </div>
+    <div class="verification-body">
+      <ol>
+        <li>What is the difference between a model and a rule-based system?</li>
+        <li>What does it mean to say a model learns?</li>
+        <li>Why cannot a model simply memorise all training data?</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav"></div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('f01-what-is-a-model');</script>
+</body>
+</html>

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E03 &mdash; Structured Outputs &mdash; AI Engineering</title>
+<link rel="stylesheet" href="../../src/css/style.css">
+<meta property="og:title" content="E03 &mdash; Structured Outputs">
+<meta property="og:description" content="Getting models to return JSON, tables, and typed responses reliably in production systems.">
+<meta property="og:type" content="article">
+<link rel="icon" href="../../src/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="scroll-progress"></div>
+
+<button class="mobile-nav-toggle" aria-label="Open navigation">&#9776;</button>
+<div class="overlay"></div>
+
+<nav id="sidebar" aria-label="Course navigation"></nav>
+
+<main id="main">
+
+  <!-- BREADCRUMB -->
+  <div class="breadcrumb">
+    <a href="../index.html">Home</a>
+    <span class="sep">&#8250;</span>
+    <a href="../module-1/e01-prompt-engineering.html">Module 1: Prompting &amp; Output Control</a>
+    <span class="sep">&#8250;</span>
+    Structured Outputs
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gap-badge" data-module="1">E03 &middot; Module 1</div>
+    <h1>Structured Outputs</h1>
+    <p class="one-liner">Getting models to return JSON, tables, and typed responses reliably in production systems.</p>
+    <span class="reading-time">~15 min</span>
+    <div class="analogy">
+      <div class="analogy-label">Anchor Analogy</div>
+      Think of the difference between handing a consultant an expense form versus asking them to write up their expenses in an email. The narrative email is flexible and human-readable, but your accounting software cannot parse it. The form produces structured data directly &mdash; every field in its column, every number ready to sum. Structured outputs do for model responses what the expense form does for reimbursement requests: they impose a contract on the shape of the answer so downstream systems can process it without a human in the loop.
+    </div>
+  </div>
+
+  <!-- WHY THIS MATTERS -->
+  <div class="callout callout-why">
+    <div class="callout-label">Why This Matters</div>
+    <p>Downstream systems that parse model output break when format varies. Structured outputs &mdash; using JSON schemas, tool-use APIs, or constrained decoding &mdash; make model responses machine-parseable and integration-safe. Without this, even a brilliant model answer is useless to any pipeline that needs to read a specific field, route on a value, or write to a database. Production AI engineering is largely the art of keeping data structures consistent across every hop in the chain.</p>
+  </div>
+
+  <!-- WHAT YOU CAN ARGUE -->
+  <div class="callout callout-argue">
+    <div class="callout-label">After This Page, You Can Argue</div>
+    <p>Why asking for JSON in a system prompt produces less reliable output than using a structured output API, what constrained decoding guarantees and what it cannot guarantee, and when streaming conflicts with structured output requirements &mdash; and what to do about it.</p>
+  </div>
+
+  <!-- PREREQUISITES -->
+  <div class="prereqs">
+    <span class="prereqs-label">Prerequisites:</span>
+    <a href="../module-1/e01-prompt-engineering.html" class="prereq-chip">E01 &mdash; Prompt Engineering as a System</a>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="content">
+
+    <h2>The Problem With Asking Nicely</h2>
+    <p>When you write "respond only in valid JSON" in a system prompt, you are making a request. The model reads that instruction, weighs it against everything else in its context, and does its best to comply. Most of the time it succeeds. But "most of the time" is not a contract, and production systems need contracts.</p>
+
+    <p>The failure modes are subtle and varied. A model might return valid JSON but wrap it in a markdown code fence (<code>```json ... ```</code>), so your <code>JSON.parse()</code> call throws on the backticks. It might drop a trailing comma, or include a helpful explanatory sentence before the opening brace. It might faithfully produce JSON on ten thousand requests and then, on the ten-thousand-and-first, apologise for not being able to help and return plain English. Each of these events breaks a downstream consumer silently or loudly depending on how much error handling you built in.</p>
+
+    <p>The root cause is architectural: the model is a next-token predictor. When it is deciding what to generate, every possible continuation &mdash; valid JSON, malformed JSON, plain text, a refusal &mdash; is in competition. The system prompt nudges probabilities toward the valid-JSON region of the output space, but it cannot remove the other regions entirely. The model can always drift.</p>
+
+    <h3>Why This Matters in Practice</h3>
+    <p>In a proof-of-concept demo, you can add a try/catch, log the failure, and move on. In production you cannot absorb that kind of non-determinism. Consider a triage system that classifies incoming support tickets into urgency levels so they route to the right queue. If the model occasionally returns <code>"high urgency"</code> instead of <code>"HIGH"</code>, tickets get lost. If it returns a paragraph explaining its reasoning instead of a classification label, the routing logic crashes. The cost is not just technical debt &mdash; it is real service-level failures for real customers.</p>
+
+    <p>This is why the engineering community has developed three distinct approaches to structured output, each offering a different trade-off between reliability, flexibility, and integration complexity.</p>
+
+    <h2>Three Approaches to Structured Output</h2>
+
+    <h3>Approach 1 — Prompt Engineering (Soft Constraint)</h3>
+    <p>You describe the format you want in the system prompt or few-shot examples. This is the oldest and most portable approach. It requires no special API features and works with any model that accepts text input.</p>
+
+    <p>The reliability ceiling is real but often acceptable for internal tools or low-stakes use cases. You can improve compliance by being explicit about edge cases ("if you have no value for a field, use null, never omit the key"), by providing a concrete example in the prompt, and by adding a post-processing step that validates the output against a schema and retries on failure. That retry loop is doing work the model should be doing, but it is pragmatic.</p>
+
+    <p>The deeper problem with prompt-only approaches is that the model has no way to know, as it generates each token, whether the string it is building is valid JSON. It is writing tokens sequentially, left to right, and only at the very end does the full response exist as a parseable object. It can miscount brackets, forget to close a string, or generate a key twice. These errors are not failures of instruction-following; they are failures of structure-awareness during generation <span class="citation" title="Liu et al. (2023). BOLT: Fast Energy-Based Controlled Text Generation with Tunable Biases. arXiv.">(Liu et al., 2023)</span>.</p>
+
+    <h3>Approach 2 &mdash; Tool Use / Function Calling (Structured API)</h3>
+    <p>The major model providers now offer function-calling or tool-use APIs that separate the model's reasoning from the format of its output. Instead of asking the model to produce JSON, you define a function signature &mdash; a name, a description, and a schema for its parameters &mdash; and the API returns a structured function call object when the model decides to invoke it.</p>
+
+    <p>OpenAI's function calling <span class="citation" title="OpenAI (2023). Function calling in the Chat Completions API. OpenAI Docs.">(OpenAI, 2023)</span>, Anthropic's tool use, and Google's function declarations all work on this principle. The model produces a special token or structured block that the API layer interprets, rather than generating raw JSON as part of the text stream.</p>
+
+    <p>Reliability improves significantly for two reasons. First, the model has been fine-tuned on examples of correctly-formatted function calls, so it has a strong prior toward valid output. Second, and more importantly for some providers, the API layer applies lightweight validation: if the model produces a call that violates the schema (wrong type for an argument, missing required field), the provider can reject it and ask the model to retry internally, before the response reaches your code.</p>
+
+    <p>This approach is not the same as constrained decoding, but it sits closer to it than prompt engineering alone. The model still generates tokens freely, but it has learned to generate function call syntax reliably, and the infrastructure catches gross errors before they reach you.</p>
+
+    <h3>Approach 3 &mdash; Constrained Decoding (Hard Constraint)</h3>
+    <p>Constrained decoding changes how the model generates tokens, not just what it is asked to generate. At each step in the generation process, the set of valid next tokens is filtered according to a grammar or schema. If the model is currently inside a JSON string value, only characters that can legally appear inside a JSON string are allowed. If it is completing an integer field, only digit characters are valid. The model cannot produce malformed output because invalid tokens are masked out before the sampling step.</p>
+
+    <p>The most widely deployed implementation of this idea is Outlines <span class="citation" title="Willard &amp; Louf (2023). Efficient Guided Generation for Large Language Models. arXiv:2307.09702.">(Willard &amp; Louf, 2023)</span>, an open-source library that compiles a JSON schema (or a regular expression, or a context-free grammar) into a finite-state automaton. At each decoding step, the automaton tracks which state the partially-generated output is in and masks the logits of all tokens that would lead to an invalid transition. The model is effectively running inside a cage whose bars are defined by the schema.</p>
+
+    <p>This is a hard guarantee, not a probabilistic one. If you specify a schema that requires a field called <code>priority</code> with an enum of <code>["low", "medium", "high"]</code>, the model will always produce exactly one of those three strings for that field. It cannot produce <code>"HIGH"</code>, <code>"high urgency"</code>, or an explanatory sentence. The output is structurally valid by construction.</p>
+
+    <div class="callout callout-warning">
+      <div class="callout-label">Important Nuance</div>
+      <p>Constrained decoding guarantees <em>structural</em> validity, not <em>semantic</em> correctness. The model might classify a low-urgency ticket as <code>"high"</code> — that is a reasoning error, not a format error. The cage ensures the key exists and the value is one of the three allowed strings. It does not ensure the model chose the right string. Format compliance and factual accuracy are orthogonal concerns.</p>
+    </div>
+
+    <h2>JSON Schema as a Contract</h2>
+    <p>Whether you use tool-use APIs or constrained decoding, you need to express what you want as a JSON schema. JSON Schema is a declarative vocabulary for describing the structure of JSON documents <span class="citation" title="Pezoa et al. (2016). Foundations of JSON Schema. WWW 2016.">(Pezoa et al., 2016)</span>. It specifies field names, types, required vs. optional fields, enum constraints, string patterns, and numeric ranges.</p>
+
+    <p>Writing good schemas for AI output is slightly different from writing schemas for human-authored data. A few principles apply:</p>
+
+    <ul>
+      <li><strong>Use enums liberally.</strong> If a field can only take a small set of values, enumerate them. This is the clearest instruction you can give both the model and the constrained decoder. It eliminates capitalisation drift, synonym substitution, and creative paraphrase.</li>
+      <li><strong>Mark fields as required or optional deliberately.</strong> Models tend to invent values for fields they cannot determine. If a field is optional, make it optional in the schema and instruct the model (in the prompt) to use <code>null</code> when the value is unknown. This is better than having the model hallucinate a plausible-sounding value.</li>
+      <li><strong>Avoid deeply nested schemas when flat structures work.</strong> Deep nesting multiplies the number of ways the structure can be subtly wrong, and it increases the length of the generated output, which increases the chance of error accumulation.</li>
+      <li><strong>Use <code>additionalProperties: false</code>.</strong> This prevents the model from adding extra fields beyond those you defined. Extra fields are often harmless, but they can cause downstream schema validators to reject the object.</li>
+    </ul>
+
+    <h2>The Streaming Conflict</h2>
+    <p>Streaming is the technique of sending model output token-by-token to the client as it is generated, rather than waiting for the full response. From a user-experience standpoint, streaming is almost always better: the user sees text appearing immediately rather than staring at a blank screen for several seconds. It also reduces perceived latency for long responses.</p>
+
+    <p>Structured outputs and streaming create an architectural tension. A JSON object is not valid until the closing brace arrives. If you are streaming the response and trying to parse it as JSON, you will fail on every intermediate chunk because the object is not yet complete. You have several options:</p>
+
+    <div class="walkthrough">
+      <div class="walkthrough-step" data-step="1">
+        <strong>Buffer and parse at the end.</strong> Collect all streamed chunks, concatenate them, and parse the result as JSON once the stream closes. This gives you all the reliability benefits of structured output but loses the responsiveness benefit of streaming. For internal API calls where the user sees no UI, this is usually the right choice.
+      </div>
+      <div class="walkthrough-step" data-step="2">
+        <strong>Stream and parse incrementally.</strong> Use a streaming JSON parser that can handle partial input and emit events as fields are completed. Libraries like <code>jsonstream</code> (Node.js) or <code>ijson</code> (Python) do this. This lets you start acting on completed sub-objects before the full response arrives. The trade-off is added complexity: you must handle the case where a streaming parse fails midway.
+      </div>
+      <div class="walkthrough-step" data-step="3">
+        <strong>Use a structured-first API with streaming disabled.</strong> If you are using a provider's tool-use API, check whether it supports streaming structured calls. Some providers buffer the function call arguments internally and only send them as a complete block even when streaming is enabled. Read the provider documentation carefully; behaviour varies.
+      </div>
+      <div class="walkthrough-step" data-step="4">
+        <strong>Separate the streaming and structured concerns.</strong> Generate a streaming conversational response for the user, then make a second, non-streaming API call to extract structured data from the conversation. This doubles the API calls but cleanly separates user experience from data extraction. It works well when the structured data is a side effect of the interaction rather than the primary output.
+      </div>
+    </div>
+
+    <div class="callout callout-insight">
+      <div class="callout-label">Key Insight</div>
+      <p>The choice between streaming and structured output is not binary. Architect your system so that streaming serves the human-facing response and a separate extraction step produces the machine-parseable record. This pattern appears throughout production AI systems: the model speaks to users in natural language and simultaneously writes to databases in structured form.</p>
+    </div>
+
+    <h2>Retry Logic and Validation Layers</h2>
+    <p>Even with tool-use APIs, you should build a validation layer. Parse the returned structure against your schema using a library (<code>jsonschema</code> in Python, <code>zod</code> in TypeScript), and if validation fails, capture the error message and retry with a corrected prompt. Include the failed output and the specific validation error in the retry prompt so the model knows exactly what went wrong.</p>
+
+    <p>A common pattern looks like this:</p>
+
+    <pre><code>def extract_structured(prompt: str, schema: dict, max_retries: int = 3) -> dict:
+    for attempt in range(max_retries):
+        response = call_model(prompt, schema=schema)
+        try:
+            validate(instance=response, schema=schema)
+            return response
+        except ValidationError as e:
+            prompt = repair_prompt(prompt, response, str(e))
+    raise StructuredOutputError("Failed after max retries")</code></pre>
+
+    <p>The <code>repair_prompt</code> function appends a correction instruction: "Your previous response failed schema validation with the following error: [error message]. Please correct only the structural issue and return the same data in valid format." This is more effective than starting over because it preserves the reasoning the model already did and focuses it on the formatting error.</p>
+
+    <p>In practice, with a good model and a well-designed schema, you will see validation failures on fewer than 1% of calls. The retry adds a small latency cost but keeps your pipeline robust against that tail of edge cases.</p>
+
+    <h2>Choosing the Right Approach for Your Use Case</h2>
+    <p>The three approaches form a spectrum from flexible but fragile to rigid but reliable. The right choice depends on what you are building:</p>
+
+    <div class="comparison-table">
+      <div class="col-header">Use prompt engineering when&hellip;</div>
+      <div class="col-header">Use constrained decoding / tool APIs when&hellip;</div>
+      <div class="col-body">
+        <ul>
+          <li>You are prototyping and iteration speed matters more than reliability</li>
+          <li>The output structure is complex and deeply nested, making schema definition cumbersome</li>
+          <li>You are using a model or provider that does not support function calling</li>
+          <li>The format is semi-structured (markdown with specific sections rather than strict JSON)</li>
+        </ul>
+      </div>
+      <div class="col-body">
+        <ul>
+          <li>A downstream system parses the output programmatically with no human review</li>
+          <li>Format failures cause service disruptions or data loss</li>
+          <li>You need enum-level guarantees on specific fields (classification labels, status codes)</li>
+          <li>You are in production and latency from retry loops is unacceptable</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>A Worked Example: Support Ticket Classification</h2>
+    <p>Suppose you are building a system that reads incoming support tickets and classifies each one before routing it. You need three fields: a priority level, a category, and a confidence score.</p>
+
+    <p>A prompt-engineering approach might include: "Respond with a JSON object with keys: priority (one of low, medium, high), category (one of billing, technical, account, other), and confidence (a number between 0 and 1)." This works most of the time.</p>
+
+    <p>A tool-use approach defines the schema formally and passes it to the API:</p>
+
+    <pre><code>{
+  "name": "classify_ticket",
+  "description": "Classify a support ticket by priority and category",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "priority": {
+        "type": "string",
+        "enum": ["low", "medium", "high"]
+      },
+      "category": {
+        "type": "string",
+        "enum": ["billing", "technical", "account", "other"]
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": ["priority", "category", "confidence"],
+    "additionalProperties": false
+  }
+}</code></pre>
+
+    <p>Now the model cannot produce <code>"HIGH"</code>, cannot add an explanatory field, cannot return a confidence of <code>1.5</code>. The contract is enforced at the infrastructure level. Your routing logic can trust the response without defensive coding.</p>
+
+    <!-- INTERACTIVE: Self-check quiz -->
+    <div class="quiz">
+      <div class="quiz-header">Self-Check</div>
+      <div class="quiz-question">A model is asked to produce a JSON object with a <code>status</code> field that must be one of <code>["open", "closed", "pending"]</code>. You use constrained decoding with the correct schema. On the next request the model returns <code>"closed"</code> for a ticket that should be <code>"open"</code>. What type of error is this?</div>
+      <button class="quiz-option" data-letter="A">A format error — constrained decoding failed to enforce the enum</button>
+      <button class="quiz-option" data-letter="B" data-correct="true">A semantic error — the format is valid but the reasoning was wrong</button>
+      <button class="quiz-option" data-letter="C">A streaming conflict — the response was cut off before the correct token</button>
+      <div class="quiz-feedback"
+           data-correct="Correct. Constrained decoding guarantees the value is one of the three allowed strings. It cannot guarantee the model chose the right string for this particular ticket. Format compliance and factual accuracy are separate concerns."
+           data-incorrect="Not quite. Constrained decoding succeeded — the output is structurally valid. The issue is that the model applied the wrong label. That is a reasoning error, not a format error."></div>
+    </div>
+
+    <!-- SECOND INTERACTIVE: Toggle-reveal -->
+    <div class="toggle-reveal">
+      <div class="toggle-reveal-header">
+        <span>Think first: why does a system prompt instruction to "return only valid JSON" sometimes produce a response wrapped in markdown code fences?</span>
+        <span>+</span>
+      </div>
+      <div class="toggle-reveal-body">
+        <p>Because the model is predicting tokens, not following rules. During pre-training and fine-tuning, the model saw enormous amounts of code shared in chat-like contexts, and in those contexts JSON was almost always inside a markdown fence. When you ask for JSON, the model's learned associations pull it toward the most common pattern it has seen for presenting JSON in a conversational setting &mdash; which is the fenced block. Your instruction says "valid JSON" but the model's statistical priors say "JSON goes in a code block." The instruction shifts the probability distribution; it does not rewrite it. Constrained decoding or a tool-use API removes the competition entirely: the model simply cannot produce backtick tokens in that context.</p>
+      </div>
+    </div>
+
+    <h2>Schema Design Pitfalls</h2>
+    <p>Even with the right infrastructure, poorly designed schemas cause problems. Three pitfalls come up repeatedly in production systems:</p>
+
+    <h3>Pitfall 1: Overloading a single field</h3>
+    <p>Resist the temptation to put complex information into a single string field with instructions like "summarise the issue in one sentence, then list the steps taken." The model will follow this instruction inconsistently. Break composite fields into separate fields. Give the model one job per field and it will do each job more reliably.</p>
+
+    <h3>Pitfall 2: Optional fields that get hallucinated</h3>
+    <p>If you have an optional field for, say, a customer account number that can only be extracted if the ticket mentions it explicitly, the model will hallucinate plausible account numbers when none is mentioned. Mitigate this by making the field nullable (<code>"type": ["string", "null"]</code>), adding a second boolean field called <code>account_number_found</code> that the model sets to true only when it is confident, and instructing the model explicitly to return <code>null</code> when uncertain rather than guessing.</p>
+
+    <h3>Pitfall 3: Schemas that are too permissive</h3>
+    <p>A schema that accepts any string for a field is almost no constraint at all for a model that has already been asked to produce JSON. The value of a strict schema comes from its constraints: enums, numeric ranges, required fields, no additional properties. The more constraints you can express in the schema itself, the less you depend on the model's instruction-following, and the more reliable your pipeline becomes.</p>
+
+    <div class="callout callout-think">
+      <div class="callout-label">Think Further</div>
+      <p>As LLMs become more capable at following complex instructions, does the distinction between prompt-based soft constraints and hard-enforced structured outputs become less important? Or does the reliability gap between "model tries to follow a rule" and "rule is architecturally enforced" remain meaningful regardless of how good the model gets? Consider what happens at the tail of the distribution &mdash; the rare, edge-case input that breaks your system at 3 AM on a Saturday.</p>
+    </div>
+
+    <!-- VERIFICATION QUESTIONS -->
+    <div class="verification" role="region" aria-label="Verification questions">
+      <div class="verification-header" role="button" aria-expanded="false" tabindex="0">
+        <h3>Verification Questions</h3>
+        <span class="toggle-icon" aria-hidden="true">&#9660;</span>
+      </div>
+      <div class="verification-body">
+        <ol>
+          <li>Why does asking for JSON in a system prompt produce less reliable output than using a structured output API?</li>
+          <li>What is constrained decoding and how does it guarantee format compliance?</li>
+          <li>When does streaming conflict with structured output requirements, and what are the main strategies for managing that conflict?</li>
+        </ol>
+      </div>
+    </div>
+
+  </div><!-- /.content -->
+
+  <!-- KEY INSIGHT -->
+  <div class="callout callout-insight">
+    <div class="callout-label">Key Insight</div>
+    <p>Prompt instructions and structural enforcement are not the same thing. A system prompt nudges the model's probability distribution toward the format you want. Constrained decoding or a tool-use API removes invalid tokens from consideration entirely. The difference is the difference between asking a contractor to use a specific form and handing them a form that only has boxes for the fields you need &mdash; one relies on compliance, the other on architecture.</p>
+  </div>
+
+  <!-- PAGE NAV -->
+  <div class="page-nav" data-prev="e02-context-management" data-next="e04-tool-use">
+    <a href="#prev" class="prev">
+      <span class="nav-direction">&larr; Previous</span>
+      <span class="nav-title">E02 &mdash; Context Management</span>
+    </a>
+    <a href="#next" class="next">
+      <span class="nav-direction">Next &rarr;</span>
+      <span class="nav-title">E04 &mdash; Tool Use &amp; Function Calling</span>
+    </a>
+  </div>
+
+</main>
+
+<script src="../js/nav.js"></script>
+<script>LLMNav.init('e03-structured-outputs');</script>
+<script>AIEngNav.init('e03-structured-outputs');</script>
+<script>
+(function () {
+  // Scroll progress bar
+  var bar = document.querySelector('.scroll-progress');
+  if (bar) {
+    window.addEventListener('scroll', function () {
+      var scrollTop = window.scrollY || document.documentElement.scrollTop;
+      var docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      bar.style.width = (docHeight > 0 ? (scrollTop / docHeight) * 100 : 0) + '%';
+    }, { passive: true });
+  }
+
+  // Mobile nav toggle
+  var toggle = document.querySelector('.mobile-nav-toggle');
+  var overlay = document.querySelector('.overlay');
+  var sidebar = document.getElementById('sidebar');
+  if (toggle && overlay && sidebar) {
+    toggle.addEventListener('click', function () {
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('open');
+    });
+    overlay.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      overlay.classList.remove('open');
+    });
+  }
+
+  // Toggle-reveal blocks
+  document.querySelectorAll('.toggle-reveal-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      if (body) body.classList.toggle('open');
+      var icon = header.querySelector('span:last-child');
+      if (icon) icon.textContent = body && body.classList.contains('open') ? '−' : '+';
+    });
+  });
+
+  // Self-check quiz
+  document.querySelectorAll('.quiz').forEach(function (quiz) {
+    var options = quiz.querySelectorAll('.quiz-option');
+    var feedback = quiz.querySelector('.quiz-feedback');
+    options.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (quiz.dataset.answered) return;
+        quiz.dataset.answered = '1';
+        var correct = btn.dataset.correct === 'true';
+        options.forEach(function (b) {
+          b.disabled = true;
+          if (b.dataset.correct === 'true') b.style.background = 'var(--green-dim)';
+          else b.style.background = 'var(--red-dim)';
+        });
+        if (feedback) {
+          feedback.textContent = correct ? feedback.dataset.correct : feedback.dataset.incorrect;
+          feedback.style.display = 'block';
+          feedback.style.color = correct ? 'var(--green)' : 'var(--amber)';
+        }
+      });
+    });
+  });
+
+  // Verification toggle
+  document.querySelectorAll('.verification-header').forEach(function (header) {
+    header.addEventListener('click', function () {
+      var body = header.nextElementSibling;
+      header.classList.toggle('open');
+      if (body) body.classList.toggle('open');
+      header.setAttribute('aria-expanded', header.classList.contains('open').toString());
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
